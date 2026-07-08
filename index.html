@@ -1,0 +1,1133 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Full Company · Producción e Inventario</title>
+  <style>
+    :root {
+      --blue: #1d4ed8;
+      --blue-dark: #0f172a;
+      --blue-soft: #eff6ff;
+      --green: #059669;
+      --red: #dc2626;
+      --orange: #ea580c;
+      --gray: #64748b;
+      --line: #e2e8f0;
+      --bg: #f8fafc;
+      --card: #ffffff;
+      --text: #0f172a;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+    header {
+      background: linear-gradient(135deg, #0f172a, #1d4ed8);
+      color: white;
+      padding: 20px 16px 14px;
+      text-align: center;
+    }
+    header h1 { margin: 0; font-size: 24px; }
+    header p { margin: 6px 0 0; font-size: 14px; opacity: 0.92; }
+    .tabs {
+      display: flex;
+      justify-content: center;
+      gap: 10px;
+      margin-top: 14px;
+    }
+    .tab-btn {
+      border: 1px solid rgba(255, 255, 255, 0.4);
+      background: rgba(255, 255, 255, 0.12);
+      color: white;
+      border-radius: 999px;
+      padding: 10px 22px;
+      font-size: 15px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+    .tab-btn.active {
+      background: white;
+      color: var(--blue-dark);
+      border-color: white;
+    }
+    main {
+      max-width: 920px;
+      margin: 18px auto;
+      padding: 0 14px 40px;
+    }
+    .view.hidden { display: none; }
+    .card {
+      background: var(--card);
+      border-radius: 18px;
+      padding: 18px;
+      border: 1px solid var(--line);
+      box-shadow: 0 8px 30px rgba(15, 23, 42, 0.08);
+    }
+    .section-title { font-weight: bold; font-size: 18px; margin: 14px 0 12px; }
+    .type-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+      margin-bottom: 18px;
+    }
+    .type-btn {
+      border: 1px solid var(--line);
+      background: white;
+      border-radius: 16px;
+      padding: 16px;
+      text-align: left;
+      cursor: pointer;
+      font-size: 15px;
+      min-height: 76px;
+      transition: 0.15s;
+    }
+    .type-btn:hover {
+      transform: translateY(-1px);
+      background: var(--blue-soft);
+      border-color: var(--blue);
+    }
+    .type-btn.active {
+      background: var(--blue);
+      border-color: var(--blue);
+      color: white;
+    }
+    .emoji { display: block; font-size: 24px; margin-bottom: 5px; }
+    form { display: none; margin-top: 8px; }
+    form.active { display: block; }
+    .row {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+    .field.full { grid-column: 1 / -1; }
+    .field.hidden { display: none; }
+    label {
+      display: block;
+      font-weight: bold;
+      font-size: 13px;
+      margin-bottom: 5px;
+      color: #334155;
+    }
+    input, select, textarea {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 12px;
+      font-size: 15px;
+      background: white;
+      outline: none;
+    }
+    input:focus, select:focus, textarea:focus {
+      border-color: var(--blue);
+      box-shadow: 0 0 0 3px rgba(29, 78, 216, 0.12);
+    }
+    textarea { min-height: 84px; resize: vertical; }
+    .hint {
+      font-size: 12px;
+      color: var(--gray);
+      margin-top: 5px;
+      line-height: 1.35;
+    }
+    .suggest-wrapper { position: relative; }
+    .suggest-box {
+      position: absolute;
+      z-index: 20;
+      top: calc(100% + 5px);
+      left: 0;
+      right: 0;
+      background: white;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      box-shadow: 0 12px 30px rgba(15, 23, 42, 0.12);
+      max-height: 220px;
+      overflow: auto;
+      display: none;
+    }
+    .suggest-item {
+      padding: 11px 12px;
+      border-bottom: 1px solid #f1f5f9;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    .suggest-item:hover { background: var(--blue-soft); }
+    .warning-box {
+      display: none;
+      margin-top: 8px;
+      border-radius: 12px;
+      padding: 10px 12px;
+      background: #fff7ed;
+      color: #9a3412;
+      font-size: 13px;
+      line-height: 1.35;
+    }
+    .check-row {
+      margin-top: 8px;
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      font-size: 13px;
+      color: #334155;
+      line-height: 1.35;
+    }
+    .check-row input { width: auto; margin-top: 2px; }
+    .actions { display: flex; gap: 10px; margin-top: 18px; }
+    button.submit, button.clear {
+      border: none;
+      border-radius: 14px;
+      padding: 15px;
+      font-size: 16px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+    button.submit { flex: 1; background: var(--green); color: white; }
+    button.submit:disabled { opacity: 0.65; cursor: not-allowed; }
+    button.clear { background: #e2e8f0; color: #0f172a; }
+    .status {
+      display: none;
+      margin-top: 14px;
+      padding: 12px;
+      border-radius: 12px;
+      font-weight: bold;
+      line-height: 1.35;
+    }
+    .status.ok { display: block; background: #dcfce7; color: #166534; }
+    .status.err { display: block; background: #fee2e2; color: #991b1b; }
+    .status.warn { display: block; background: #fff7ed; color: #9a3412; }
+    .small-note { margin-top: 8px; font-size: 12px; color: var(--gray); }
+
+    /* ===== Inventario ===== */
+    .inv-top { display: flex; gap: 10px; margin-bottom: 14px; }
+    .inv-top input { flex: 1; }
+    .inv-top button {
+      border: none;
+      background: var(--blue);
+      color: white;
+      border-radius: 12px;
+      padding: 0 18px;
+      font-size: 15px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+    .inv-resumen {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+    .inv-chip {
+      border-radius: 14px;
+      padding: 12px;
+      text-align: center;
+      font-size: 13px;
+      font-weight: bold;
+    }
+    .inv-chip .num { display: block; font-size: 24px; }
+    .inv-chip.ok { background: #dcfce7; color: #166534; }
+    .inv-chip.low { background: #ffedd5; color: #9a3412; }
+    .inv-chip.out { background: #fee2e2; color: #991b1b; }
+    .inv-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 12px 10px;
+      border-bottom: 1px solid #f1f5f9;
+      font-size: 14px;
+    }
+    .inv-row .inv-nombre { font-weight: bold; }
+    .inv-row .inv-cat { font-size: 12px; color: var(--gray); }
+    .inv-row .inv-stock { font-weight: bold; white-space: nowrap; }
+    .badge {
+      border-radius: 999px;
+      padding: 4px 12px;
+      font-size: 12px;
+      font-weight: bold;
+      white-space: nowrap;
+    }
+    .badge.ok { background: #dcfce7; color: #166534; }
+    .badge.low { background: #ffedd5; color: #9a3412; }
+    .badge.out { background: #fee2e2; color: #991b1b; }
+    @media (max-width: 700px) {
+      .type-grid, .row { grid-template-columns: 1fr; }
+      header h1 { font-size: 21px; }
+      .actions { flex-direction: column; }
+      .inv-resumen { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Full Company · Producción e Inventario</h1>
+    <p>Registro rápido para laboratorio</p>
+    <div class="tabs">
+      <button type="button" class="tab-btn active" data-tab="registro">📝 Registrar</button>
+      <button type="button" class="tab-btn" data-tab="inventario">📊 Inventario</button>
+    </div>
+  </header>
+  <main>
+    <!-- ================= VISTA REGISTRO ================= -->
+    <section id="view-registro" class="view">
+      <div class="card">
+        <div class="section-title">¿Qué vas a registrar?</div>
+        <div class="type-grid" id="typeGrid">
+          <button type="button" class="type-btn" data-type="Entrada mercancía"><span class="emoji">📦</span>Llegó mercancía</button>
+          <button type="button" class="type-btn" data-type="Consumo materia prima"><span class="emoji">🧪</span>Usé materia prima</button>
+          <button type="button" class="type-btn" data-type="Preparar tambor"><span class="emoji">🛢️</span>Preparé tambor</button>
+          <button type="button" class="type-btn" data-type="Empacar desde tambor"><span class="emoji">🧴</span>Empaqué producto</button>
+          <button type="button" class="type-btn" data-type="Empacar sólido/polvo"><span class="emoji">⚖️</span>Empaqué sólido/polvo</button>
+          <button type="button" class="type-btn" data-type="Salida directa/Baja"><span class="emoji">🚚</span>Salida directa / baja</button>
+          <button type="button" class="type-btn" data-type="Fabricar palos"><span class="emoji">🧹</span>Fabricar palos</button>
+          <button type="button" class="type-btn" data-type="Novedad/Corrección"><span class="emoji">⚠️</span>Novedad / corrección</button>
+        </div>
+        <form id="mainForm" autocomplete="off">
+          <div class="section-title" id="formTitle">Registro</div>
+          <div class="row">
+            <div class="field" data-field="responsable">
+              <label for="Responsable">Responsable</label>
+              <select id="Responsable" name="Responsable">
+                <option value="">Seleccionar</option>
+                <option>Carlos</option>
+                <option>Neyder</option>
+                <option>Leandro</option>
+              </select>
+            </div>
+            <div class="field hidden" data-field="categoria">
+              <label for="Categoria">Categoría</label>
+              <select id="Categoria" name="Categoria">
+                <option value="">Seleccionar</option>
+                <option>Materia prima</option>
+                <option>Fragancia / Color</option>
+                <option>Envase</option>
+                <option>Accesorio</option>
+                <option>Etiqueta</option>
+                <option>Material palo</option>
+                <option>Producto terminado</option>
+                <option>Otro</option>
+              </select>
+              <div class="hint">La categoría filtra el listado de ítems para evitar mezclas.</div>
+            </div>
+          </div>
+          <div class="row">
+            <div class="field hidden" data-field="item">
+              <label for="Item">Ítem</label>
+              <div class="suggest-wrapper">
+                <input id="Item" name="Item" placeholder="Busca o escribe el ítem exacto" />
+                <div id="itemSuggestions" class="suggest-box"></div>
+              </div>
+              <div id="itemWarning" class="warning-box"></div>
+              <label class="check-row">
+                <input type="checkbox" id="CrearNuevoItem" />
+                <span>Crear como nuevo en catálogo, pendiente de revisar</span>
+              </label>
+            </div>
+            <div class="field hidden" data-field="variante">
+              <label for="Variante">Variante / aroma / color / referencia</label>
+              <div class="suggest-wrapper">
+                <input id="Variante" name="Variante" placeholder="Ej: Chicle, Azul, Genérica, Deterfull 4 L" />
+                <div id="varianteSuggestions" class="suggest-box"></div>
+              </div>
+              <div class="hint">Etiquetas: Ítem = Etiqueta y aquí va la variante (Genérica, Deterfull 4 L…). Fragancia/Color: aquí va el aroma o color.</div>
+            </div>
+          </div>
+          <div class="row">
+            <div class="field hidden" data-field="cantidad">
+              <label for="Cantidad">Cantidad</label>
+              <input id="Cantidad" name="Cantidad" type="number" step="0.001" min="0" placeholder="Ej: 200" />
+            </div>
+            <div class="field hidden" data-field="unidad">
+              <label for="Unidad">Unidad</label>
+              <select id="Unidad" name="Unidad">
+                <option value="">Seleccionar</option>
+                <option>L</option>
+                <option>ml</option>
+                <option>kg</option>
+                <option>g</option>
+                <option>und</option>
+              </select>
+            </div>
+          </div>
+          <div class="row">
+            <div class="field hidden" data-field="producto">
+              <label for="Producto">Producto</label>
+              <div class="suggest-wrapper">
+                <input id="Producto" name="Producto" placeholder="Ej: Ambientador, Deterfull" />
+                <div id="productoSuggestions" class="suggest-box"></div>
+              </div>
+            </div>
+            <div class="field hidden" data-field="tanque">
+              <label for="Tanque">Tanque</label>
+              <select id="Tanque" name="Tanque">
+                <option value="">Seleccionar</option>
+                <option>20 L</option>
+                <option>60 L</option>
+                <option>100 L</option>
+                <option>110 L</option>
+                <option>120 L</option>
+                <option>160 L</option>
+                <option>Otro / revisar</option>
+              </select>
+            </div>
+          </div>
+          <div class="row">
+            <div class="field hidden" data-field="litros">
+              <label for="LitrosPreparados">Litros preparados</label>
+              <input id="LitrosPreparados" name="LitrosPreparados" type="number" step="0.001" min="0" placeholder="Ej: 120" />
+            </div>
+            <div class="field hidden" data-field="tambor">
+              <label for="TamborID">Tambor disponible</label>
+              <div class="suggest-wrapper">
+                <input id="TamborID" name="TamborID" placeholder="Ej: Tambor Deterfull 120 L" />
+                <div id="tamborSuggestions" class="suggest-box"></div>
+              </div>
+              <div class="hint">Si no aparece, primero registra “Preparé tambor” o deja observación para revisar.</div>
+            </div>
+          </div>
+          <div class="row">
+            <div class="field hidden" data-field="presentacion">
+              <label for="Presentacion">Presentación / empaque</label>
+              <div class="suggest-wrapper">
+                <input id="Presentacion" name="Presentacion" placeholder="Ej: Galón 4 L, Bolsa 500 g, Recarga litros" />
+                <div id="presentacionSuggestions" class="suggest-box"></div>
+              </div>
+              <div class="hint">Siempre con tamaño: 500 ml, 4 L, 1 kg… O “Recarga litros” / “Bulto”.</div>
+            </div>
+            <div class="field hidden" data-field="cantpres">
+              <label for="CantidadPresentacion">Cantidad de presentaciones</label>
+              <input id="CantidadPresentacion" name="CantidadPresentacion" type="number" step="0.001" min="0" placeholder="Ej: 20" />
+            </div>
+          </div>
+          <div class="row">
+            <div class="field hidden" data-field="accesorio">
+              <label for="Accesorio">Accesorio usado</label>
+              <select id="Accesorio" name="Accesorio">
+                <option value="">Seleccionar</option>
+                <option>Sin accesorio</option>
+                <option>Tapa normal</option>
+                <option>Gatillo / pistola</option>
+                <option>Válvula jabón</option>
+                <option>Pull push</option>
+                <option>Press top</option>
+                <option>Tapa medidora</option>
+                <option>Asa para galón</option>
+              </select>
+            </div>
+            <div class="field hidden" data-field="etiqueta">
+              <label for="Etiqueta">Etiqueta usada</label>
+              <input id="Etiqueta" name="Etiqueta" placeholder="Ej: Genérica, Deterfull 4 L, Ambientador 1 L" />
+              <div class="hint">Aquí va la variante de la etiqueta. Si no lleva, escribe “Sin etiqueta”.</div>
+            </div>
+          </div>
+          <div class="row">
+            <div class="field hidden" data-field="motivo">
+              <label for="Motivo">Motivo</label>
+              <select id="Motivo" name="Motivo">
+                <option value="">Seleccionar</option>
+                <option>Venta directa</option>
+                <option>Exhibición</option>
+                <option>Muestra</option>
+                <option>Daño</option>
+                <option>Derrame</option>
+                <option>Uso interno</option>
+                <option>Corrección</option>
+                <option>Otro</option>
+              </select>
+            </div>
+          </div>
+          <div class="row">
+            <div class="field full hidden" data-field="observacion">
+              <label for="Observacion">Observación</label>
+              <textarea id="Observacion" name="Observacion" placeholder="Opcional"></textarea>
+            </div>
+          </div>
+          <div class="actions">
+            <button type="button" class="clear" id="btnClear">Limpiar</button>
+            <button type="submit" class="submit" id="btnSubmit">Guardar registro</button>
+          </div>
+          <div id="status" class="status"></div>
+          <div class="small-note">Si el mensaje dice “Enviado”, revisa la hoja REGISTRO_APP para confirmar.</div>
+        </form>
+      </div>
+    </section>
+
+    <!-- ================= VISTA INVENTARIO ================= -->
+    <section id="view-inventario" class="view hidden">
+      <div class="card">
+        <div class="section-title">Existencias de inventario</div>
+        <div class="inv-top">
+          <input id="invBuscar" placeholder="Buscar ítem…" />
+          <button type="button" id="btnInvRecargar">Actualizar</button>
+        </div>
+        <div id="invResumen" class="inv-resumen" style="display:none"></div>
+        <div id="invEstado" class="status"></div>
+        <div id="invLista"></div>
+        <div class="small-note">Primero se muestran los agotados y los que están por acabarse. Los datos vienen de la hoja INVENTARIO.</div>
+      </div>
+    </section>
+  </main>
+  <script>
+    // ================== CONFIGURACIÓN ==================
+    var APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxAWuJv7dfjjyobgnEc9yIMJN7uqSnOu9vM80G88JCiDV-0oam5DebiEeqG0FLgcN8I/exec';
+
+    var state = {
+      selectedType: '',
+      dynamicLoaded: false,
+      catalogos: {},
+      inventario: null
+    };
+
+    // ================== CATÁLOGOS LOCALES (fallback) ==================
+    var catalogosLocales = {
+      materiasPrimas: [
+        'Hipoclorito 13%', 'Blanqueador con cloro al 6%', 'Soda Líquida', 'Soda Cáustica',
+        'Alcohol 96%', 'Alcohol 70%', 'Alcohol Extra Neutro', 'Alcohol Isopropílico',
+        'Ácido Sulfónico', 'Ácido Nítrico 55%', 'Ácido Muriático', 'Ácido Acético',
+        'Ácido Cítrico', 'Ácido Bórico', 'Peróxido 50%', 'Percarbonato de Sodio',
+        'Texapón', 'Trietanolamina (TEA)', 'Glicerina', 'CMC Chino', 'Fosfato Trisódico',
+        'Tripolifosfato / Polvillo', 'Carbopol', 'Formol', 'Arcopal', 'Genapol', 'Varsol',
+        'EXXSOL Galón', 'Butylglycol', 'Bicarbonato', 'Silicona Pura', 'Salicilato',
+        'Aceite Mineral USP', 'Creolina 3*1', 'Blend Ecov', 'Deltaforce', 'Quita Óxido',
+        'Mentol Cristales', 'Cloruro de Benzalconio', 'Clorhexidina', 'Suavizante',
+        'PAC Líquido', 'Bicromato de Potasio', 'Detergente en Bulto'
+      ],
+      fraganciasColores: ['Fragancia', 'Color'],
+      variantesFragancia: [
+        'Chicle', 'Canela', 'Bouquet', 'Lavanda', 'Limón', 'Dulce', 'Cítrico',
+        'Azul', 'Verde', 'Amarillo', 'Rojo', 'Morado'
+      ],
+      envases: [
+        'Perfumero 30 ml', 'Botella 60 ml', 'Gotero 60 ml', 'Botella 120 ml',
+        'Spray 120 ml', 'Spray 250 ml', 'Botella 250 ml', 'Botella 500 ml',
+        'Spray 500 ml', 'Botella 810 ml', 'Botella 1 L', 'Galón 2 L', 'Galón 4 L',
+        'Pimpina 20 L', 'Jarabero 250 ml ámbar', 'Botella 500 ml ámbar',
+        'Botella 1 L ámbar', 'Tarro 500 g', 'Tarro 1 kg', 'Tarro detergente 1 L',
+        'Tarro detergente 2 L', 'Bomba fumigadora 800 ml', 'Bomba fumigadora 2 L',
+        'Bolsa 60 g', 'Bolsa 250 g', 'Bolsa 500 g', 'Bolsa 1 kg'
+      ],
+      accesorios: [
+        'Tapa normal', 'Gatillo / pistola', 'Válvula jabón', 'Pull push',
+        'Press top', 'Tapa medidora', 'Asa para galón'
+      ],
+      etiquetas: ['Etiqueta'],
+      materialesPalos: [
+        'Tubo aluminio 1.50 m', 'Tubo aluminio 1.20 m', 'Mango', 'Caucho', 'Rosca',
+        'Cabezote mariposa', 'Lámina', 'Tornillo', 'Tuerca mariposa', 'Etiqueta'
+      ],
+      solidos: [
+        'Bicarbonato', 'Ácido Bórico', 'Tripolifosfato / Polvillo',
+        'Percarbonato de Sodio', 'Oxígeno Activo', 'Soda Cáustica', 'Detergente en Bulto'
+      ],
+      palosTerminados: [
+        'Palo aluminio rosca 1.50 m', 'Palo aluminio rosca 1.20 m',
+        'Palo aluminio mariposa 1.50 m', 'Palo aluminio mariposa 1.20 m'
+      ],
+      productos: [
+        'Deterfull', 'Desmanchador de brechas', 'Extermin', 'Extermin con aroma a limón',
+        'Clordeter', 'Limpgrax', 'Full desincrustante', 'Shoefull', 'Eliminador de olores',
+        'Gotero eliminador de olores', 'Spray eliminador de olores', 'Ecovarsol', 'Oxycolor',
+        'Jabón líquido para manos', 'Ambientador para trapear', 'Lavaloza suave con las manos',
+        'Lavaloza industrial arranca grasa puro', 'Vinagre para consumo y limpieza',
+        'Alcohol 70%', 'Alcohol 96%', 'Gel antibacterial', 'Creolina', 'Varsol transparente',
+        'Ácido muriático', 'Ácido nítrico', 'Silicona', 'Glicerina', 'Cera emulsionada',
+        'Cloruro de benzalconio', 'Detergente de ropa de coco con suavizante', 'Limpiavidrios',
+        'Detergente líquido de ropa oscura', 'Detergente multiusos para ropa en general',
+        'Suavizante de telas', 'Blanqueador con cloro al 6%', 'Hipoclorito al 13%',
+        'Blanqueador con cloro al 6% con aroma dulce', 'Blanqueador con cloro al 6% con aroma cítrico',
+        'Perfume de interiores', 'After-shave', 'Agua de rosas', 'Shampoo de jacuzzi',
+        'Exfoliante de cuerpo', 'Alcohol electrónico / isopropílico',
+        'Shampoo con cera para vehículos', 'Jabón con clorhexidina',
+        'Palo aluminio rosca 1.50 m', 'Palo aluminio rosca 1.20 m',
+        'Palo aluminio mariposa 1.50 m', 'Palo aluminio mariposa 1.20 m'
+      ],
+      presentaciones: [
+        'Recarga litros', 'Botella 30 ml', 'Botella 60 ml', 'Botella 120 ml',
+        'Botella 250 ml', 'Botella 500 ml', 'Botella 810 ml', 'Botella 1 L',
+        'Galón 2 L', 'Galón 4 L', 'Pimpina 20 L', 'Spray 120 ml', 'Spray 250 ml',
+        'Spray 500 ml', 'Gotero 60 ml', 'Tarro 500 g', 'Tarro 1 kg', 'Bolsa 60 g',
+        'Bolsa 250 g', 'Bolsa 500 g', 'Bolsa 1 kg', 'Bulto'
+      ],
+      tambores: []
+    };
+
+    // Campos visibles por tipo de registro
+    var visibility = {
+      'Entrada mercancía': ['responsable', 'categoria', 'item', 'variante', 'cantidad', 'unidad', 'observacion'],
+      'Consumo materia prima': ['responsable', 'item', 'variante', 'cantidad', 'unidad', 'producto', 'observacion'],
+      'Preparar tambor': ['responsable', 'producto', 'variante', 'tanque', 'litros', 'observacion'],
+      'Empacar desde tambor': ['responsable', 'tambor', 'presentacion', 'cantpres', 'accesorio', 'etiqueta', 'observacion'],
+      'Empacar sólido/polvo': ['responsable', 'item', 'presentacion', 'cantpres', 'etiqueta', 'observacion'],
+      'Salida directa/Baja': ['responsable', 'categoria', 'item', 'variante', 'cantidad', 'unidad', 'motivo', 'observacion'],
+      'Fabricar palos': ['responsable', 'item', 'cantidad', 'observacion'],
+      'Novedad/Corrección': ['responsable', 'categoria', 'item', 'variante', 'cantidad', 'unidad', 'motivo', 'observacion']
+    };
+
+    // Tipos que exigen categoría para filtrar ítems
+    var tiposConCategoria = ['Entrada mercancía', 'Salida directa/Baja', 'Novedad/Corrección'];
+
+    document.addEventListener('DOMContentLoaded', function () {
+      state.catalogos = JSON.parse(JSON.stringify(catalogosLocales));
+
+      document.querySelectorAll('.type-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () { selectType(btn.dataset.type); });
+      });
+      document.querySelectorAll('.tab-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () { switchTab(btn.dataset.tab); });
+      });
+      document.getElementById('mainForm').addEventListener('submit', submitForm);
+      document.getElementById('btnClear').addEventListener('click', function () { resetForm(true); });
+      document.getElementById('Categoria').addEventListener('change', onCategoriaChange);
+      document.getElementById('CrearNuevoItem').addEventListener('change', validateItemSoft);
+      document.getElementById('btnInvRecargar').addEventListener('click', loadInventario);
+      document.getElementById('invBuscar').addEventListener('input', renderInventario);
+
+      setupSuggest('Item', 'itemSuggestions', getItemOptions, validateItemSoft);
+      setupSuggest('Variante', 'varianteSuggestions', getVarianteOptions);
+      setupSuggest('Producto', 'productoSuggestions', function () { return getCatalog('productos'); });
+      setupSuggest('Presentacion', 'presentacionSuggestions', function () { return getCatalog('presentaciones'); });
+      setupSuggest('TamborID', 'tamborSuggestions', getTamborOptions);
+
+      loadInitJsonp();
+    });
+
+    // ================== UTILIDADES ==================
+    function getCatalog(key) {
+      return unique((state.catalogos && state.catalogos[key]) || catalogosLocales[key] || []);
+    }
+    function unique(arr) {
+      return Array.from(new Set((arr || []).filter(Boolean).map(function (x) {
+        return String(x).trim();
+      }).filter(Boolean)));
+    }
+    function normalize(str) {
+      return String(str || '')
+        .trim()
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/\s+/g, ' ');
+    }
+    function escapeHtml(str) {
+      return String(str || '').replace(/[&<>"']/g, function (s) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[s];
+      });
+    }
+    function valueOf(id) {
+      var el = document.getElementById(id);
+      return el ? String(el.value || '').trim() : '';
+    }
+
+    // ================== JSONP (lectura desde Apps Script) ==================
+    function jsonp(action, onOk, onFail, timeoutMs) {
+      var callbackName = '__fc_' + action.replace(/[^a-z]/gi, '') + '_' + Date.now();
+      var done = false;
+      window[callbackName] = function (data) {
+        done = true;
+        cleanupJsonp(callbackName);
+        try { onOk(data || {}); } catch (err) { console.log('Error procesando ' + action + ':', err); }
+      };
+      var script = document.createElement('script');
+      script.src = APPS_SCRIPT_URL + '?action=' + encodeURIComponent(action) +
+        '&callback=' + encodeURIComponent(callbackName) + '&v=' + Date.now();
+      script.onerror = function () {
+        cleanupJsonp(callbackName);
+        if (!done && typeof onFail === 'function') { done = true; onFail(); }
+      };
+      document.body.appendChild(script);
+      setTimeout(function () {
+        cleanupJsonp(callbackName);
+        if (!done && typeof onFail === 'function') { done = true; onFail(); }
+      }, timeoutMs || 8000);
+    }
+    function cleanupJsonp(callbackName) {
+      try { delete window[callbackName]; } catch (err) { window[callbackName] = undefined; }
+      document.querySelectorAll('script[src*="' + callbackName + '"]').forEach(function (el) { el.remove(); });
+    }
+
+    function loadInitJsonp() {
+      jsonp('init', function (data) {
+        mergeDynamicCatalogs(data);
+        state.dynamicLoaded = true;
+      }, function () {
+        console.log('Catálogos dinámicos no disponibles. Usando catálogos locales.');
+      });
+    }
+    function mergeDynamicCatalogs(data) {
+      ['materiasPrimas', 'fraganciasColores', 'variantesFragancia', 'envases', 'accesorios',
+        'etiquetas', 'materialesPalos', 'solidos', 'palosTerminados', 'productos', 'presentaciones'
+      ].forEach(function (key) {
+        if (data[key] && data[key].length) {
+          state.catalogos[key] = unique(getCatalog(key).concat(data[key]));
+        }
+      });
+      if (data.tambores) state.catalogos.tambores = data.tambores;
+    }
+
+    // ================== SELECCIÓN DE TIPO ==================
+    function selectType(type) {
+      state.selectedType = type;
+      document.getElementById('formTitle').textContent = type;
+      document.getElementById('mainForm').classList.add('active');
+      document.querySelectorAll('.type-btn').forEach(function (btn) {
+        btn.classList.toggle('active', btn.dataset.type === type);
+      });
+      document.querySelectorAll('.field').forEach(function (field) {
+        field.classList.add('hidden');
+      });
+      (visibility[type] || []).forEach(function (fieldName) {
+        document.querySelectorAll('[data-field="' + fieldName + '"]').forEach(function (field) {
+          field.classList.remove('hidden');
+        });
+      });
+      clearStatus();
+      document.getElementById('Item').value = '';
+      document.getElementById('CrearNuevoItem').checked = false;
+      validateItemSoft();
+      hideSuggestions();
+      if (type === 'Fabricar palos') {
+        document.getElementById('Unidad').value = 'und';
+      }
+      window.scrollTo({ top: document.getElementById('mainForm').offsetTop - 20, behavior: 'smooth' });
+    }
+
+    function onCategoriaChange() {
+      var categoria = valueOf('Categoria');
+      document.getElementById('Item').value = '';
+      document.getElementById('Variante').value = '';
+      document.getElementById('CrearNuevoItem').checked = false;
+      // Etiquetas: el ítem SIEMPRE es "Etiqueta"; lo que cambia es la variante
+      if (categoria === 'Etiqueta') {
+        document.getElementById('Item').value = 'Etiqueta';
+      }
+      // Unidad sugerida automáticamente (se puede cambiar)
+      if (['Envase', 'Accesorio', 'Etiqueta', 'Material palo'].indexOf(categoria) >= 0) {
+        document.getElementById('Unidad').value = 'und';
+      }
+      validateItemSoft();
+      hideSuggestions();
+    }
+
+    // ================== SUGERENCIAS ==================
+    function setupSuggest(inputId, boxId, optionsProvider, afterPick) {
+      var input = document.getElementById(inputId);
+      var box = document.getElementById(boxId);
+      input.addEventListener('input', function () {
+        renderSuggestions(input, box, optionsProvider(), afterPick);
+        if (typeof afterPick === 'function') afterPick();
+      });
+      input.addEventListener('focus', function () {
+        renderSuggestions(input, box, optionsProvider(), afterPick);
+      });
+      document.addEventListener('click', function (e) {
+        if (!box.contains(e.target) && e.target !== input) box.style.display = 'none';
+      });
+    }
+    function renderSuggestions(input, box, options, afterPick) {
+      var value = normalize(input.value);
+      var list = unique(options || []);
+      if (value) {
+        list = list.filter(function (item) { return normalize(item).includes(value); });
+      }
+      list = list.slice(0, 10);
+      if (!list.length) {
+        box.innerHTML = '';
+        box.style.display = 'none';
+        return;
+      }
+      box.innerHTML = list.map(function (item) {
+        return '<div class="suggest-item" data-value="' + escapeHtml(item) + '">' + escapeHtml(item) + '</div>';
+      }).join('');
+      box.querySelectorAll('.suggest-item').forEach(function (el) {
+        el.addEventListener('click', function () {
+          input.value = el.dataset.value;
+          box.style.display = 'none';
+          if (typeof afterPick === 'function') afterPick();
+        });
+      });
+      box.style.display = 'block';
+    }
+    function hideSuggestions() {
+      document.querySelectorAll('.suggest-box').forEach(function (box) { box.style.display = 'none'; });
+    }
+
+    // Opciones de ítem SEGÚN tipo y categoría (nunca mezcladas)
+    function getItemOptions() {
+      var type = state.selectedType;
+      var categoria = valueOf('Categoria');
+      if (type === 'Consumo materia prima') {
+        return unique(getCatalog('materiasPrimas').concat(getCatalog('fraganciasColores')));
+      }
+      if (type === 'Empacar sólido/polvo') return getCatalog('solidos');
+      if (type === 'Fabricar palos') return getCatalog('palosTerminados');
+      if (tiposConCategoria.indexOf(type) >= 0) {
+        if (categoria === 'Materia prima') return getCatalog('materiasPrimas');
+        if (categoria === 'Fragancia / Color') return getCatalog('fraganciasColores');
+        if (categoria === 'Envase') return getCatalog('envases');
+        if (categoria === 'Accesorio') return getCatalog('accesorios');
+        if (categoria === 'Etiqueta') return getCatalog('etiquetas');
+        if (categoria === 'Material palo') return getCatalog('materialesPalos');
+        if (categoria === 'Producto terminado') return getCatalog('productos');
+        if (categoria === 'Otro') return [];
+        return []; // sin categoría no se sugiere nada: evita mezclas
+      }
+      return [];
+    }
+
+    function getVarianteOptions() {
+      var categoria = valueOf('Categoria');
+      var item = normalize(valueOf('Item'));
+      if (categoria === 'Fragancia / Color' || item === 'fragancia' || item === 'color') {
+        return getCatalog('variantesFragancia');
+      }
+      if (categoria === 'Etiqueta' || item === 'etiqueta') {
+        // Variantes de etiqueta = Genérica + nombres de productos
+        return unique(['Genérica'].concat(getCatalog('productos')));
+      }
+      return [];
+    }
+
+    function getTamborOptions() {
+      return (state.catalogos.tambores || []).map(function (t) {
+        if (typeof t === 'string') return t;
+        return [t.id, t.producto, t.variante, t.disponible ? 'Disponible: ' + t.disponible + ' L' : '']
+          .filter(Boolean).join(' · ');
+      });
+    }
+
+    // ================== VALIDACIÓN SUAVE DEL ÍTEM ==================
+    function validateItemSoft() {
+      var item = valueOf('Item');
+      var warning = document.getElementById('itemWarning');
+      var checked = document.getElementById('CrearNuevoItem').checked;
+      var type = state.selectedType;
+      var categoria = valueOf('Categoria');
+
+      if (!item) {
+        if (tiposConCategoria.indexOf(type) >= 0 && !categoria) {
+          warning.textContent = 'Primero selecciona la categoría para ver los ítems correctos.';
+          warning.style.display = 'block';
+        } else {
+          warning.style.display = 'none';
+          warning.textContent = '';
+        }
+        return;
+      }
+      var options = getItemOptions();
+      var exact = options.some(function (x) { return normalize(x) === normalize(item); });
+      if (exact && !checked) {
+        warning.style.display = 'none';
+        warning.textContent = '';
+        return;
+      }
+      if (checked) {
+        warning.textContent = 'Se guardará como ítem NUEVO pendiente de revisar. Verifica que el nombre esté bien escrito y con tamaño si es envase o bolsa (Ej: Botella 500 ml).';
+        warning.style.display = 'block';
+        return;
+      }
+      var similar = options.filter(function (x) {
+        return similarityScore(item, x) >= 0.45 ||
+          normalize(x).includes(normalize(item)) ||
+          normalize(item).includes(normalize(x));
+      }).slice(0, 3);
+      var msg = 'No encontré este ítem exacto en la categoría seleccionada.';
+      if (similar.length) msg += ' ¿Será uno de estos?: ' + similar.join(', ') + '.';
+      msg += ' Si de verdad es nuevo, marca “Crear como nuevo en catálogo, pendiente de revisar”.';
+      warning.textContent = msg;
+      warning.style.display = 'block';
+    }
+    function similarityScore(a, b) {
+      var aa = normalize(a);
+      var bb = normalize(b);
+      if (!aa || !bb) return 0;
+      if (aa === bb) return 1;
+      var wordsA = aa.split(' ');
+      var wordsB = bb.split(' ');
+      var hits = wordsA.filter(function (w) { return wordsB.includes(w); }).length;
+      return hits / Math.max(wordsA.length, wordsB.length);
+    }
+
+    // ================== PAYLOAD Y VALIDACIÓN ==================
+    function collectPayload() {
+      var activeBtn = document.querySelector('.type-btn.active');
+      var tipo = state.selectedType || (activeBtn ? activeBtn.dataset.type : '') || '';
+      var categoria = valueOf('Categoria');
+      if (!categoria && tipo === 'Consumo materia prima') categoria = 'Materia prima';
+      if (!categoria && tipo === 'Empacar sólido/polvo') categoria = 'Producto terminado';
+      if (!categoria && tipo === 'Fabricar palos') categoria = 'Producto terminado';
+      var esNuevo = document.getElementById('CrearNuevoItem').checked;
+      return {
+        FechaCliente: new Date().toISOString(),
+        TipoRegistro: tipo,
+        Responsable: valueOf('Responsable'),
+        Categoria: categoria,
+        Item: valueOf('Item'),
+        Variante: valueOf('Variante'),
+        Cantidad: valueOf('Cantidad'),
+        Unidad: valueOf('Unidad'),
+        Producto: valueOf('Producto'),
+        Tanque: valueOf('Tanque'),
+        LitrosPreparados: valueOf('LitrosPreparados'),
+        TamborID: valueOf('TamborID'),
+        Presentacion: valueOf('Presentacion'),
+        CantidadPresentacion: valueOf('CantidadPresentacion'),
+        Accesorio: valueOf('Accesorio'),
+        Etiqueta: valueOf('Etiqueta'),
+        Motivo: valueOf('Motivo'),
+        NuevoItem: esNuevo ? 'Sí' : 'No',
+        PendienteAprobacion: esNuevo ? 'Sí' : 'No',
+        Observacion: valueOf('Observacion'),
+        Origen: 'GitHub Pages'
+      };
+    }
+
+    function esNumeroPositivo(v) {
+      var n = parseFloat(v);
+      return !isNaN(n) && n > 0;
+    }
+    function hasSize(text) {
+      return /\d+([.,]\d+)?\s*(ml|mililitro|mililitros|l|lt|litro|litros|g|gr|gramo|gramos|kg|kilo|kilos)\b/i.test(text);
+    }
+    function isRecargaOBulto(text) {
+      return /recarga|bulto/i.test(text);
+    }
+
+    function validatePayload(data) {
+      if (!data.TipoRegistro) return 'Selecciona qué vas a registrar (toca uno de los botones de arriba).';
+      if (!data.Responsable) return 'Selecciona responsable.';
+
+      if (tiposConCategoria.includes(data.TipoRegistro) && !valueOf('Categoria')) {
+        return 'Selecciona categoría.';
+      }
+      var tiposConItem = ['Entrada mercancía', 'Consumo materia prima', 'Salida directa/Baja', 'Novedad/Corrección', 'Empacar sólido/polvo', 'Fabricar palos'];
+      if (tiposConItem.includes(data.TipoRegistro) && !data.Item) {
+        return 'Debes escribir o seleccionar un ítem.';
+      }
+      if (['Entrada mercancía', 'Consumo materia prima', 'Salida directa/Baja', 'Novedad/Corrección'].includes(data.TipoRegistro)) {
+        if (!esNumeroPositivo(data.Cantidad)) return 'Debes poner una cantidad mayor que cero.';
+        if (!data.Unidad) return 'Debes seleccionar unidad.';
+      }
+      if (data.TipoRegistro === 'Preparar tambor') {
+        if (!data.Producto) return 'Debes escribir el producto.';
+        if (!data.Tanque) return 'Debes seleccionar tanque.';
+        if (!esNumeroPositivo(data.LitrosPreparados)) return 'Debes poner los litros preparados.';
+      }
+      if (data.TipoRegistro === 'Empacar desde tambor') {
+        if (!data.TamborID) return 'Debes seleccionar o escribir el tambor disponible.';
+        if (!data.Presentacion) return 'Debes poner presentación.';
+        if (!esNumeroPositivo(data.CantidadPresentacion)) return 'Debes poner cuántas presentaciones empacaste.';
+      }
+      if (data.TipoRegistro === 'Empacar sólido/polvo') {
+        if (!data.Presentacion) return 'Debes poner presentación.';
+        if (!esNumeroPositivo(data.CantidadPresentacion)) return 'Debes poner cuántas presentaciones empacaste.';
+      }
+      if (data.TipoRegistro === 'Fabricar palos') {
+        if (!/palo/i.test(data.Item)) return 'En fabricar palos, el ítem debe ser un tipo de palo.';
+        if (!esNumeroPositivo(data.Cantidad)) return 'Debes poner cantidad de palos.';
+      }
+
+      // Anti-duplicados: si el ítem no existe exacto, debe marcarse como nuevo
+      var tiposConItemValidado = tiposConItem;
+      if (tiposConItemValidado.includes(data.TipoRegistro) && data.Item) {
+        var options = getItemOptions();
+        var itemExists = options.some(function (x) { return normalize(x) === normalize(data.Item); });
+        if (!itemExists && data.NuevoItem !== 'Sí') {
+          return 'Este ítem no existe exacto en la categoría seleccionada. Selecciona una sugerencia del listado o marca “Crear como nuevo en catálogo, pendiente de revisar”.';
+        }
+      }
+
+      // Reglas de tamaño obligatorio
+      var cat = valueOf('Categoria');
+      if (cat === 'Envase' && data.Item && !hasSize(data.Item)) {
+        return 'Para envases debes escribir el tamaño. Ejemplo: Galón 4 L, Botella 500 ml, Bolsa 1 kg.';
+      }
+      if (data.Presentacion && !isRecargaOBulto(data.Presentacion) && !hasSize(data.Presentacion)) {
+        return 'La presentación debe tener tamaño. Ejemplo: Galón 4 L, Botella 500 ml, Bolsa 500 g. Si es recarga escribe “Recarga litros”; si es bulto, “Bulto”.';
+      }
+
+      // Reglas de variante obligatoria
+      if (cat === 'Fragancia / Color' && !data.Variante) {
+        return 'Para Fragancia / Color debes poner la variante. Ejemplo: Chicle, Canela, Azul.';
+      }
+      if (normalize(data.Item) === 'fragancia' && !data.Variante) {
+        return 'Si el ítem es Fragancia, debes poner la variante/aroma. Ejemplo: Chicle.';
+      }
+      if (normalize(data.Item) === 'color' && !data.Variante) {
+        return 'Si el ítem es Color, debes poner la variante. Ejemplo: Azul.';
+      }
+      if (normalize(data.Item) === 'etiqueta' && cat === 'Etiqueta' && !data.Variante) {
+        return 'Para etiquetas pon la variante. Ejemplo: Genérica, Deterfull 4 L.';
+      }
+      return '';
+    }
+
+    // ================== ENVÍO ==================
+    async function submitForm(e) {
+      e.preventDefault();
+      clearStatus();
+      var data = collectPayload();
+      var error = validatePayload(data);
+      if (error) {
+        showStatus(error, 'err');
+        return;
+      }
+      var btn = document.getElementById('btnSubmit');
+      btn.disabled = true;
+      btn.textContent = 'Guardando...';
+      try {
+        // GitHub Pages no tiene backend: se envía directo a Apps Script.
+        // Con mode "no-cors" el guardado funciona pero no se puede leer la respuesta.
+        await fetch(APPS_SCRIPT_URL, {
+          method: 'POST',
+          mode: 'no-cors',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify(data)
+        });
+        showStatus('✅ Enviado: ' + data.TipoRegistro + (data.Item ? ' · ' + data.Item : '') +
+          '. Revisa REGISTRO_APP para confirmar el guardado.', 'ok');
+        var keepType = data.TipoRegistro;
+        var keepResp = data.Responsable;
+        resetForm(false);
+        selectType(keepType);
+        document.getElementById('Responsable').value = keepResp;
+        state.inventario = null; // para que el inventario se recargue con datos frescos
+      } catch (err) {
+        showStatus('No se pudo enviar. Revisa tu conexión a internet e intenta de nuevo. Error: ' + (err.message || String(err)), 'err');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Guardar registro';
+      }
+    }
+
+    function resetForm(clearType) {
+      var currentType = state.selectedType;
+      document.getElementById('mainForm').reset();
+      document.getElementById('CrearNuevoItem').checked = false;
+      clearStatus();
+      hideSuggestions();
+      document.getElementById('itemWarning').style.display = 'none';
+      if (clearType) {
+        state.selectedType = '';
+        document.getElementById('formTitle').textContent = 'Registro';
+        document.getElementById('mainForm').classList.remove('active');
+        document.querySelectorAll('.type-btn').forEach(function (btn) { btn.classList.remove('active'); });
+      } else {
+        state.selectedType = currentType;
+      }
+    }
+    function clearStatus() {
+      var status = document.getElementById('status');
+      status.className = 'status';
+      status.textContent = '';
+    }
+    function showStatus(message, type) {
+      var status = document.getElementById('status');
+      status.className = 'status ' + type;
+      status.textContent = message;
+    }
+
+    // ================== PESTAÑAS ==================
+    function switchTab(tab) {
+      document.querySelectorAll('.tab-btn').forEach(function (btn) {
+        btn.classList.toggle('active', btn.dataset.tab === tab);
+      });
+      document.getElementById('view-registro').classList.toggle('hidden', tab !== 'registro');
+      document.getElementById('view-inventario').classList.toggle('hidden', tab !== 'inventario');
+      if (tab === 'inventario' && !state.inventario) loadInventario();
+    }
+
+    // ================== INVENTARIO ==================
+    function loadInventario() {
+      var estado = document.getElementById('invEstado');
+      estado.className = 'status warn';
+      estado.textContent = 'Cargando inventario...';
+      document.getElementById('invLista').innerHTML = '';
+      document.getElementById('invResumen').style.display = 'none';
+      jsonp('inventario', function (data) {
+        state.inventario = parseInventario(data);
+        if (!state.inventario.length) {
+          estado.className = 'status warn';
+          estado.textContent = 'No llegaron datos de inventario. Verifica que la hoja INVENTARIO tenga información y que el Apps Script esté actualizado.';
+          return;
+        }
+        estado.className = 'status';
+        estado.textContent = '';
+        renderInventario();
+      }, function () {
+        estado.className = 'status err';
+        estado.textContent = 'No se pudo cargar el inventario. Hay que actualizar el Apps Script con el archivo "codigo-apps-script.gs" (soporte de ?action=inventario&callback=). Mientras tanto puedes ver el inventario directamente en la hoja de Google Sheets.';
+      }, 10000);
+    }
+
+    function parseInventario(data) {
+      var rows = [];
+      if (Array.isArray(data)) rows = data;
+      else if (Array.isArray(data.items)) rows = data.items;
+      else if (Array.isArray(data.inventario)) rows = data.inventario;
+      return rows.map(function (r) {
+        return {
+          item: pickField(r, ['item', 'nombre', 'producto', 'descripcion']),
+          categoria: pickField(r, ['categoria', 'tipo', 'grupo']),
+          stock: parseFloat(String(pickField(r, ['stock', 'existencia', 'existencias', 'saldo', 'disponible', 'cantidad'])).replace(',', '.')),
+          unidad: pickField(r, ['unidad', 'und', 'um']),
+          minimo: parseFloat(String(pickField(r, ['minimo', 'stockminimo', 'min', 'alerta', 'nivelminimo'])).replace(',', '.'))
+        };
+      }).filter(function (r) { return r.item; });
+    }
+    function pickField(obj, wanted) {
+      for (var k in obj) {
+        var nk = normalize(k).replace(/[ _]/g, '');
+        if (wanted.indexOf(nk) >= 0) return obj[k] == null ? '' : obj[k];
+      }
+      return '';
+    }
+    function estadoDe(r) {
+      if (!isNaN(r.stock) && r.stock <= 0) return 'out';
+      if (!isNaN(r.stock) && !isNaN(r.minimo) && r.minimo > 0 && r.stock <= r.minimo) return 'low';
+      return 'ok';
+    }
+
+    function renderInventario() {
+      var lista = document.getElementById('invLista');
+      var resumen = document.getElementById('invResumen');
+      var filtro = normalize(valueOf('invBuscar'));
+      var rows = (state.inventario || []).slice();
+      if (!rows.length) return;
+
+      var counts = { ok: 0, low: 0, out: 0 };
+      rows.forEach(function (r) { counts[estadoDe(r)]++; });
+      resumen.style.display = 'grid';
+      resumen.innerHTML =
+        '<div class="inv-chip out"><span class="num">' + counts.out + '</span>Agotados</div>' +
+        '<div class="inv-chip low"><span class="num">' + counts.low + '</span>Por acabarse</div>' +
+        '<div class="inv-chip ok"><span class="num">' + counts.ok + '</span>Con stock</div>';
+
+      if (filtro) {
+        rows = rows.filter(function (r) {
+          return normalize(r.item).includes(filtro) || normalize(r.categoria).includes(filtro);
+        });
+      }
+      var orden = { out: 0, low: 1, ok: 2 };
+      rows.sort(function (a, b) {
+        var d = orden[estadoDe(a)] - orden[estadoDe(b)];
+        return d !== 0 ? d : String(a.item).localeCompare(String(b.item), 'es');
+      });
+
+      var etiquetas = { out: 'AGOTADO', low: 'POCO', ok: 'OK' };
+      lista.innerHTML = rows.map(function (r) {
+        var est = estadoDe(r);
+        var stockTxt = isNaN(r.stock) ? '—' : (r.stock + (r.unidad ? ' ' + r.unidad : ''));
+        return '<div class="inv-row">' +
+          '<div><div class="inv-nombre">' + escapeHtml(r.item) + '</div>' +
+          (r.categoria ? '<div class="inv-cat">' + escapeHtml(r.categoria) + '</div>' : '') + '</div>' +
+          '<div style="display:flex;align-items:center;gap:10px">' +
+          '<span class="inv-stock">' + escapeHtml(stockTxt) + '</span>' +
+          '<span class="badge ' + est + '">' + etiquetas[est] + '</span>' +
+          '</div></div>';
+      }).join('') || '<div class="hint" style="padding:14px">No hay ítems que coincidan con la búsqueda.</div>';
+    }
+  </script>
+</body>
+</html>
