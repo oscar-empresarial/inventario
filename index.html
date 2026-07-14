@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Full Company · Producción e Inventario</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%231d4ed8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M21 8l-9-5-9 5v8l9 5 9-5V8z'/%3E%3Cpath d='M3 8l9 5 9-5'/%3E%3Cpath d='M12 13v8'/%3E%3C/svg%3E" />
   <style>
     :root {
       --blue: #1d4ed8;
@@ -12,6 +13,7 @@
       --green: #059669;
       --red: #dc2626;
       --orange: #ea580c;
+      --purple: #7c3aed;
       --gray: #64748b;
       --line: #e2e8f0;
       --bg: #f8fafc;
@@ -36,19 +38,24 @@
     .tabs {
       display: flex;
       justify-content: center;
-      gap: 10px;
+      gap: 8px;
       margin-top: 14px;
+      flex-wrap: wrap;
     }
     .tab-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
       border: 1px solid rgba(255, 255, 255, 0.4);
       background: rgba(255, 255, 255, 0.12);
       color: white;
       border-radius: 999px;
-      padding: 10px 22px;
-      font-size: 15px;
+      padding: 9px 16px;
+      font-size: 14px;
       font-weight: bold;
       cursor: pointer;
     }
+    .tab-btn svg { width: 16px; height: 16px; }
     .tab-btn.active {
       background: white;
       color: var(--blue-dark);
@@ -70,7 +77,7 @@
     .section-title { font-weight: bold; font-size: 18px; margin: 14px 0 12px; }
     .type-grid {
       display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
+      grid-template-columns: repeat(3, minmax(0, 1fr));
       gap: 12px;
       margin-bottom: 18px;
     }
@@ -78,11 +85,13 @@
       border: 1px solid var(--line);
       background: white;
       border-radius: 16px;
-      padding: 16px;
+      padding: 14px;
       text-align: left;
       cursor: pointer;
-      font-size: 15px;
-      min-height: 76px;
+      font-size: 14px;
+      font-weight: bold;
+      color: #334155;
+      min-height: 84px;
       transition: 0.15s;
     }
     .type-btn:hover {
@@ -95,7 +104,15 @@
       border-color: var(--blue);
       color: white;
     }
-    .emoji { display: block; font-size: 24px; margin-bottom: 5px; }
+    .type-btn .icon {
+      display: block;
+      width: 26px;
+      height: 26px;
+      margin-bottom: 7px;
+      color: var(--blue);
+    }
+    .type-btn.active .icon { color: white; }
+    .type-btn .icon svg { width: 26px; height: 26px; }
     form { display: none; margin-top: 8px; }
     form.active { display: block; }
     .row {
@@ -121,6 +138,7 @@
       font-size: 15px;
       background: white;
       outline: none;
+      font-family: inherit;
     }
     input:focus, select:focus, textarea:focus {
       border-color: var(--blue);
@@ -165,6 +183,18 @@
       font-size: 13px;
       line-height: 1.35;
     }
+    .warning-box button {
+      margin-top: 8px;
+      border: none;
+      background: var(--purple);
+      color: white;
+      border-radius: 10px;
+      padding: 8px 12px;
+      font-size: 13px;
+      font-weight: bold;
+      cursor: pointer;
+      width: auto;
+    }
     .check-row {
       margin-top: 8px;
       display: flex;
@@ -193,26 +223,37 @@
       padding: 12px;
       border-radius: 12px;
       font-weight: bold;
-      line-height: 1.35;
+      line-height: 1.45;
+      font-size: 14px;
     }
     .status.ok { display: block; background: #dcfce7; color: #166534; }
     .status.err { display: block; background: #fee2e2; color: #991b1b; }
     .status.warn { display: block; background: #fff7ed; color: #9a3412; }
     .small-note { margin-top: 8px; font-size: 12px; color: var(--gray); }
-
-    /* ===== Inventario ===== */
-    .inv-top { display: flex; gap: 10px; margin-bottom: 14px; }
-    .inv-top input { flex: 1; }
-    .inv-top button {
+    .btn-azul {
       border: none;
       background: var(--blue);
       color: white;
       border-radius: 12px;
-      padding: 0 18px;
-      font-size: 15px;
+      padding: 12px 18px;
+      font-size: 14px;
       font-weight: bold;
       cursor: pointer;
     }
+    .btn-verde {
+      border: none;
+      background: var(--green);
+      color: white;
+      border-radius: 12px;
+      padding: 12px 18px;
+      font-size: 14px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+
+    /* ===== Inventario ===== */
+    .inv-top { display: flex; gap: 10px; margin-bottom: 14px; }
+    .inv-top input { flex: 1; }
     .inv-resumen {
       display: grid;
       grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -245,18 +286,39 @@
     .badge {
       border-radius: 999px;
       padding: 4px 12px;
-      font-size: 12px;
+      font-size: 11px;
       font-weight: bold;
       white-space: nowrap;
     }
     .badge.ok { background: #dcfce7; color: #166534; }
     .badge.low { background: #ffedd5; color: #9a3412; }
     .badge.out { background: #fee2e2; color: #991b1b; }
+    .badge.tipo { background: var(--blue-soft); color: var(--blue); }
+    .badge.conteo { background: #ede9fe; color: var(--purple); }
+    .badge.nuevo { background: #ffedd5; color: #9a3412; }
+
+    /* ===== Movimientos ===== */
+    .filtros {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+      margin-bottom: 14px;
+      align-items: end;
+    }
+    .mov-row {
+      padding: 12px 10px;
+      border-bottom: 1px solid #f1f5f9;
+      font-size: 14px;
+    }
+    .mov-row .mov-titulo { font-weight: bold; margin-bottom: 3px; }
+    .mov-row .mov-detalle { font-size: 12px; color: var(--gray); line-height: 1.4; }
+    .mov-badges { margin-top: 5px; display: flex; gap: 6px; flex-wrap: wrap; }
+
     @media (max-width: 700px) {
-      .type-grid, .row { grid-template-columns: 1fr; }
+      .type-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .row, .filtros { grid-template-columns: 1fr; }
       header h1 { font-size: 21px; }
       .actions { flex-direction: column; }
-      .inv-resumen { grid-template-columns: repeat(3, minmax(0, 1fr)); }
     }
   </style>
 </head>
@@ -265,8 +327,22 @@
     <h1>Full Company · Producción e Inventario</h1>
     <p>Registro rápido para laboratorio</p>
     <div class="tabs">
-      <button type="button" class="tab-btn active" data-tab="registro">📝 Registrar</button>
-      <button type="button" class="tab-btn" data-tab="inventario">📊 Inventario</button>
+      <button type="button" class="tab-btn active" data-tab="registro">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+        Registrar
+      </button>
+      <button type="button" class="tab-btn" data-tab="inventario">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8l-9-5-9 5v8l9 5 9-5V8z"/><path d="M3 8l9 5 9-5"/><path d="M12 13v8"/></svg>
+        Inventario
+      </button>
+      <button type="button" class="tab-btn" data-tab="movimientos">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
+        Movimientos
+      </button>
+      <button type="button" class="tab-btn" data-tab="exportar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
+        Exportar
+      </button>
     </div>
   </header>
   <main>
@@ -275,17 +351,48 @@
       <div class="card">
         <div class="section-title">¿Qué vas a registrar?</div>
         <div class="type-grid" id="typeGrid">
-          <button type="button" class="type-btn" data-type="Entrada mercancía"><span class="emoji">📦</span>Llegó mercancía</button>
-          <button type="button" class="type-btn" data-type="Consumo materia prima"><span class="emoji">🧪</span>Usé materia prima</button>
-          <button type="button" class="type-btn" data-type="Preparar tambor"><span class="emoji">🛢️</span>Preparé tambor</button>
-          <button type="button" class="type-btn" data-type="Empacar desde tambor"><span class="emoji">🧴</span>Empaqué producto</button>
-          <button type="button" class="type-btn" data-type="Empacar sólido/polvo"><span class="emoji">⚖️</span>Empaqué sólido/polvo</button>
-          <button type="button" class="type-btn" data-type="Salida directa/Baja"><span class="emoji">🚚</span>Salida directa / baja</button>
-          <button type="button" class="type-btn" data-type="Fabricar palos"><span class="emoji">🧹</span>Fabricar palos</button>
-          <button type="button" class="type-btn" data-type="Novedad/Corrección"><span class="emoji">⚠️</span>Novedad / corrección</button>
+          <button type="button" class="type-btn" data-type="Entrada mercancía">
+            <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8l-9-5-9 5v8l9 5 9-5V8z"/><path d="M3 8l9 5 9-5"/><path d="M12 13v8"/></svg></span>
+            Llegó mercancía
+          </button>
+          <button type="button" class="type-btn" data-type="Consumo materia prima">
+            <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3v6l-5.3 8.5A3 3 0 0 0 7.2 22h9.6a3 3 0 0 0 2.5-4.5L14 9V3"/><path d="M8.5 3h7"/><path d="M7 15h10"/></svg></span>
+            Usé materia prima
+          </button>
+          <button type="button" class="type-btn" data-type="Preparar tambor">
+            <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="7" ry="2.5"/><path d="M5 5v14c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5V5"/><path d="M5 12c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5"/></svg></span>
+            Preparé tambor
+          </button>
+          <button type="button" class="type-btn" data-type="Empacar desde tambor">
+            <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2h4"/><path d="M10 2v4.2L7.6 9.6A4 4 0 0 0 7 11.8V20a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2v-8.2a4 4 0 0 0-.6-2.2L14 6.2V2"/><path d="M7 14h10"/></svg></span>
+            Empaqué producto
+          </button>
+          <button type="button" class="type-btn" data-type="Empacar sólido/polvo">
+            <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18"/><path d="M7 21h10"/><path d="M3 7h3c2 0 4-.7 6-2 2 1.3 4 2 6 2h3"/><path d="m17 15 2.5-8 2.5 8a4.2 4.2 0 0 1-5 0Z"/><path d="m2 15 2.5-8 2.5 8a4.2 4.2 0 0 1-5 0Z"/></svg></span>
+            Empaqué sólido/polvo
+          </button>
+          <button type="button" class="type-btn" data-type="Salida directa/Baja">
+            <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h12v11H3z"/><path d="M15 10h4l3 3v4h-7"/><circle cx="7" cy="19" r="1.8"/><circle cx="18" cy="19" r="1.8"/></svg></span>
+            Salida directa / baja
+          </button>
+          <button type="button" class="type-btn" data-type="Fabricar palos">
+            <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 3 9.5 13.5"/><path d="M9.5 13.5 4 19c-1 1-.6 2.7.8 3l4.7-1.5 2-5.5-2-1.5Z"/><path d="M6 16.5 9 19"/></svg></span>
+            Fabricar palos
+          </button>
+          <button type="button" class="type-btn" data-type="Conteo inventario">
+            <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="m9 14 2 2 4-4"/></svg></span>
+            Conteo de inventario
+          </button>
+          <button type="button" class="type-btn" data-type="Novedad/Corrección">
+            <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.8 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.8a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg></span>
+            Novedad / corrección
+          </button>
         </div>
         <form id="mainForm" autocomplete="off">
           <div class="section-title" id="formTitle">Registro</div>
+          <div id="conteoAyuda" class="status warn" style="display:none">
+            Conteo de inventario: ve, revisa físicamente cuánto hay y regístralo aquí. El sistema fijará la existencia en ese valor y quedará marcado como CONTEO en la trazabilidad.
+          </div>
           <div class="row">
             <div class="field" data-field="responsable">
               <label for="Responsable">Responsable</label>
@@ -328,10 +435,10 @@
             <div class="field hidden" data-field="variante">
               <label for="Variante">Variante / aroma / color / referencia</label>
               <div class="suggest-wrapper">
-                <input id="Variante" name="Variante" placeholder="Ej: Chicle, Azul, Genérica, Deterfull 4 L" />
+                <input id="Variante" name="Variante" placeholder="Ej: Chicle, Azul, Genérica, Deterfull" />
                 <div id="varianteSuggestions" class="suggest-box"></div>
               </div>
-              <div class="hint">Etiquetas: Ítem = Etiqueta y aquí va la variante (Genérica, Deterfull 4 L…). Fragancia/Color: aquí va el aroma o color.</div>
+              <div class="hint">Etiquetas: Ítem = Etiqueta y aquí va de qué producto es (Genérica, Deterfull…). Fragancia/Color: aquí va el aroma o color.</div>
             </div>
           </div>
           <div class="row">
@@ -379,12 +486,12 @@
               <input id="LitrosPreparados" name="LitrosPreparados" type="number" step="0.001" min="0" placeholder="Ej: 120" />
             </div>
             <div class="field hidden" data-field="tambor">
-              <label for="TamborID">Tambor disponible</label>
+              <label for="TamborID">Tambor / producto que empacas</label>
               <div class="suggest-wrapper">
-                <input id="TamborID" name="TamborID" placeholder="Ej: Tambor Deterfull 120 L" />
+                <input id="TamborID" name="TamborID" placeholder="Ej: Deterfull tambor 120 L" />
                 <div id="tamborSuggestions" class="suggest-box"></div>
               </div>
-              <div class="hint">Si no aparece, primero registra “Preparé tambor” o deja observación para revisar.</div>
+              <div class="hint">Escribe el producto del tambor. Si no aparece sugerido, primero registra “Preparé tambor”.</div>
             </div>
           </div>
           <div class="row">
@@ -394,7 +501,7 @@
                 <input id="Presentacion" name="Presentacion" placeholder="Ej: Galón 4 L, Bolsa 500 g, Recarga litros" />
                 <div id="presentacionSuggestions" class="suggest-box"></div>
               </div>
-              <div class="hint">Siempre con tamaño: 500 ml, 4 L, 1 kg… O “Recarga litros” / “Bulto”.</div>
+              <div class="hint">Siempre con tamaño: 500 ml, 4 L, 1 kg… O “Recarga litros” / “Bulto”. Al guardar, se descuenta ese envase del inventario automáticamente.</div>
             </div>
             <div class="field hidden" data-field="cantpres">
               <label for="CantidadPresentacion">Cantidad de presentaciones</label>
@@ -418,8 +525,11 @@
             </div>
             <div class="field hidden" data-field="etiqueta">
               <label for="Etiqueta">Etiqueta usada</label>
-              <input id="Etiqueta" name="Etiqueta" placeholder="Ej: Genérica, Deterfull 4 L, Ambientador 1 L" />
-              <div class="hint">Aquí va la variante de la etiqueta. Si no lleva, escribe “Sin etiqueta”.</div>
+              <div class="suggest-wrapper">
+                <input id="Etiqueta" name="Etiqueta" placeholder="Ej: Genérica, Deterfull, Ambientador" />
+                <div id="etiquetaSuggestions" class="suggest-box"></div>
+              </div>
+              <div class="hint">De qué producto es la etiqueta. Si no lleva (polvos), escribe “Sin etiqueta”.</div>
             </div>
           </div>
           <div class="row">
@@ -449,7 +559,7 @@
             <button type="submit" class="submit" id="btnSubmit">Guardar registro</button>
           </div>
           <div id="status" class="status"></div>
-          <div class="small-note">Si el mensaje dice “Enviado”, revisa la hoja REGISTRO_APP para confirmar.</div>
+          <div class="small-note">Si el mensaje dice “Enviado”, el registro quedó en la hoja REGISTRO_APP.</div>
         </form>
       </div>
     </section>
@@ -460,12 +570,61 @@
         <div class="section-title">Existencias de inventario</div>
         <div class="inv-top">
           <input id="invBuscar" placeholder="Buscar ítem…" />
-          <button type="button" id="btnInvRecargar">Actualizar</button>
+          <button type="button" class="btn-azul" id="btnInvRecargar">Actualizar</button>
         </div>
         <div id="invResumen" class="inv-resumen" style="display:none"></div>
         <div id="invEstado" class="status"></div>
         <div id="invLista"></div>
-        <div class="small-note">Primero se muestran los agotados y los que están por acabarse. Los datos vienen de la hoja INVENTARIO.</div>
+        <div class="small-note">El inventario se calcula automáticamente con todos los movimientos de REGISTRO_APP: entradas suman, consumos y empaques restan (envases, etiquetas y accesorios se descuentan solos al empacar), y los conteos fijan el valor real. Primero se muestran los agotados y los que están por acabarse.</div>
+      </div>
+    </section>
+
+    <!-- ================= VISTA MOVIMIENTOS (TRAZABILIDAD) ================= -->
+    <section id="view-movimientos" class="view hidden">
+      <div class="card">
+        <div class="section-title">Trazabilidad de movimientos</div>
+        <div class="filtros">
+          <div>
+            <label for="movDesde">Desde</label>
+            <input type="date" id="movDesde" />
+          </div>
+          <div>
+            <label for="movHasta">Hasta</label>
+            <input type="date" id="movHasta" />
+          </div>
+          <div>
+            <button type="button" class="btn-azul" id="btnMovCargar" style="width:100%">Consultar</button>
+          </div>
+        </div>
+        <input id="movBuscar" placeholder="Filtrar por ítem, responsable, tipo…" style="margin-bottom:12px" />
+        <div id="movEstado" class="status"></div>
+        <div id="movLista"></div>
+        <div class="small-note">Los registros de CONTEO (morado) son ajustes donde alguien revisó físicamente cuánto había. Los marcados ÍTEM NUEVO están pendientes de revisar en el catálogo.</div>
+      </div>
+    </section>
+
+    <!-- ================= VISTA EXPORTAR ================= -->
+    <section id="view-exportar" class="view hidden">
+      <div class="card">
+        <div class="section-title">Exportar reportes</div>
+        <div class="filtros">
+          <div>
+            <label for="expDesde">Desde</label>
+            <input type="date" id="expDesde" />
+          </div>
+          <div>
+            <label for="expHasta">Hasta</label>
+            <input type="date" id="expHasta" />
+          </div>
+        </div>
+        <div class="actions" style="margin-top:6px; flex-wrap:wrap">
+          <button type="button" class="btn-verde" id="btnExpMateria">Materia prima gastada (Excel/CSV)</button>
+          <button type="button" class="btn-azul" id="btnExpTodo">Todos los movimientos (Excel/CSV)</button>
+          <button type="button" class="btn-azul" id="btnExpInventario">Inventario actual (Excel/CSV)</button>
+        </div>
+        <div id="expEstado" class="status"></div>
+        <div id="expVista"></div>
+        <div class="small-note">“Materia prima gastada” suma todos los consumos de cada materia prima en el rango de fechas: ideal para enviarle al contador cada semana. Los archivos abren directo en Excel.</div>
       </div>
     </section>
   </main>
@@ -477,7 +636,8 @@
       selectedType: '',
       dynamicLoaded: false,
       catalogos: {},
-      inventario: null
+      inventario: null,
+      registros: null
     };
 
     // ================== CATÁLOGOS LOCALES (fallback) ==================
@@ -553,7 +713,6 @@
       tambores: []
     };
 
-    // Campos visibles por tipo de registro
     var visibility = {
       'Entrada mercancía': ['responsable', 'categoria', 'item', 'variante', 'cantidad', 'unidad', 'observacion'],
       'Consumo materia prima': ['responsable', 'item', 'variante', 'cantidad', 'unidad', 'producto', 'observacion'],
@@ -562,11 +721,10 @@
       'Empacar sólido/polvo': ['responsable', 'item', 'presentacion', 'cantpres', 'etiqueta', 'observacion'],
       'Salida directa/Baja': ['responsable', 'categoria', 'item', 'variante', 'cantidad', 'unidad', 'motivo', 'observacion'],
       'Fabricar palos': ['responsable', 'item', 'cantidad', 'observacion'],
+      'Conteo inventario': ['responsable', 'categoria', 'item', 'variante', 'cantidad', 'unidad', 'observacion'],
       'Novedad/Corrección': ['responsable', 'categoria', 'item', 'variante', 'cantidad', 'unidad', 'motivo', 'observacion']
     };
-
-    // Tipos que exigen categoría para filtrar ítems
-    var tiposConCategoria = ['Entrada mercancía', 'Salida directa/Baja', 'Novedad/Corrección'];
+    var tiposConCategoria = ['Entrada mercancía', 'Salida directa/Baja', 'Novedad/Corrección', 'Conteo inventario'];
 
     document.addEventListener('DOMContentLoaded', function () {
       state.catalogos = JSON.parse(JSON.stringify(catalogosLocales));
@@ -583,17 +741,38 @@
       document.getElementById('CrearNuevoItem').addEventListener('change', validateItemSoft);
       document.getElementById('btnInvRecargar').addEventListener('click', loadInventario);
       document.getElementById('invBuscar').addEventListener('input', renderInventario);
+      document.getElementById('btnMovCargar').addEventListener('click', loadMovimientos);
+      document.getElementById('movBuscar').addEventListener('input', renderMovimientos);
+      document.getElementById('btnExpMateria').addEventListener('click', function () { exportar('materia'); });
+      document.getElementById('btnExpTodo').addEventListener('click', function () { exportar('todo'); });
+      document.getElementById('btnExpInventario').addEventListener('click', function () { exportar('inventario'); });
 
       setupSuggest('Item', 'itemSuggestions', getItemOptions, validateItemSoft);
       setupSuggest('Variante', 'varianteSuggestions', getVarianteOptions);
       setupSuggest('Producto', 'productoSuggestions', function () { return getCatalog('productos'); });
-      setupSuggest('Presentacion', 'presentacionSuggestions', function () { return getCatalog('presentaciones'); });
+      setupSuggest('Presentacion', 'presentacionSuggestions', getPresentacionOptions);
       setupSuggest('TamborID', 'tamborSuggestions', getTamborOptions);
+      setupSuggest('Etiqueta', 'etiquetaSuggestions', function () {
+        return unique(['Sin etiqueta', 'Genérica'].concat(getCatalog('productos')));
+      });
+
+      // fechas por defecto: última semana
+      var hoy = new Date();
+      var hace7 = new Date(hoy.getTime() - 7 * 86400000);
+      ['movDesde', 'expDesde'].forEach(function (id) { document.getElementById(id).value = fechaInput(hace7); });
+      ['movHasta', 'expHasta'].forEach(function (id) { document.getElementById(id).value = fechaInput(hoy); });
 
       loadInitJsonp();
+      // Carga silenciosa del inventario para poder avisar cuando no hay existencias
+      jsonp({ action: 'inventario' }, function (data) {
+        state.inventario = parseInventario(data);
+      }, function () {});
     });
 
     // ================== UTILIDADES ==================
+    function fechaInput(d) {
+      return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    }
     function getCatalog(key) {
       return unique((state.catalogos && state.catalogos[key]) || catalogosLocales[key] || []);
     }
@@ -621,34 +800,46 @@
     }
 
     // ================== JSONP (lectura desde Apps Script) ==================
-    function jsonp(action, onOk, onFail, timeoutMs) {
-      var callbackName = '__fc_' + action.replace(/[^a-z]/gi, '') + '_' + Date.now();
+    function jsonp(params, onOk, onFail, timeoutMs) {
+      var callbackName = '__fc_' + Math.random().toString(36).slice(2) + Date.now();
       var done = false;
       window[callbackName] = function (data) {
+        if (done) return;
         done = true;
         cleanupJsonp(callbackName);
-        try { onOk(data || {}); } catch (err) { console.log('Error procesando ' + action + ':', err); }
+        try { onOk(data || {}); } catch (err) { console.log('Error procesando respuesta:', err); }
       };
+      var qs = Object.keys(params).map(function (k) {
+        return encodeURIComponent(k) + '=' + encodeURIComponent(params[k]);
+      }).join('&');
       var script = document.createElement('script');
-      script.src = APPS_SCRIPT_URL + '?action=' + encodeURIComponent(action) +
-        '&callback=' + encodeURIComponent(callbackName) + '&v=' + Date.now();
+      script.src = APPS_SCRIPT_URL + '?' + qs + '&callback=' + encodeURIComponent(callbackName) + '&v=' + Date.now();
       script.onerror = function () {
+        if (done) return;
+        done = true;
         cleanupJsonp(callbackName);
-        if (!done && typeof onFail === 'function') { done = true; onFail(); }
+        if (typeof onFail === 'function') onFail();
       };
       document.body.appendChild(script);
       setTimeout(function () {
+        if (done) return;
+        done = true;
         cleanupJsonp(callbackName);
-        if (!done && typeof onFail === 'function') { done = true; onFail(); }
-      }, timeoutMs || 8000);
+        if (typeof onFail === 'function') onFail();
+      }, timeoutMs || 12000);
     }
     function cleanupJsonp(callbackName) {
       try { delete window[callbackName]; } catch (err) { window[callbackName] = undefined; }
       document.querySelectorAll('script[src*="' + callbackName + '"]').forEach(function (el) { el.remove(); });
     }
+    var MSG_SCRIPT = 'No se pudo conectar con el Apps Script. Revisa en orden: ' +
+      '1) Que hayas pegado el archivo codigo-apps-script.gs completo. ' +
+      '2) Que al implementar hayas usado "Administrar implementaciones → editar (lápiz) → Nueva versión" (NO crear una implementación nueva). ' +
+      '3) Que diga "Quién tiene acceso: Cualquier usuario". ' +
+      '4) Que el ID_HOJA del script sea el de tu hoja de cálculo.';
 
     function loadInitJsonp() {
-      jsonp('init', function (data) {
+      jsonp({ action: 'init' }, function (data) {
         mergeDynamicCatalogs(data);
         state.dynamicLoaded = true;
       }, function () {
@@ -669,8 +860,9 @@
     // ================== SELECCIÓN DE TIPO ==================
     function selectType(type) {
       state.selectedType = type;
-      document.getElementById('formTitle').textContent = type;
+      document.getElementById('formTitle').textContent = type === 'Conteo inventario' ? 'Conteo de inventario' : type;
       document.getElementById('mainForm').classList.add('active');
+      document.getElementById('conteoAyuda').style.display = (type === 'Conteo inventario') ? 'block' : 'none';
       document.querySelectorAll('.type-btn').forEach(function (btn) {
         btn.classList.toggle('active', btn.dataset.type === type);
       });
@@ -687,9 +879,7 @@
       document.getElementById('CrearNuevoItem').checked = false;
       validateItemSoft();
       hideSuggestions();
-      if (type === 'Fabricar palos') {
-        document.getElementById('Unidad').value = 'und';
-      }
+      if (type === 'Fabricar palos') document.getElementById('Unidad').value = 'und';
       window.scrollTo({ top: document.getElementById('mainForm').offsetTop - 20, behavior: 'smooth' });
     }
 
@@ -698,11 +888,9 @@
       document.getElementById('Item').value = '';
       document.getElementById('Variante').value = '';
       document.getElementById('CrearNuevoItem').checked = false;
-      // Etiquetas: el ítem SIEMPRE es "Etiqueta"; lo que cambia es la variante
       if (categoria === 'Etiqueta') {
         document.getElementById('Item').value = 'Etiqueta';
       }
-      // Unidad sugerida automáticamente (se puede cambiar)
       if (['Envase', 'Accesorio', 'Etiqueta', 'Material palo'].indexOf(categoria) >= 0) {
         document.getElementById('Unidad').value = 'und';
       }
@@ -753,7 +941,6 @@
       document.querySelectorAll('.suggest-box').forEach(function (box) { box.style.display = 'none'; });
     }
 
-    // Opciones de ítem SEGÚN tipo y categoría (nunca mezcladas)
     function getItemOptions() {
       var type = state.selectedType;
       var categoria = valueOf('Categoria');
@@ -770,8 +957,7 @@
         if (categoria === 'Etiqueta') return getCatalog('etiquetas');
         if (categoria === 'Material palo') return getCatalog('materialesPalos');
         if (categoria === 'Producto terminado') return getCatalog('productos');
-        if (categoria === 'Otro') return [];
-        return []; // sin categoría no se sugiere nada: evita mezclas
+        return [];
       }
       return [];
     }
@@ -783,21 +969,28 @@
         return getCatalog('variantesFragancia');
       }
       if (categoria === 'Etiqueta' || item === 'etiqueta') {
-        // Variantes de etiqueta = Genérica + nombres de productos
         return unique(['Genérica'].concat(getCatalog('productos')));
       }
       return [];
     }
 
+    function getPresentacionOptions() {
+      var lista = getCatalog('presentaciones');
+      if (state.selectedType === 'Empacar sólido/polvo') {
+        return lista.filter(function (p) { return /bolsa|tarro|bulto/i.test(p); });
+      }
+      return lista;
+    }
+
     function getTamborOptions() {
       return (state.catalogos.tambores || []).map(function (t) {
         if (typeof t === 'string') return t;
-        return [t.id, t.producto, t.variante, t.disponible ? 'Disponible: ' + t.disponible + ' L' : '']
+        return [t.producto || t.id, t.variante, t.tanque, (t.disponible != null ? 'Quedan aprox ' + t.disponible + ' L' : '')]
           .filter(Boolean).join(' · ');
       });
     }
 
-    // ================== VALIDACIÓN SUAVE DEL ÍTEM ==================
+    // ================== VALIDACIÓN SUAVE DEL ÍTEM + AVISO DE EXISTENCIA ==================
     function validateItemSoft() {
       var item = valueOf('Item');
       var warning = document.getElementById('itemWarning');
@@ -807,36 +1000,69 @@
 
       if (!item) {
         if (tiposConCategoria.indexOf(type) >= 0 && !categoria) {
-          warning.textContent = 'Primero selecciona la categoría para ver los ítems correctos.';
-          warning.style.display = 'block';
+          setWarning(warning, 'Primero selecciona la categoría para ver los ítems correctos.');
         } else {
-          warning.style.display = 'none';
-          warning.textContent = '';
+          setWarning(warning, '');
         }
         return;
       }
       var options = getItemOptions();
       var exact = options.some(function (x) { return normalize(x) === normalize(item); });
-      if (exact && !checked) {
-        warning.style.display = 'none';
-        warning.textContent = '';
-        return;
-      }
       if (checked) {
-        warning.textContent = 'Se guardará como ítem NUEVO pendiente de revisar. Verifica que el nombre esté bien escrito y con tamaño si es envase o bolsa (Ej: Botella 500 ml).';
-        warning.style.display = 'block';
+        setWarning(warning, 'Se guardará como ítem NUEVO pendiente de revisar. Verifica que el nombre esté bien escrito y con tamaño si es envase o bolsa (Ej: Botella 500 ml).');
         return;
       }
-      var similar = options.filter(function (x) {
-        return similarityScore(item, x) >= 0.45 ||
-          normalize(x).includes(normalize(item)) ||
-          normalize(item).includes(normalize(x));
-      }).slice(0, 3);
-      var msg = 'No encontré este ítem exacto en la categoría seleccionada.';
-      if (similar.length) msg += ' ¿Será uno de estos?: ' + similar.join(', ') + '.';
-      msg += ' Si de verdad es nuevo, marca “Crear como nuevo en catálogo, pendiente de revisar”.';
-      warning.textContent = msg;
+      if (!exact) {
+        var similar = options.filter(function (x) {
+          return similarityScore(item, x) >= 0.45 ||
+            normalize(x).includes(normalize(item)) ||
+            normalize(item).includes(normalize(x));
+        }).slice(0, 3);
+        var msg = 'No encontré este ítem exacto en la categoría seleccionada.';
+        if (similar.length) msg += ' ¿Será uno de estos?: ' + similar.join(', ') + '.';
+        msg += ' Si de verdad es nuevo, marca “Crear como nuevo en catálogo, pendiente de revisar”.';
+        setWarning(warning, msg);
+        return;
+      }
+      // Ítem correcto: revisar si hay existencia registrada (para tipos que restan)
+      var tiposQueRestan = ['Consumo materia prima', 'Salida directa/Baja', 'Empacar sólido/polvo', 'Fabricar palos'];
+      if (tiposQueRestan.indexOf(type) >= 0 && state.inventario && state.inventario.length) {
+        var enInv = state.inventario.find(function (r) { return normalize(r.item) === normalize(item); });
+        if (!enInv) {
+          setWarning(warning, 'Este ítem no tiene existencia registrada en el inventario. Puedes guardar igual, pero lo ideal es que alguien revise físicamente cuánto hay y registre un “Conteo de inventario”.', item, categoria);
+          return;
+        }
+        if (enInv.stock <= 0) {
+          setWarning(warning, 'El inventario dice que este ítem está en ' + enInv.stock + (enInv.unidad ? ' ' + enInv.unidad : '') + '. Puedes guardar igual, pero conviene hacer un “Conteo de inventario” para cuadrarlo.', item, categoria);
+          return;
+        }
+      }
+      setWarning(warning, '');
+    }
+    function setWarning(warning, msg, itemConteo, catConteo) {
+      if (!msg) {
+        warning.style.display = 'none';
+        warning.innerHTML = '';
+        return;
+      }
+      warning.innerHTML = escapeHtml(msg);
+      if (itemConteo) {
+        var b = document.createElement('button');
+        b.type = 'button';
+        b.textContent = 'Registrar conteo de este ítem';
+        b.addEventListener('click', function () { irAConteo(itemConteo, catConteo); });
+        warning.appendChild(document.createElement('br'));
+        warning.appendChild(b);
+      }
       warning.style.display = 'block';
+    }
+    function irAConteo(item, categoria) {
+      var resp = valueOf('Responsable');
+      selectType('Conteo inventario');
+      document.getElementById('Responsable').value = resp;
+      if (categoria) document.getElementById('Categoria').value = categoria;
+      document.getElementById('Item').value = item;
+      showStatus('Revisa físicamente cuánto hay de “' + item + '”, pon la cantidad y guarda. Ese valor quedará como la existencia real.', 'warn');
     }
     function similarityScore(a, b) {
       var aa = normalize(a);
@@ -883,9 +1109,10 @@
       };
     }
 
-    function esNumeroPositivo(v) {
+    function esNumero(v, permitirCero) {
       var n = parseFloat(v);
-      return !isNaN(n) && n > 0;
+      if (isNaN(n)) return false;
+      return permitirCero ? n >= 0 : n > 0;
     }
     function hasSize(text) {
       return /\d+([.,]\d+)?\s*(ml|mililitro|mililitros|l|lt|litro|litros|g|gr|gramo|gramos|kg|kilo|kilos)\b/i.test(text);
@@ -897,40 +1124,44 @@
     function validatePayload(data) {
       if (!data.TipoRegistro) return 'Selecciona qué vas a registrar (toca uno de los botones de arriba).';
       if (!data.Responsable) return 'Selecciona responsable.';
-
       if (tiposConCategoria.includes(data.TipoRegistro) && !valueOf('Categoria')) {
         return 'Selecciona categoría.';
       }
-      var tiposConItem = ['Entrada mercancía', 'Consumo materia prima', 'Salida directa/Baja', 'Novedad/Corrección', 'Empacar sólido/polvo', 'Fabricar palos'];
+      var tiposConItem = ['Entrada mercancía', 'Consumo materia prima', 'Salida directa/Baja', 'Novedad/Corrección', 'Empacar sólido/polvo', 'Fabricar palos', 'Conteo inventario'];
       if (tiposConItem.includes(data.TipoRegistro) && !data.Item) {
         return 'Debes escribir o seleccionar un ítem.';
       }
       if (['Entrada mercancía', 'Consumo materia prima', 'Salida directa/Baja', 'Novedad/Corrección'].includes(data.TipoRegistro)) {
-        if (!esNumeroPositivo(data.Cantidad)) return 'Debes poner una cantidad mayor que cero.';
+        if (!esNumero(data.Cantidad, false)) return 'Debes poner una cantidad mayor que cero.';
+        if (!data.Unidad) return 'Debes seleccionar unidad.';
+      }
+      if (data.TipoRegistro === 'Conteo inventario') {
+        if (!esNumero(data.Cantidad, true)) return 'Debes poner la cantidad contada (puede ser 0 si está agotado).';
         if (!data.Unidad) return 'Debes seleccionar unidad.';
       }
       if (data.TipoRegistro === 'Preparar tambor') {
         if (!data.Producto) return 'Debes escribir el producto.';
         if (!data.Tanque) return 'Debes seleccionar tanque.';
-        if (!esNumeroPositivo(data.LitrosPreparados)) return 'Debes poner los litros preparados.';
+        if (!esNumero(data.LitrosPreparados, false)) return 'Debes poner los litros preparados.';
       }
       if (data.TipoRegistro === 'Empacar desde tambor') {
-        if (!data.TamborID) return 'Debes seleccionar o escribir el tambor disponible.';
+        if (!data.TamborID) return 'Debes escribir el tambor o producto que empacas.';
         if (!data.Presentacion) return 'Debes poner presentación.';
-        if (!esNumeroPositivo(data.CantidadPresentacion)) return 'Debes poner cuántas presentaciones empacaste.';
+        if (!esNumero(data.CantidadPresentacion, false)) return 'Debes poner cuántas presentaciones empacaste.';
+        if (!data.Etiqueta) return 'Indica la etiqueta usada. Si no lleva, escribe “Sin etiqueta”.';
       }
       if (data.TipoRegistro === 'Empacar sólido/polvo') {
-        if (!data.Presentacion) return 'Debes poner presentación.';
-        if (!esNumeroPositivo(data.CantidadPresentacion)) return 'Debes poner cuántas presentaciones empacaste.';
+        if (!data.Presentacion) return 'Debes poner presentación (bolsa o tarro con tamaño).';
+        if (!esNumero(data.CantidadPresentacion, false)) return 'Debes poner cuántas presentaciones empacaste.';
+        if (!data.Etiqueta) return 'Indica la etiqueta usada. Si no lleva, escribe “Sin etiqueta”.';
       }
       if (data.TipoRegistro === 'Fabricar palos') {
         if (!/palo/i.test(data.Item)) return 'En fabricar palos, el ítem debe ser un tipo de palo.';
-        if (!esNumeroPositivo(data.Cantidad)) return 'Debes poner cantidad de palos.';
+        if (!esNumero(data.Cantidad, false)) return 'Debes poner cantidad de palos.';
       }
 
-      // Anti-duplicados: si el ítem no existe exacto, debe marcarse como nuevo
-      var tiposConItemValidado = tiposConItem;
-      if (tiposConItemValidado.includes(data.TipoRegistro) && data.Item) {
+      // Anti-duplicados
+      if (tiposConItem.includes(data.TipoRegistro) && data.Item) {
         var options = getItemOptions();
         var itemExists = options.some(function (x) { return normalize(x) === normalize(data.Item); });
         if (!itemExists && data.NuevoItem !== 'Sí') {
@@ -938,7 +1169,7 @@
         }
       }
 
-      // Reglas de tamaño obligatorio
+      // Tamaños obligatorios
       var cat = valueOf('Categoria');
       if (cat === 'Envase' && data.Item && !hasSize(data.Item)) {
         return 'Para envases debes escribir el tamaño. Ejemplo: Galón 4 L, Botella 500 ml, Bolsa 1 kg.';
@@ -947,7 +1178,7 @@
         return 'La presentación debe tener tamaño. Ejemplo: Galón 4 L, Botella 500 ml, Bolsa 500 g. Si es recarga escribe “Recarga litros”; si es bulto, “Bulto”.';
       }
 
-      // Reglas de variante obligatoria
+      // Variantes obligatorias
       if (cat === 'Fragancia / Color' && !data.Variante) {
         return 'Para Fragancia / Color debes poner la variante. Ejemplo: Chicle, Canela, Azul.';
       }
@@ -958,7 +1189,7 @@
         return 'Si el ítem es Color, debes poner la variante. Ejemplo: Azul.';
       }
       if (normalize(data.Item) === 'etiqueta' && cat === 'Etiqueta' && !data.Variante) {
-        return 'Para etiquetas pon la variante. Ejemplo: Genérica, Deterfull 4 L.';
+        return 'Para etiquetas pon de qué producto es. Ejemplo: Genérica, Deterfull.';
       }
       return '';
     }
@@ -977,22 +1208,20 @@
       btn.disabled = true;
       btn.textContent = 'Guardando...';
       try {
-        // GitHub Pages no tiene backend: se envía directo a Apps Script.
-        // Con mode "no-cors" el guardado funciona pero no se puede leer la respuesta.
         await fetch(APPS_SCRIPT_URL, {
           method: 'POST',
           mode: 'no-cors',
           headers: { 'Content-Type': 'text/plain;charset=utf-8' },
           body: JSON.stringify(data)
         });
-        showStatus('✅ Enviado: ' + data.TipoRegistro + (data.Item ? ' · ' + data.Item : '') +
-          '. Revisa REGISTRO_APP para confirmar el guardado.', 'ok');
+        showStatus('✔ Enviado: ' + data.TipoRegistro + (data.Item ? ' · ' + data.Item : '') + (data.Presentacion ? ' · ' + data.Presentacion : ''), 'ok');
         var keepType = data.TipoRegistro;
         var keepResp = data.Responsable;
         resetForm(false);
         selectType(keepType);
         document.getElementById('Responsable').value = keepResp;
-        state.inventario = null; // para que el inventario se recargue con datos frescos
+        state.inventario = null;
+        state.registros = null;
       } catch (err) {
         showStatus('No se pudo enviar. Revisa tu conexión a internet e intenta de nuevo. Error: ' + (err.message || String(err)), 'err');
       } finally {
@@ -1007,7 +1236,7 @@
       document.getElementById('CrearNuevoItem').checked = false;
       clearStatus();
       hideSuggestions();
-      document.getElementById('itemWarning').style.display = 'none';
+      setWarning(document.getElementById('itemWarning'), '');
       if (clearType) {
         state.selectedType = '';
         document.getElementById('formTitle').textContent = 'Registro';
@@ -1033,23 +1262,30 @@
       document.querySelectorAll('.tab-btn').forEach(function (btn) {
         btn.classList.toggle('active', btn.dataset.tab === tab);
       });
-      document.getElementById('view-registro').classList.toggle('hidden', tab !== 'registro');
-      document.getElementById('view-inventario').classList.toggle('hidden', tab !== 'inventario');
+      ['registro', 'inventario', 'movimientos', 'exportar'].forEach(function (t) {
+        document.getElementById('view-' + t).classList.toggle('hidden', t !== tab);
+      });
       if (tab === 'inventario' && !state.inventario) loadInventario();
+      if (tab === 'movimientos' && !state.registros) loadMovimientos();
     }
 
     // ================== INVENTARIO ==================
     function loadInventario() {
       var estado = document.getElementById('invEstado');
       estado.className = 'status warn';
-      estado.textContent = 'Cargando inventario...';
+      estado.textContent = 'Calculando inventario con todos los movimientos...';
       document.getElementById('invLista').innerHTML = '';
       document.getElementById('invResumen').style.display = 'none';
-      jsonp('inventario', function (data) {
+      jsonp({ action: 'inventario' }, function (data) {
+        if (data && data.error) {
+          estado.className = 'status err';
+          estado.textContent = 'El script respondió con un error: ' + data.error + '. Revisa que el ID_HOJA del Apps Script sea el de tu hoja y que exista la pestaña REGISTRO_APP.';
+          return;
+        }
         state.inventario = parseInventario(data);
         if (!state.inventario.length) {
           estado.className = 'status warn';
-          estado.textContent = 'No llegaron datos de inventario. Verifica que la hoja INVENTARIO tenga información y que el Apps Script esté actualizado.';
+          estado.textContent = 'La conexión funciona, pero no hay movimientos en REGISTRO_APP todavía. Registra entradas o conteos y aparecerán aquí.';
           return;
         }
         estado.className = 'status';
@@ -1057,18 +1293,19 @@
         renderInventario();
       }, function () {
         estado.className = 'status err';
-        estado.textContent = 'No se pudo cargar el inventario. Hay que actualizar el Apps Script con el archivo "codigo-apps-script.gs" (soporte de ?action=inventario&callback=). Mientras tanto puedes ver el inventario directamente en la hoja de Google Sheets.';
-      }, 10000);
+        estado.textContent = MSG_SCRIPT;
+      }, 20000);
     }
 
     function parseInventario(data) {
       var rows = [];
       if (Array.isArray(data)) rows = data;
-      else if (Array.isArray(data.items)) rows = data.items;
-      else if (Array.isArray(data.inventario)) rows = data.inventario;
+      else if (data && Array.isArray(data.items)) rows = data.items;
+      else if (data && Array.isArray(data.inventario)) rows = data.inventario;
       return rows.map(function (r) {
         return {
           item: pickField(r, ['item', 'nombre', 'producto', 'descripcion']),
+          variante: pickField(r, ['variante', 'aroma', 'referencia']),
           categoria: pickField(r, ['categoria', 'tipo', 'grupo']),
           stock: parseFloat(String(pickField(r, ['stock', 'existencia', 'existencias', 'saldo', 'disponible', 'cantidad'])).replace(',', '.')),
           unidad: pickField(r, ['unidad', 'und', 'um']),
@@ -1088,6 +1325,9 @@
       if (!isNaN(r.stock) && !isNaN(r.minimo) && r.minimo > 0 && r.stock <= r.minimo) return 'low';
       return 'ok';
     }
+    function nombreDe(r) {
+      return r.item + (r.variante ? ' · ' + r.variante : '');
+    }
 
     function renderInventario() {
       var lista = document.getElementById('invLista');
@@ -1106,27 +1346,220 @@
 
       if (filtro) {
         rows = rows.filter(function (r) {
-          return normalize(r.item).includes(filtro) || normalize(r.categoria).includes(filtro);
+          return normalize(nombreDe(r)).includes(filtro) || normalize(r.categoria).includes(filtro);
         });
       }
       var orden = { out: 0, low: 1, ok: 2 };
       rows.sort(function (a, b) {
         var d = orden[estadoDe(a)] - orden[estadoDe(b)];
-        return d !== 0 ? d : String(a.item).localeCompare(String(b.item), 'es');
+        return d !== 0 ? d : String(nombreDe(a)).localeCompare(String(nombreDe(b)), 'es');
       });
 
-      var etiquetas = { out: 'AGOTADO', low: 'POCO', ok: 'OK' };
+      var etiq = { out: 'AGOTADO', low: 'POCO', ok: 'OK' };
       lista.innerHTML = rows.map(function (r) {
         var est = estadoDe(r);
-        var stockTxt = isNaN(r.stock) ? '—' : (r.stock + (r.unidad ? ' ' + r.unidad : ''));
+        var stockTxt = isNaN(r.stock) ? '—' : (redondear(r.stock) + (r.unidad ? ' ' + r.unidad : ''));
         return '<div class="inv-row">' +
-          '<div><div class="inv-nombre">' + escapeHtml(r.item) + '</div>' +
+          '<div><div class="inv-nombre">' + escapeHtml(nombreDe(r)) + '</div>' +
           (r.categoria ? '<div class="inv-cat">' + escapeHtml(r.categoria) + '</div>' : '') + '</div>' +
           '<div style="display:flex;align-items:center;gap:10px">' +
           '<span class="inv-stock">' + escapeHtml(stockTxt) + '</span>' +
-          '<span class="badge ' + est + '">' + etiquetas[est] + '</span>' +
+          '<span class="badge ' + est + '">' + etiq[est] + '</span>' +
           '</div></div>';
       }).join('') || '<div class="hint" style="padding:14px">No hay ítems que coincidan con la búsqueda.</div>';
+    }
+    function redondear(n) {
+      return Math.round(n * 100) / 100;
+    }
+
+    // ================== MOVIMIENTOS (TRAZABILIDAD) ==================
+    function loadMovimientos() {
+      var estado = document.getElementById('movEstado');
+      estado.className = 'status warn';
+      estado.textContent = 'Cargando movimientos...';
+      document.getElementById('movLista').innerHTML = '';
+      var params = { action: 'registros' };
+      if (valueOf('movDesde')) params.desde = valueOf('movDesde');
+      if (valueOf('movHasta')) params.hasta = valueOf('movHasta');
+      jsonp(params, function (data) {
+        if (data && data.error) {
+          estado.className = 'status err';
+          estado.textContent = 'El script respondió con un error: ' + data.error;
+          return;
+        }
+        state.registros = (data && data.registros) || [];
+        if (!state.registros.length) {
+          estado.className = 'status warn';
+          estado.textContent = 'No hay movimientos en ese rango de fechas.';
+          return;
+        }
+        estado.className = 'status';
+        estado.textContent = '';
+        renderMovimientos();
+      }, function () {
+        estado.className = 'status err';
+        estado.textContent = MSG_SCRIPT;
+      }, 20000);
+    }
+
+    function campoReg(r, nombres) {
+      return String(pickField(r, nombres) || '');
+    }
+    function renderMovimientos() {
+      var lista = document.getElementById('movLista');
+      var filtro = normalize(valueOf('movBuscar'));
+      var rows = (state.registros || []).slice().reverse(); // más recientes primero
+      if (filtro) {
+        rows = rows.filter(function (r) {
+          return normalize(JSON.stringify(r)).includes(filtro);
+        });
+      }
+      lista.innerHTML = rows.slice(0, 300).map(function (r) {
+        var tipo = campoReg(r, ['tiporegistro', 'tipo']);
+        var esConteo = /conteo|ajuste/i.test(tipo);
+        var esNuevo = /^s/i.test(campoReg(r, ['nuevoitem', 'pendienteaprobacion']));
+        var fecha = campoReg(r, ['fecha', 'timestamp', 'fechaservidor', 'fechacliente']);
+        var fechaTxt = fecha ? new Date(fecha).toLocaleString('es-CO', { dateStyle: 'short', timeStyle: 'short' }) : '';
+        if (fechaTxt === 'Invalid Date') fechaTxt = fecha;
+        var item = campoReg(r, ['item']) || campoReg(r, ['producto']) || campoReg(r, ['tamborid']);
+        var variante = campoReg(r, ['variante']);
+        var detalles = [];
+        var cant = campoReg(r, ['cantidad']);
+        var uni = campoReg(r, ['unidad']);
+        if (cant) detalles.push('Cantidad: ' + cant + (uni ? ' ' + uni : ''));
+        var pres = campoReg(r, ['presentacion']);
+        var cantPres = campoReg(r, ['cantidadpresentacion']);
+        if (pres) detalles.push(cantPres ? cantPres + ' × ' + pres : pres);
+        var litros = campoReg(r, ['litrospreparados']);
+        if (litros) detalles.push(litros + ' L preparados');
+        var etiqueta = campoReg(r, ['etiqueta']);
+        if (etiqueta) detalles.push('Etiqueta: ' + etiqueta);
+        var motivo = campoReg(r, ['motivo']);
+        if (motivo) detalles.push('Motivo: ' + motivo);
+        var resp = campoReg(r, ['responsable']);
+        if (resp) detalles.push('Por: ' + resp);
+        var obs = campoReg(r, ['observacion']);
+        if (obs) detalles.push('Obs: ' + obs);
+        return '<div class="mov-row">' +
+          '<div class="mov-titulo">' + escapeHtml(item + (variante ? ' · ' + variante : '')) + '</div>' +
+          '<div class="mov-detalle">' + escapeHtml(fechaTxt) + (detalles.length ? ' — ' + escapeHtml(detalles.join(' · ')) : '') + '</div>' +
+          '<div class="mov-badges">' +
+          '<span class="badge ' + (esConteo ? 'conteo' : 'tipo') + '">' + escapeHtml(esConteo ? 'CONTEO / AJUSTE' : (tipo || 'Registro')) + '</span>' +
+          (esNuevo ? '<span class="badge nuevo">ÍTEM NUEVO · pendiente revisar</span>' : '') +
+          '</div></div>';
+      }).join('') || '<div class="hint" style="padding:14px">Nada que coincida con el filtro.</div>';
+    }
+
+    // ================== EXPORTAR ==================
+    function exportar(tipo) {
+      var estado = document.getElementById('expEstado');
+      var vista = document.getElementById('expVista');
+      vista.innerHTML = '';
+      if (tipo === 'inventario') {
+        if (!state.inventario || !state.inventario.length) {
+          estado.className = 'status warn';
+          estado.textContent = 'Primero abre la pestaña Inventario para cargar los datos, y vuelve a intentar.';
+          return;
+        }
+        var lineas = [['Ítem', 'Variante', 'Categoría', 'Existencia', 'Unidad', 'Mínimo', 'Estado']];
+        state.inventario.forEach(function (r) {
+          var etiq = { out: 'AGOTADO', low: 'POCO', ok: 'OK' };
+          lineas.push([r.item, r.variante, r.categoria, numCsv(r.stock), r.unidad, numCsv(r.minimo), etiq[estadoDe(r)]]);
+        });
+        descargarCsv(lineas, 'inventario_full_company_' + fechaInput(new Date()) + '.csv');
+        estado.className = 'status ok';
+        estado.textContent = 'Inventario descargado.';
+        return;
+      }
+      estado.className = 'status warn';
+      estado.textContent = 'Consultando movimientos...';
+      var params = { action: 'registros' };
+      if (valueOf('expDesde')) params.desde = valueOf('expDesde');
+      if (valueOf('expHasta')) params.hasta = valueOf('expHasta');
+      jsonp(params, function (data) {
+        var regs = (data && data.registros) || [];
+        if (!regs.length) {
+          estado.className = 'status warn';
+          estado.textContent = 'No hay movimientos en ese rango de fechas.';
+          return;
+        }
+        var rango = (params.desde || 'inicio') + '_a_' + (params.hasta || 'hoy');
+        if (tipo === 'todo') {
+          var claves = Object.keys(regs[0]);
+          var lineas = [claves];
+          regs.forEach(function (r) {
+            lineas.push(claves.map(function (k) { return r[k] == null ? '' : r[k]; }));
+          });
+          descargarCsv(lineas, 'movimientos_' + rango + '.csv');
+          estado.className = 'status ok';
+          estado.textContent = 'Descargados ' + regs.length + ' movimientos.';
+          return;
+        }
+        // Resumen de materia prima gastada
+        var grupos = {};
+        regs.forEach(function (r) {
+          var t = normalize(campoReg(r, ['tiporegistro', 'tipo']));
+          if (t !== 'consumo materia prima') return;
+          var item = campoReg(r, ['item']);
+          var variante = campoReg(r, ['variante']);
+          var uni = normalize(campoReg(r, ['unidad']));
+          var cant = parseFloat(String(campoReg(r, ['cantidad'])).replace(',', '.')) || 0;
+          // convertir a unidad base
+          var uniBase = uni;
+          if (uni === 'ml') { cant = cant / 1000; uniBase = 'l'; }
+          if (uni === 'g') { cant = cant / 1000; uniBase = 'kg'; }
+          if (uni === 'l' || uni === 'lt') uniBase = 'l';
+          var clave = normalize(item) + '|' + normalize(variante) + '|' + uniBase;
+          if (!grupos[clave]) grupos[clave] = { item: item, variante: variante, unidad: uniBase.toUpperCase(), total: 0, veces: 0 };
+          grupos[clave].total += cant;
+          grupos[clave].veces++;
+        });
+        var filas = Object.keys(grupos).map(function (k) { return grupos[k]; });
+        if (!filas.length) {
+          estado.className = 'status warn';
+          estado.textContent = 'En ese rango no hay registros de “Usé materia prima”.';
+          return;
+        }
+        filas.sort(function (a, b) { return a.item.localeCompare(b.item, 'es'); });
+        var lineas2 = [['Materia prima', 'Variante', 'Total gastado', 'Unidad', 'N° de registros']];
+        filas.forEach(function (f) {
+          lineas2.push([f.item, f.variante, numCsv(redondear(f.total)), f.unidad, f.veces]);
+        });
+        descargarCsv(lineas2, 'materia_prima_gastada_' + rango + '.csv');
+        estado.className = 'status ok';
+        estado.textContent = 'Reporte descargado: ' + filas.length + ' materias primas.';
+        // vista previa
+        vista.innerHTML = filas.slice(0, 50).map(function (f) {
+          return '<div class="inv-row"><div class="inv-nombre">' + escapeHtml(f.item + (f.variante ? ' · ' + f.variante : '')) + '</div>' +
+            '<div class="inv-stock">' + escapeHtml(redondear(f.total) + ' ' + f.unidad) + '</div></div>';
+        }).join('');
+      }, function () {
+        estado.className = 'status err';
+        estado.textContent = MSG_SCRIPT;
+      }, 25000);
+    }
+    function numCsv(n) {
+      if (n == null || isNaN(n)) return '';
+      return String(n).replace('.', ',');
+    }
+    function descargarCsv(lineas, nombreArchivo) {
+      var contenido = '\ufeff' + lineas.map(function (fila) {
+        return fila.map(function (celda) {
+          var c = String(celda == null ? '' : celda);
+          if (/[;"\n]/.test(c)) c = '"' + c.replace(/"/g, '""') + '"';
+          return c;
+        }).join(';');
+      }).join('\r\n');
+      var blob = new Blob([contenido], { type: 'text/csv;charset=utf-8' });
+      var a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = nombreArchivo;
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(function () {
+        URL.revokeObjectURL(a.href);
+        a.remove();
+      }, 500);
     }
   </script>
 </body>
