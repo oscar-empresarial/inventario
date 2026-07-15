@@ -183,18 +183,6 @@
       font-size: 13px;
       line-height: 1.35;
     }
-    .warning-box button {
-      margin-top: 8px;
-      border: none;
-      background: var(--purple);
-      color: white;
-      border-radius: 10px;
-      padding: 8px 12px;
-      font-size: 13px;
-      font-weight: bold;
-      cursor: pointer;
-      width: auto;
-    }
     .check-row {
       margin-top: 8px;
       display: flex;
@@ -230,9 +218,8 @@
     .status.err { display: block; background: #fee2e2; color: #991b1b; }
     .status.warn { display: block; background: #fff7ed; color: #9a3412; }
     .small-note { margin-top: 8px; font-size: 12px; color: var(--gray); }
-    .btn-azul {
+    .btn-azul, .btn-verde, .btn-morado {
       border: none;
-      background: var(--blue);
       color: white;
       border-radius: 12px;
       padding: 12px 18px;
@@ -240,13 +227,67 @@
       font-weight: bold;
       cursor: pointer;
     }
-    .btn-verde {
+    .btn-azul { background: var(--blue); }
+    .btn-verde { background: var(--green); }
+    .btn-morado { background: var(--purple); }
+
+    /* ===== Materias primas dinámicas ===== */
+    .mp-fila {
+      display: grid;
+      grid-template-columns: 2fr 1.1fr 0.9fr 0.8fr auto;
+      gap: 8px;
+      margin-bottom: 8px;
+      align-items: center;
+    }
+    .mp-fila input, .mp-fila select { padding: 10px; font-size: 14px; }
+    .mp-quitar {
       border: none;
-      background: var(--green);
-      color: white;
+      background: #fee2e2;
+      color: #991b1b;
+      border-radius: 10px;
+      padding: 10px 12px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+    .mp-agregar {
+      border: 1px dashed var(--blue);
+      background: var(--blue-soft);
+      color: var(--blue);
       border-radius: 12px;
-      padding: 12px 18px;
-      font-size: 14px;
+      padding: 10px 14px;
+      font-size: 13px;
+      font-weight: bold;
+      cursor: pointer;
+      width: 100%;
+    }
+
+    /* ===== Panel de existencias faltantes ===== */
+    .stock-aviso {
+      display: none;
+      margin-top: 14px;
+      border: 1px solid #fbbf24;
+      background: #fffbeb;
+      border-radius: 14px;
+      padding: 14px;
+    }
+    .stock-aviso h4 { margin: 0 0 8px; font-size: 14px; color: #92400e; }
+    .stock-aviso p { margin: 0 0 10px; font-size: 13px; color: #92400e; line-height: 1.4; }
+    .stock-fila {
+      display: grid;
+      grid-template-columns: 1.6fr 0.9fr 0.7fr auto;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+    .stock-fila .nombre { font-size: 13px; font-weight: bold; color: #92400e; }
+    .stock-fila input, .stock-fila select { padding: 9px; font-size: 14px; }
+    .stock-fila button {
+      border: none;
+      background: var(--purple);
+      color: white;
+      border-radius: 10px;
+      padding: 9px 12px;
+      font-size: 12px;
       font-weight: bold;
       cursor: pointer;
     }
@@ -317,6 +358,9 @@
     @media (max-width: 700px) {
       .type-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .row, .filtros { grid-template-columns: 1fr; }
+      .mp-fila { grid-template-columns: 1.5fr 1fr 0.9fr auto; }
+      .mp-fila .mp-var { display: none; }
+      .stock-fila { grid-template-columns: 1fr 0.8fr 0.6fr auto; }
       header h1 { font-size: 21px; }
       .actions { flex-direction: column; }
     }
@@ -355,15 +399,11 @@
             <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8l-9-5-9 5v8l9 5 9-5V8z"/><path d="M3 8l9 5 9-5"/><path d="M12 13v8"/></svg></span>
             Llegó mercancía
           </button>
-          <button type="button" class="type-btn" data-type="Consumo materia prima">
+          <button type="button" class="type-btn" data-type="Preparación">
             <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3v6l-5.3 8.5A3 3 0 0 0 7.2 22h9.6a3 3 0 0 0 2.5-4.5L14 9V3"/><path d="M8.5 3h7"/><path d="M7 15h10"/></svg></span>
-            Usé materia prima
+            Preparé / usé materia prima
           </button>
-          <button type="button" class="type-btn" data-type="Preparar tambor">
-            <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="7" ry="2.5"/><path d="M5 5v14c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5V5"/><path d="M5 12c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5"/></svg></span>
-            Preparé tambor
-          </button>
-          <button type="button" class="type-btn" data-type="Empacar desde tambor">
+          <button type="button" class="type-btn" data-type="Empacar producto">
             <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2h4"/><path d="M10 2v4.2L7.6 9.6A4 4 0 0 0 7 11.8V20a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2v-8.2a4 4 0 0 0-.6-2.2L14 6.2V2"/><path d="M7 14h10"/></svg></span>
             Empaqué producto
           </button>
@@ -379,10 +419,6 @@
             <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 3 9.5 13.5"/><path d="M9.5 13.5 4 19c-1 1-.6 2.7.8 3l4.7-1.5 2-5.5-2-1.5Z"/><path d="M6 16.5 9 19"/></svg></span>
             Fabricar palos
           </button>
-          <button type="button" class="type-btn" data-type="Conteo inventario">
-            <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="m9 14 2 2 4-4"/></svg></span>
-            Conteo de inventario
-          </button>
           <button type="button" class="type-btn" data-type="Novedad/Corrección">
             <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.8 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.8a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg></span>
             Novedad / corrección
@@ -390,9 +426,6 @@
         </div>
         <form id="mainForm" autocomplete="off">
           <div class="section-title" id="formTitle">Registro</div>
-          <div id="conteoAyuda" class="status warn" style="display:none">
-            Conteo de inventario: ve, revisa físicamente cuánto hay y regístralo aquí. El sistema fijará la existencia en ese valor y quedará marcado como CONTEO en la trazabilidad.
-          </div>
           <div class="row">
             <div class="field" data-field="responsable">
               <label for="Responsable">Responsable</label>
@@ -419,56 +452,48 @@
               <div class="hint">La categoría filtra el listado de ítems para evitar mezclas.</div>
             </div>
           </div>
+
+          <!-- Preparación: destino / Empaque: subtipo -->
           <div class="row">
-            <div class="field hidden" data-field="item">
-              <label for="Item">Ítem</label>
-              <div class="suggest-wrapper">
-                <input id="Item" name="Item" placeholder="Busca o escribe el ítem exacto" />
-                <div id="itemSuggestions" class="suggest-box"></div>
-              </div>
-              <div id="itemWarning" class="warning-box"></div>
-              <label class="check-row">
-                <input type="checkbox" id="CrearNuevoItem" />
-                <span>Crear como nuevo en catálogo, pendiente de revisar</span>
-              </label>
+            <div class="field hidden" data-field="destino">
+              <label for="Destino">¿Dónde lo usaste?</label>
+              <select id="Destino">
+                <option value="existente">En un tambor que ya existe</option>
+                <option value="nuevo">Tambor nuevo (enumerado)</option>
+                <option value="balde">Balde / se empaca de una vez</option>
+                <option value="directo">Uso directo / otro</option>
+              </select>
             </div>
-            <div class="field hidden" data-field="variante">
-              <label for="Variante">Variante / aroma / color / referencia</label>
-              <div class="suggest-wrapper">
-                <input id="Variante" name="Variante" placeholder="Ej: Chicle, Azul, Genérica, Deterfull" />
-                <div id="varianteSuggestions" class="suggest-box"></div>
-              </div>
-              <div class="hint">Etiquetas: Ítem = Etiqueta y aquí va de qué producto es (Genérica, Deterfull…). Fragancia/Color: aquí va el aroma o color.</div>
-            </div>
-          </div>
-          <div class="row">
-            <div class="field hidden" data-field="cantidad">
-              <label for="Cantidad">Cantidad</label>
-              <input id="Cantidad" name="Cantidad" type="number" step="0.001" min="0" placeholder="Ej: 200" />
-            </div>
-            <div class="field hidden" data-field="unidad">
-              <label for="Unidad">Unidad</label>
-              <select id="Unidad" name="Unidad">
-                <option value="">Seleccionar</option>
-                <option>L</option>
-                <option>ml</option>
-                <option>kg</option>
-                <option>g</option>
-                <option>und</option>
+            <div class="field hidden" data-field="subempaque">
+              <label for="Subempaque">¿Qué empacas?</label>
+              <select id="Subempaque">
+                <option value="tambor">Producto de un tambor o balde</option>
+                <option value="materia">Materia prima directa (ej: ácido, varsol)</option>
               </select>
             </div>
           </div>
+
           <div class="row">
-            <div class="field hidden" data-field="producto">
-              <label for="Producto">Producto</label>
+            <div class="field hidden" data-field="tambor">
+              <label for="TamborID" id="tamborLabel">Tambor (número o nombre)</label>
               <div class="suggest-wrapper">
-                <input id="Producto" name="Producto" placeholder="Ej: Ambientador, Deterfull" />
+                <input id="TamborID" placeholder="Ej: Tambor 1, Balde jabón" />
+                <div id="tamborSuggestions" class="suggest-box"></div>
+              </div>
+              <div class="hint" id="tamborHint">Enumera los tambores: Tambor 1, Tambor 2… Los baldes con nombre: Balde jabón.</div>
+            </div>
+            <div class="field hidden" data-field="producto">
+              <label for="Producto">Producto que se prepara</label>
+              <div class="suggest-wrapper">
+                <input id="Producto" placeholder="Ej: Deterfull, Ambientador" />
                 <div id="productoSuggestions" class="suggest-box"></div>
               </div>
             </div>
+          </div>
+          <div class="row">
             <div class="field hidden" data-field="tanque">
-              <label for="Tanque">Tanque</label>
-              <select id="Tanque" name="Tanque">
+              <label for="Tanque">Tamaño del tambor</label>
+              <select id="Tanque">
                 <option value="">Seleccionar</option>
                 <option>20 L</option>
                 <option>60 L</option>
@@ -479,39 +504,79 @@
                 <option>Otro / revisar</option>
               </select>
             </div>
+            <div class="field hidden" data-field="litros">
+              <label for="LitrosPreparados" id="litrosLabel">Litros preparados</label>
+              <input id="LitrosPreparados" type="number" step="0.001" min="0" placeholder="Ej: 120" />
+            </div>
+          </div>
+
+          <!-- Materias primas usadas (lista dinámica) -->
+          <div class="row">
+            <div class="field full hidden" data-field="materias">
+              <label>Materias primas que usaste</label>
+              <div id="mpLista"></div>
+              <button type="button" class="mp-agregar" id="btnMpAgregar">+ Agregar otra materia prima</button>
+              <div class="hint">Escribe cada materia prima con su cantidad. Para fragancia o color, pon el aroma/color en la casilla "variante".</div>
+            </div>
+          </div>
+
+          <div class="row">
+            <div class="field hidden" data-field="item">
+              <label for="Item" id="itemLabel">Ítem</label>
+              <div class="suggest-wrapper">
+                <input id="Item" placeholder="Busca o escribe el ítem exacto" />
+                <div id="itemSuggestions" class="suggest-box"></div>
+              </div>
+              <div id="itemWarning" class="warning-box"></div>
+              <label class="check-row" id="crearNuevoRow">
+                <input type="checkbox" id="CrearNuevoItem" />
+                <span>Crear como nuevo en catálogo, pendiente de revisar</span>
+              </label>
+            </div>
+            <div class="field hidden" data-field="variante">
+              <label for="Variante">Variante / aroma / color / referencia</label>
+              <div class="suggest-wrapper">
+                <input id="Variante" placeholder="Ej: Chicle, Azul, Genérica, Deterfull" />
+                <div id="varianteSuggestions" class="suggest-box"></div>
+              </div>
+              <div class="hint">Etiquetas: Ítem = Etiqueta y aquí va de qué producto es. Fragancia/Color: aquí va el aroma o color.</div>
+            </div>
           </div>
           <div class="row">
-            <div class="field hidden" data-field="litros">
-              <label for="LitrosPreparados">Litros preparados</label>
-              <input id="LitrosPreparados" name="LitrosPreparados" type="number" step="0.001" min="0" placeholder="Ej: 120" />
+            <div class="field hidden" data-field="cantidad">
+              <label for="Cantidad">Cantidad</label>
+              <input id="Cantidad" type="number" step="0.001" min="0" placeholder="Ej: 200" />
             </div>
-            <div class="field hidden" data-field="tambor">
-              <label for="TamborID">Tambor / producto que empacas</label>
-              <div class="suggest-wrapper">
-                <input id="TamborID" name="TamborID" placeholder="Ej: Deterfull tambor 120 L" />
-                <div id="tamborSuggestions" class="suggest-box"></div>
-              </div>
-              <div class="hint">Escribe el producto del tambor. Si no aparece sugerido, primero registra “Preparé tambor”.</div>
+            <div class="field hidden" data-field="unidad">
+              <label for="Unidad">Unidad</label>
+              <select id="Unidad">
+                <option value="">Seleccionar</option>
+                <option>L</option>
+                <option>ml</option>
+                <option>kg</option>
+                <option>g</option>
+                <option>und</option>
+              </select>
             </div>
           </div>
           <div class="row">
             <div class="field hidden" data-field="presentacion">
               <label for="Presentacion">Presentación / empaque</label>
               <div class="suggest-wrapper">
-                <input id="Presentacion" name="Presentacion" placeholder="Ej: Galón 4 L, Bolsa 500 g, Recarga litros" />
+                <input id="Presentacion" placeholder="Ej: Galón 4 L, Bolsa 500 g, Recarga litros" />
                 <div id="presentacionSuggestions" class="suggest-box"></div>
               </div>
-              <div class="hint">Siempre con tamaño: 500 ml, 4 L, 1 kg… O “Recarga litros” / “Bulto”. Al guardar, se descuenta ese envase del inventario automáticamente.</div>
+              <div class="hint">Siempre con tamaño: 500 ml, 4 L, 1 kg… O “Recarga litros” / “Bulto”. Al guardar se descuenta ese envase del inventario.</div>
             </div>
             <div class="field hidden" data-field="cantpres">
               <label for="CantidadPresentacion">Cantidad de presentaciones</label>
-              <input id="CantidadPresentacion" name="CantidadPresentacion" type="number" step="0.001" min="0" placeholder="Ej: 20" />
+              <input id="CantidadPresentacion" type="number" step="0.001" min="0" placeholder="Ej: 20" />
             </div>
           </div>
           <div class="row">
             <div class="field hidden" data-field="accesorio">
               <label for="Accesorio">Accesorio usado</label>
-              <select id="Accesorio" name="Accesorio">
+              <select id="Accesorio">
                 <option value="">Seleccionar</option>
                 <option>Sin accesorio</option>
                 <option>Tapa normal</option>
@@ -526,16 +591,16 @@
             <div class="field hidden" data-field="etiqueta">
               <label for="Etiqueta">Etiqueta usada</label>
               <div class="suggest-wrapper">
-                <input id="Etiqueta" name="Etiqueta" placeholder="Ej: Genérica, Deterfull, Ambientador" />
+                <input id="Etiqueta" placeholder="Ej: Genérica, Deterfull, Sin etiqueta" />
                 <div id="etiquetaSuggestions" class="suggest-box"></div>
               </div>
-              <div class="hint">De qué producto es la etiqueta. Si no lleva (polvos), escribe “Sin etiqueta”.</div>
+              <div class="hint">De qué producto es la etiqueta. Si no lleva, escribe “Sin etiqueta”.</div>
             </div>
           </div>
           <div class="row">
             <div class="field hidden" data-field="motivo">
               <label for="Motivo">Motivo</label>
-              <select id="Motivo" name="Motivo">
+              <select id="Motivo">
                 <option value="">Seleccionar</option>
                 <option>Venta directa</option>
                 <option>Exhibición</option>
@@ -551,9 +616,18 @@
           <div class="row">
             <div class="field full hidden" data-field="observacion">
               <label for="Observacion">Observación</label>
-              <textarea id="Observacion" name="Observacion" placeholder="Opcional"></textarea>
+              <textarea id="Observacion" placeholder="Opcional"></textarea>
             </div>
           </div>
+
+          <!-- Panel: ítems sin existencia registrada -->
+          <div id="stockAviso" class="stock-aviso">
+            <h4>⚠ Esto no tiene existencia registrada en el inventario</h4>
+            <p>Ve, revisa físicamente cuánto hay de cada cosa y regístralo aquí mismo (quedará marcado como CONTEO en la trazabilidad). Si es porque acaba de llegar, mejor regístralo en “Llegó mercancía”. Después vuelve a presionar Guardar.</p>
+            <div id="stockFilas"></div>
+            <button type="button" class="btn-azul" id="btnOmitirStock" style="margin-top:6px">Guardar de todas formas sin registrar existencias</button>
+          </div>
+
           <div class="actions">
             <button type="button" class="clear" id="btnClear">Limpiar</button>
             <button type="submit" class="submit" id="btnSubmit">Guardar registro</button>
@@ -575,11 +649,11 @@
         <div id="invResumen" class="inv-resumen" style="display:none"></div>
         <div id="invEstado" class="status"></div>
         <div id="invLista"></div>
-        <div class="small-note">El inventario se calcula automáticamente con todos los movimientos de REGISTRO_APP: entradas suman, consumos y empaques restan (envases, etiquetas y accesorios se descuentan solos al empacar), y los conteos fijan el valor real. Primero se muestran los agotados y los que están por acabarse.</div>
+        <div class="small-note">El inventario se calcula solo con los movimientos de REGISTRO_APP: entradas suman, consumos y empaques restan (envases, etiquetas y accesorios se descuentan automáticamente al empacar) y los conteos fijan el valor real.</div>
       </div>
     </section>
 
-    <!-- ================= VISTA MOVIMIENTOS (TRAZABILIDAD) ================= -->
+    <!-- ================= VISTA MOVIMIENTOS ================= -->
     <section id="view-movimientos" class="view hidden">
       <div class="card">
         <div class="section-title">Trazabilidad de movimientos</div>
@@ -599,7 +673,7 @@
         <input id="movBuscar" placeholder="Filtrar por ítem, responsable, tipo…" style="margin-bottom:12px" />
         <div id="movEstado" class="status"></div>
         <div id="movLista"></div>
-        <div class="small-note">Los registros de CONTEO (morado) son ajustes donde alguien revisó físicamente cuánto había. Los marcados ÍTEM NUEVO están pendientes de revisar en el catálogo.</div>
+        <div class="small-note">Los registros de CONTEO (morado) son existencias registradas cuando algo no estaba en el inventario. Los marcados ÍTEM NUEVO están pendientes de revisar en el catálogo.</div>
       </div>
     </section>
 
@@ -624,23 +698,32 @@
         </div>
         <div id="expEstado" class="status"></div>
         <div id="expVista"></div>
-        <div class="small-note">“Materia prima gastada” suma todos los consumos de cada materia prima en el rango de fechas: ideal para enviarle al contador cada semana. Los archivos abren directo en Excel.</div>
+        <div class="small-note">“Materia prima gastada” suma los consumos de cada materia prima en el rango de fechas: ideal para el contador cada semana. Los archivos abren directo en Excel.</div>
       </div>
     </section>
   </main>
+  <datalist id="dlMp"></datalist>
   <script>
-    // ================== CONFIGURACIÓN ==================
+    // ============================================================
+    // ⚠️ URL DEL APPS SCRIPT: si creaste una implementación NUEVA en
+    // Apps Script, la URL cambió. Abre "Implementar → Administrar
+    // implementaciones", copia la URL que termina en /exec y pégala aquí.
+    // ============================================================
     var APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxAWuJv7dfjjyobgnEc9yIMJN7uqSnOu9vM80G88JCiDV-0oam5DebiEeqG0FLgcN8I/exec';
 
     var state = {
       selectedType: '',
-      dynamicLoaded: false,
       catalogos: {},
       inventario: null,
-      registros: null
+      registros: null,
+      omitirStock: false
     };
 
-    // ================== CATÁLOGOS LOCALES (fallback) ==================
+    var BOM_PALOS_JS = {
+      rosca: ['Tubo aluminio {largo}', 'Mango', 'Caucho', 'Rosca'],
+      mariposa: ['Tubo aluminio {largo}', 'Mango', 'Cabezote mariposa', 'Lámina', 'Tornillo', 'Tuerca mariposa']
+    };
+
     var catalogosLocales = {
       materiasPrimas: [
         'Hipoclorito 13%', 'Blanqueador con cloro al 6%', 'Soda Líquida', 'Soda Cáustica',
@@ -715,16 +798,14 @@
 
     var visibility = {
       'Entrada mercancía': ['responsable', 'categoria', 'item', 'variante', 'cantidad', 'unidad', 'observacion'],
-      'Consumo materia prima': ['responsable', 'item', 'variante', 'cantidad', 'unidad', 'producto', 'observacion'],
-      'Preparar tambor': ['responsable', 'producto', 'variante', 'tanque', 'litros', 'observacion'],
-      'Empacar desde tambor': ['responsable', 'tambor', 'presentacion', 'cantpres', 'accesorio', 'etiqueta', 'observacion'],
+      'Preparación': ['responsable', 'destino', 'materias', 'observacion'],
+      'Empacar producto': ['responsable', 'subempaque', 'observacion'],
       'Empacar sólido/polvo': ['responsable', 'item', 'presentacion', 'cantpres', 'etiqueta', 'observacion'],
       'Salida directa/Baja': ['responsable', 'categoria', 'item', 'variante', 'cantidad', 'unidad', 'motivo', 'observacion'],
       'Fabricar palos': ['responsable', 'item', 'cantidad', 'observacion'],
-      'Conteo inventario': ['responsable', 'categoria', 'item', 'variante', 'cantidad', 'unidad', 'observacion'],
       'Novedad/Corrección': ['responsable', 'categoria', 'item', 'variante', 'cantidad', 'unidad', 'motivo', 'observacion']
     };
-    var tiposConCategoria = ['Entrada mercancía', 'Salida directa/Baja', 'Novedad/Corrección', 'Conteo inventario'];
+    var tiposConCategoria = ['Entrada mercancía', 'Salida directa/Baja', 'Novedad/Corrección'];
 
     document.addEventListener('DOMContentLoaded', function () {
       state.catalogos = JSON.parse(JSON.stringify(catalogosLocales));
@@ -739,6 +820,14 @@
       document.getElementById('btnClear').addEventListener('click', function () { resetForm(true); });
       document.getElementById('Categoria').addEventListener('change', onCategoriaChange);
       document.getElementById('CrearNuevoItem').addEventListener('change', validateItemSoft);
+      document.getElementById('Destino').addEventListener('change', updateDestino);
+      document.getElementById('Subempaque').addEventListener('change', updateSubempaque);
+      document.getElementById('btnMpAgregar').addEventListener('click', function () { agregarFilaMp(); });
+      document.getElementById('btnOmitirStock').addEventListener('click', function () {
+        state.omitirStock = true;
+        ocultarStockAviso();
+        document.getElementById('mainForm').requestSubmit();
+      });
       document.getElementById('btnInvRecargar').addEventListener('click', loadInventario);
       document.getElementById('invBuscar').addEventListener('input', renderInventario);
       document.getElementById('btnMovCargar').addEventListener('click', loadMovimientos);
@@ -756,16 +845,16 @@
         return unique(['Sin etiqueta', 'Genérica'].concat(getCatalog('productos')));
       });
 
-      // fechas por defecto: última semana
       var hoy = new Date();
       var hace7 = new Date(hoy.getTime() - 7 * 86400000);
       ['movDesde', 'expDesde'].forEach(function (id) { document.getElementById(id).value = fechaInput(hace7); });
       ['movHasta', 'expHasta'].forEach(function (id) { document.getElementById(id).value = fechaInput(hoy); });
 
+      llenarDatalistMp();
+      agregarFilaMp();
       loadInitJsonp();
-      // Carga silenciosa del inventario para poder avisar cuando no hay existencias
       jsonp({ action: 'inventario' }, function (data) {
-        state.inventario = parseInventario(data);
+        if (data && !data.error) state.inventario = parseInventario(data);
       }, function () {});
     });
 
@@ -799,7 +888,7 @@
       return el ? String(el.value || '').trim() : '';
     }
 
-    // ================== JSONP (lectura desde Apps Script) ==================
+    // ================== JSONP ==================
     function jsonp(params, onOk, onFail, timeoutMs) {
       var callbackName = '__fc_' + Math.random().toString(36).slice(2) + Date.now();
       var done = false;
@@ -826,22 +915,33 @@
         done = true;
         cleanupJsonp(callbackName);
         if (typeof onFail === 'function') onFail();
-      }, timeoutMs || 12000);
+      }, timeoutMs || 15000);
     }
     function cleanupJsonp(callbackName) {
       try { delete window[callbackName]; } catch (err) { window[callbackName] = undefined; }
       document.querySelectorAll('script[src*="' + callbackName + '"]').forEach(function (el) { el.remove(); });
     }
-    var MSG_SCRIPT = 'No se pudo conectar con el Apps Script. Revisa en orden: ' +
-      '1) Que hayas pegado el archivo codigo-apps-script.gs completo. ' +
-      '2) Que al implementar hayas usado "Administrar implementaciones → editar (lápiz) → Nueva versión" (NO crear una implementación nueva). ' +
-      '3) Que diga "Quién tiene acceso: Cualquier usuario". ' +
-      '4) Que el ID_HOJA del script sea el de tu hoja de cálculo.';
+    var MSG_SCRIPT = 'No se pudo conectar con el Apps Script. Lo más probable: la URL de la implementación cambió. ' +
+      'En Apps Script abre "Implementar → Administrar implementaciones", copia la URL que termina en /exec ' +
+      'y compárala con la que está al inicio del index.html (línea APPS_SCRIPT_URL). Si es diferente, reemplázala y vuelve a subir el archivo a GitHub. ' +
+      'También verifica: acceso = "Cualquier usuario", y que ejecutaste "probarConfiguracion" sin errores.';
+
+    function diagnosticarConexion(estadoEl) {
+      jsonp({ action: 'ping' }, function (data) {
+        estadoEl.className = 'status err';
+        estadoEl.textContent = 'El script SÍ responde, pero esta acción falló' +
+          (data && data.error ? ': ' + data.error : '') +
+          '. Revisa que hayas pegado la versión más reciente de codigo-apps-script.gs y publicado "Nueva versión". También ejecuta "probarConfiguracion" en el editor para ver el error exacto.';
+      }, function () {
+        estadoEl.className = 'status err';
+        estadoEl.textContent = MSG_SCRIPT;
+      }, 10000);
+    }
 
     function loadInitJsonp() {
       jsonp({ action: 'init' }, function (data) {
         mergeDynamicCatalogs(data);
-        state.dynamicLoaded = true;
+        llenarDatalistMp();
       }, function () {
         console.log('Catálogos dinámicos no disponibles. Usando catálogos locales.');
       });
@@ -856,13 +956,19 @@
       });
       if (data.tambores) state.catalogos.tambores = data.tambores;
     }
+    function llenarDatalistMp() {
+      var dl = document.getElementById('dlMp');
+      var lista = unique(getCatalog('materiasPrimas').concat(getCatalog('fraganciasColores')));
+      dl.innerHTML = lista.map(function (x) { return '<option value="' + escapeHtml(x) + '">'; }).join('');
+    }
 
     // ================== SELECCIÓN DE TIPO ==================
     function selectType(type) {
       state.selectedType = type;
-      document.getElementById('formTitle').textContent = type === 'Conteo inventario' ? 'Conteo de inventario' : type;
+      state.omitirStock = false;
+      ocultarStockAviso();
+      document.getElementById('formTitle').textContent = type === 'Preparación' ? 'Preparé / usé materia prima' : type;
       document.getElementById('mainForm').classList.add('active');
-      document.getElementById('conteoAyuda').style.display = (type === 'Conteo inventario') ? 'block' : 'none';
       document.querySelectorAll('.type-btn').forEach(function (btn) {
         btn.classList.toggle('active', btn.dataset.type === type);
       });
@@ -877,10 +983,69 @@
       clearStatus();
       document.getElementById('Item').value = '';
       document.getElementById('CrearNuevoItem').checked = false;
+      document.getElementById('itemLabel').textContent = (type === 'Fabricar palos') ? 'Tipo de palo' : (type === 'Empacar sólido/polvo' ? 'Polvo / sólido que empacas' : 'Ítem');
       validateItemSoft();
       hideSuggestions();
       if (type === 'Fabricar palos') document.getElementById('Unidad').value = 'und';
+      if (type === 'Preparación') updateDestino();
+      if (type === 'Empacar producto') updateSubempaque();
       window.scrollTo({ top: document.getElementById('mainForm').offsetTop - 20, behavior: 'smooth' });
+    }
+
+    function mostrarCampos(nombres) {
+      nombres.forEach(function (fieldName) {
+        document.querySelectorAll('[data-field="' + fieldName + '"]').forEach(function (field) {
+          field.classList.remove('hidden');
+        });
+      });
+    }
+    function esconderCampos(nombres) {
+      nombres.forEach(function (fieldName) {
+        document.querySelectorAll('[data-field="' + fieldName + '"]').forEach(function (field) {
+          field.classList.add('hidden');
+        });
+      });
+    }
+
+    function updateDestino() {
+      if (state.selectedType !== 'Preparación') return;
+      var d = valueOf('Destino');
+      esconderCampos(['tambor', 'producto', 'tanque', 'litros']);
+      var lbl = document.getElementById('litrosLabel');
+      var tamborLbl = document.getElementById('tamborLabel');
+      var hint = document.getElementById('tamborHint');
+      if (d === 'existente') {
+        mostrarCampos(['tambor', 'litros']);
+        tamborLbl.textContent = '¿En cuál tambor?';
+        hint.textContent = 'Elige el tambor de la lista. Si no aparece, créalo como “Tambor nuevo”.';
+        lbl.textContent = 'Litros adicionados (solo si el tambor creció, si no deja vacío)';
+      } else if (d === 'nuevo') {
+        mostrarCampos(['tambor', 'producto', 'tanque', 'litros']);
+        tamborLbl.textContent = 'Número o nombre del tambor nuevo';
+        hint.textContent = 'Enuméralos: Tambor 1, Tambor 2… así todos saben cuál es cuál.';
+        lbl.textContent = 'Litros preparados';
+      } else if (d === 'balde') {
+        mostrarCampos(['tambor', 'producto', 'litros']);
+        tamborLbl.textContent = 'Nombre del balde';
+        hint.textContent = 'Ej: Balde jabón, Balde ambientador. Se empaca de una vez.';
+        lbl.textContent = 'Litros preparados';
+      }
+    }
+
+    function updateSubempaque() {
+      if (state.selectedType !== 'Empacar producto') return;
+      var s = valueOf('Subempaque');
+      esconderCampos(['tambor', 'item', 'variante', 'presentacion', 'cantpres', 'accesorio', 'etiqueta']);
+      var tamborLbl = document.getElementById('tamborLabel');
+      var hint = document.getElementById('tamborHint');
+      if (s === 'tambor') {
+        mostrarCampos(['tambor', 'presentacion', 'cantpres', 'accesorio', 'etiqueta']);
+        tamborLbl.textContent = '¿De cuál tambor o balde?';
+        hint.textContent = 'Elige el tambor/balde de la lista. Si no existe, primero registra la preparación.';
+      } else {
+        mostrarCampos(['item', 'variante', 'presentacion', 'cantpres', 'accesorio', 'etiqueta']);
+        document.getElementById('itemLabel').textContent = 'Materia prima que empacas';
+      }
     }
 
     function onCategoriaChange() {
@@ -888,14 +1053,53 @@
       document.getElementById('Item').value = '';
       document.getElementById('Variante').value = '';
       document.getElementById('CrearNuevoItem').checked = false;
-      if (categoria === 'Etiqueta') {
-        document.getElementById('Item').value = 'Etiqueta';
-      }
+      if (categoria === 'Etiqueta') document.getElementById('Item').value = 'Etiqueta';
       if (['Envase', 'Accesorio', 'Etiqueta', 'Material palo'].indexOf(categoria) >= 0) {
         document.getElementById('Unidad').value = 'und';
       }
       validateItemSoft();
       hideSuggestions();
+    }
+
+    // ================== MATERIAS PRIMAS DINÁMICAS ==================
+    function agregarFilaMp(valores) {
+      var cont = document.getElementById('mpLista');
+      var fila = document.createElement('div');
+      fila.className = 'mp-fila';
+      fila.innerHTML =
+        '<input class="mp-item" list="dlMp" placeholder="Materia prima / fragancia" />' +
+        '<input class="mp-var" placeholder="Variante (aroma/color)" />' +
+        '<input class="mp-cant" type="number" step="0.001" min="0" placeholder="Cant." />' +
+        '<select class="mp-uni"><option>L</option><option>ml</option><option>kg</option><option>g</option><option>und</option></select>' +
+        '<button type="button" class="mp-quitar" title="Quitar">✕</button>';
+      fila.querySelector('.mp-quitar').addEventListener('click', function () {
+        if (document.querySelectorAll('.mp-fila').length > 1) fila.remove();
+        else {
+          fila.querySelectorAll('input').forEach(function (i) { i.value = ''; });
+        }
+      });
+      if (valores) {
+        fila.querySelector('.mp-item').value = valores.item || '';
+        fila.querySelector('.mp-var').value = valores.variante || '';
+        fila.querySelector('.mp-cant').value = valores.cantidad || '';
+        fila.querySelector('.mp-uni').value = valores.unidad || 'L';
+      }
+      cont.appendChild(fila);
+    }
+    function leerFilasMp() {
+      var filas = [];
+      document.querySelectorAll('.mp-fila').forEach(function (f) {
+        var item = f.querySelector('.mp-item').value.trim();
+        var variante = f.querySelector('.mp-var').value.trim();
+        var cantidad = f.querySelector('.mp-cant').value.trim();
+        var unidad = f.querySelector('.mp-uni').value;
+        if (item || cantidad) filas.push({ item: item, variante: variante, cantidad: cantidad, unidad: unidad });
+      });
+      return filas;
+    }
+    function limpiarFilasMp() {
+      document.getElementById('mpLista').innerHTML = '';
+      agregarFilaMp();
     }
 
     // ================== SUGERENCIAS ==================
@@ -913,11 +1117,21 @@
         if (!box.contains(e.target) && e.target !== input) box.style.display = 'none';
       });
     }
+    // options: lista de strings o de objetos {value, label}
     function renderSuggestions(input, box, options, afterPick) {
       var value = normalize(input.value);
-      var list = unique(options || []);
+      var list = (options || []).map(function (o) {
+        return (typeof o === 'string') ? { value: o, label: o } : o;
+      }).filter(function (o) { return o && o.value; });
+      var vistos = {};
+      list = list.filter(function (o) {
+        var k = normalize(o.value);
+        if (vistos[k]) return false;
+        vistos[k] = true;
+        return true;
+      });
       if (value) {
-        list = list.filter(function (item) { return normalize(item).includes(value); });
+        list = list.filter(function (o) { return normalize(o.label).includes(value) || normalize(o.value).includes(value); });
       }
       list = list.slice(0, 10);
       if (!list.length) {
@@ -925,8 +1139,8 @@
         box.style.display = 'none';
         return;
       }
-      box.innerHTML = list.map(function (item) {
-        return '<div class="suggest-item" data-value="' + escapeHtml(item) + '">' + escapeHtml(item) + '</div>';
+      box.innerHTML = list.map(function (o) {
+        return '<div class="suggest-item" data-value="' + escapeHtml(o.value) + '">' + escapeHtml(o.label) + '</div>';
       }).join('');
       box.querySelectorAll('.suggest-item').forEach(function (el) {
         el.addEventListener('click', function () {
@@ -944,8 +1158,8 @@
     function getItemOptions() {
       var type = state.selectedType;
       var categoria = valueOf('Categoria');
-      if (type === 'Consumo materia prima') {
-        return unique(getCatalog('materiasPrimas').concat(getCatalog('fraganciasColores')));
+      if (type === 'Empacar producto') {
+        return unique(getCatalog('materiasPrimas'));
       }
       if (type === 'Empacar sólido/polvo') return getCatalog('solidos');
       if (type === 'Fabricar palos') return getCatalog('palosTerminados');
@@ -984,13 +1198,27 @@
 
     function getTamborOptions() {
       return (state.catalogos.tambores || []).map(function (t) {
-        if (typeof t === 'string') return t;
-        return [t.producto || t.id, t.variante, t.tanque, (t.disponible != null ? 'Quedan aprox ' + t.disponible + ' L' : '')]
+        if (typeof t === 'string') return { value: t, label: t };
+        var id = t.id || t.producto || '';
+        var label = [id, (t.producto && t.producto !== id) ? t.producto : '', t.variante, t.tanque,
+          (t.disponible != null ? 'quedan aprox ' + t.disponible + ' L' : '')]
           .filter(Boolean).join(' · ');
+        return { value: id, label: label || id };
+      });
+    }
+    function tamborExiste(nombre) {
+      var tambores = state.catalogos.tambores || [];
+      if (!tambores.length) return true; // sin datos no se puede verificar
+      var n = normalize(nombre);
+      return tambores.some(function (t) {
+        var id = normalize(typeof t === 'string' ? t : (t.id || t.producto || ''));
+        var prod = normalize(typeof t === 'string' ? '' : (t.producto || ''));
+        return (id && (id === n || id.includes(n) || n.includes(id))) ||
+          (prod && (prod === n || prod.includes(n) || n.includes(prod)));
       });
     }
 
-    // ================== VALIDACIÓN SUAVE DEL ÍTEM + AVISO DE EXISTENCIA ==================
+    // ================== VALIDACIÓN SUAVE DEL ÍTEM ==================
     function validateItemSoft() {
       var item = valueOf('Item');
       var warning = document.getElementById('itemWarning');
@@ -1024,45 +1252,16 @@
         setWarning(warning, msg);
         return;
       }
-      // Ítem correcto: revisar si hay existencia registrada (para tipos que restan)
-      var tiposQueRestan = ['Consumo materia prima', 'Salida directa/Baja', 'Empacar sólido/polvo', 'Fabricar palos'];
-      if (tiposQueRestan.indexOf(type) >= 0 && state.inventario && state.inventario.length) {
-        var enInv = state.inventario.find(function (r) { return normalize(r.item) === normalize(item); });
-        if (!enInv) {
-          setWarning(warning, 'Este ítem no tiene existencia registrada en el inventario. Puedes guardar igual, pero lo ideal es que alguien revise físicamente cuánto hay y registre un “Conteo de inventario”.', item, categoria);
-          return;
-        }
-        if (enInv.stock <= 0) {
-          setWarning(warning, 'El inventario dice que este ítem está en ' + enInv.stock + (enInv.unidad ? ' ' + enInv.unidad : '') + '. Puedes guardar igual, pero conviene hacer un “Conteo de inventario” para cuadrarlo.', item, categoria);
-          return;
-        }
-      }
       setWarning(warning, '');
     }
-    function setWarning(warning, msg, itemConteo, catConteo) {
+    function setWarning(warning, msg) {
       if (!msg) {
         warning.style.display = 'none';
-        warning.innerHTML = '';
+        warning.textContent = '';
         return;
       }
-      warning.innerHTML = escapeHtml(msg);
-      if (itemConteo) {
-        var b = document.createElement('button');
-        b.type = 'button';
-        b.textContent = 'Registrar conteo de este ítem';
-        b.addEventListener('click', function () { irAConteo(itemConteo, catConteo); });
-        warning.appendChild(document.createElement('br'));
-        warning.appendChild(b);
-      }
+      warning.textContent = msg;
       warning.style.display = 'block';
-    }
-    function irAConteo(item, categoria) {
-      var resp = valueOf('Responsable');
-      selectType('Conteo inventario');
-      document.getElementById('Responsable').value = resp;
-      if (categoria) document.getElementById('Categoria').value = categoria;
-      document.getElementById('Item').value = item;
-      showStatus('Revisa físicamente cuánto hay de “' + item + '”, pon la cantidad y guarda. Ese valor quedará como la existencia real.', 'warn');
     }
     function similarityScore(a, b) {
       var aa = normalize(a);
@@ -1075,33 +1274,27 @@
       return hits / Math.max(wordsA.length, wordsB.length);
     }
 
-    // ================== PAYLOAD Y VALIDACIÓN ==================
-    function collectPayload() {
-      var activeBtn = document.querySelector('.type-btn.active');
-      var tipo = state.selectedType || (activeBtn ? activeBtn.dataset.type : '') || '';
-      var categoria = valueOf('Categoria');
-      if (!categoria && tipo === 'Consumo materia prima') categoria = 'Materia prima';
-      if (!categoria && tipo === 'Empacar sólido/polvo') categoria = 'Producto terminado';
-      if (!categoria && tipo === 'Fabricar palos') categoria = 'Producto terminado';
+    // ================== CONSTRUIR REGISTROS A GUARDAR ==================
+    function baseRecord(tipo) {
       var esNuevo = document.getElementById('CrearNuevoItem').checked;
       return {
         FechaCliente: new Date().toISOString(),
         TipoRegistro: tipo,
         Responsable: valueOf('Responsable'),
-        Categoria: categoria,
-        Item: valueOf('Item'),
-        Variante: valueOf('Variante'),
-        Cantidad: valueOf('Cantidad'),
-        Unidad: valueOf('Unidad'),
-        Producto: valueOf('Producto'),
-        Tanque: valueOf('Tanque'),
-        LitrosPreparados: valueOf('LitrosPreparados'),
-        TamborID: valueOf('TamborID'),
-        Presentacion: valueOf('Presentacion'),
-        CantidadPresentacion: valueOf('CantidadPresentacion'),
-        Accesorio: valueOf('Accesorio'),
-        Etiqueta: valueOf('Etiqueta'),
-        Motivo: valueOf('Motivo'),
+        Categoria: '',
+        Item: '',
+        Variante: '',
+        Cantidad: '',
+        Unidad: '',
+        Producto: '',
+        Tanque: '',
+        LitrosPreparados: '',
+        TamborID: '',
+        Presentacion: '',
+        CantidadPresentacion: '',
+        Accesorio: '',
+        Etiqueta: '',
+        Motivo: '',
         NuevoItem: esNuevo ? 'Sí' : 'No',
         PendienteAprobacion: esNuevo ? 'Sí' : 'No',
         Observacion: valueOf('Observacion'),
@@ -1109,6 +1302,211 @@
       };
     }
 
+    // Devuelve {error} o {records: [...]} o {confirmar, alCancelar, build}
+    function buildRecords() {
+      var type = state.selectedType;
+      if (!type) return { error: 'Selecciona qué vas a registrar (toca uno de los botones de arriba).' };
+      if (!valueOf('Responsable')) return { error: 'Selecciona responsable.' };
+
+      if (type === 'Preparación') return buildPreparacion();
+      if (type === 'Empacar producto') return buildEmpaque();
+
+      var r = baseRecord(type);
+      r.Categoria = valueOf('Categoria');
+      r.Item = valueOf('Item');
+      r.Variante = valueOf('Variante');
+      r.Cantidad = valueOf('Cantidad');
+      r.Unidad = valueOf('Unidad');
+      r.Motivo = valueOf('Motivo');
+
+      if (type === 'Entrada mercancía' || type === 'Salida directa/Baja' || type === 'Novedad/Corrección') {
+        if (!r.Categoria) return { error: 'Selecciona categoría.' };
+        if (!r.Item) return { error: 'Debes escribir o seleccionar un ítem.' };
+        if (!esNumero(r.Cantidad, false)) return { error: 'Debes poner una cantidad mayor que cero.' };
+        if (!r.Unidad) return { error: 'Debes seleccionar unidad.' };
+        var e1 = validarItemCatalogo(r.Item, r.NuevoItem);
+        if (e1) return { error: e1 };
+        var e2 = validarReglas(r.Categoria, r.Item, r.Variante);
+        if (e2) return { error: e2 };
+        return { records: [r] };
+      }
+
+      if (type === 'Empacar sólido/polvo') {
+        r.Categoria = 'Producto terminado';
+        r.Presentacion = valueOf('Presentacion');
+        r.CantidadPresentacion = valueOf('CantidadPresentacion');
+        r.Etiqueta = valueOf('Etiqueta');
+        r.Cantidad = '';
+        r.Unidad = '';
+        if (!r.Item) return { error: 'Debes escribir el polvo/sólido que empacas.' };
+        if (!r.Presentacion) return { error: 'Debes poner presentación (bolsa o tarro con tamaño).' };
+        if (!esNumero(r.CantidadPresentacion, false)) return { error: 'Debes poner cuántas presentaciones empacaste.' };
+        if (!r.Etiqueta) return { error: 'Indica la etiqueta usada. Si no lleva, escribe “Sin etiqueta”.' };
+        var e3 = validarItemCatalogo(r.Item, r.NuevoItem);
+        if (e3) return { error: e3 };
+        var e4 = validarPresentacion(r.Presentacion);
+        if (e4) return { error: e4 };
+        return { records: [r] };
+      }
+
+      if (type === 'Fabricar palos') {
+        if (!/palo/i.test(r.Item)) return { error: 'En fabricar palos, el ítem debe ser un tipo de palo.' };
+        if (!esNumero(r.Cantidad, false)) return { error: 'Debes poner cantidad de palos.' };
+        r.Unidad = 'und';
+        r.Categoria = 'Producto terminado';
+        var e5 = validarItemCatalogo(r.Item, r.NuevoItem);
+        if (e5) return { error: e5 };
+        return { records: [r] };
+      }
+
+      return { error: 'Tipo de registro no reconocido.' };
+    }
+
+    function buildPreparacion() {
+      var destino = valueOf('Destino');
+      var tambor = valueOf('TamborID');
+      var producto = valueOf('Producto');
+      var tanque = valueOf('Tanque');
+      var litros = valueOf('LitrosPreparados');
+      var mps = leerFilasMp();
+
+      var records = [];
+      var nombreDestino = '';
+
+      if (destino === 'existente') {
+        if (!tambor) return { error: 'Elige o escribe en cuál tambor usaste la materia prima.' };
+        nombreDestino = tambor;
+        if (litros && esNumero(litros, false)) {
+          var rAdd = baseRecord('Preparar tambor');
+          rAdd.TamborID = tambor;
+          rAdd.LitrosPreparados = litros;
+          rAdd.Observacion = ('Adición de litros a tambor existente. ' + valueOf('Observacion')).trim();
+          records.push(rAdd);
+        }
+      } else if (destino === 'nuevo' || destino === 'balde') {
+        if (!tambor) return { error: destino === 'balde' ? 'Ponle un nombre al balde (Ej: Balde jabón).' : 'Ponle número o nombre al tambor nuevo (Ej: Tambor 1).' };
+        if (!producto) return { error: 'Escribe qué producto se prepara.' };
+        if (!esNumero(litros, false)) return { error: 'Debes poner los litros preparados.' };
+        if (destino === 'nuevo' && !tanque) return { error: 'Selecciona el tamaño del tambor.' };
+        nombreDestino = tambor;
+        var rNew = baseRecord('Preparar tambor');
+        rNew.TamborID = tambor;
+        rNew.Producto = producto;
+        rNew.Tanque = destino === 'balde' ? 'Balde' : tanque;
+        rNew.LitrosPreparados = litros;
+        records.push(rNew);
+      } else {
+        nombreDestino = 'Uso directo';
+      }
+
+      var mpsValidas = mps.filter(function (m) { return m.item; });
+      if (!mpsValidas.length && !records.length) {
+        return { error: 'Agrega al menos una materia prima con su cantidad.' };
+      }
+      var catalogoMp = unique(getCatalog('materiasPrimas').concat(getCatalog('fraganciasColores')));
+      for (var i = 0; i < mpsValidas.length; i++) {
+        var m = mpsValidas[i];
+        if (!esNumero(m.cantidad, false)) return { error: 'Ponle cantidad a "' + m.item + '".' };
+        var itemMp = m.item;
+        var existe = catalogoMp.some(function (x) { return normalize(x) === normalize(itemMp); });
+        if (!existe) {
+          return { error: 'La materia prima "' + m.item + '" no está en el catálogo. Escríbela igual a como aparece en la lista (o regístrala primero en "Llegó mercancía" marcando que es nueva).' };
+        }
+        if ((normalize(m.item) === 'fragancia' || normalize(m.item) === 'color') && !m.variante) {
+          return { error: 'Para "' + m.item + '" pon la variante (aroma o color) en su casilla.' };
+        }
+        var rC = baseRecord('Consumo materia prima');
+        rC.Categoria = 'Materia prima';
+        rC.Item = m.item;
+        rC.Variante = m.variante;
+        rC.Cantidad = m.cantidad;
+        rC.Unidad = m.unidad;
+        rC.TamborID = nombreDestino;
+        rC.Producto = producto;
+        records.push(rC);
+      }
+      if (!records.length) return { error: 'No hay nada para guardar.' };
+      return { records: records };
+    }
+
+    function buildEmpaque() {
+      var sub = valueOf('Subempaque');
+      var pres = valueOf('Presentacion');
+      var nPres = valueOf('CantidadPresentacion');
+      var etiq = valueOf('Etiqueta');
+      var acc = valueOf('Accesorio');
+      if (!pres) return { error: 'Debes poner presentación.' };
+      if (!esNumero(nPres, false)) return { error: 'Debes poner cuántas presentaciones empacaste.' };
+      var eP = validarPresentacion(pres);
+      if (eP) return { error: eP };
+      if (!etiq) return { error: 'Indica la etiqueta usada. Si no lleva, escribe “Sin etiqueta”.' };
+
+      if (sub === 'tambor') {
+        var tambor = valueOf('TamborID');
+        if (!tambor) return { error: 'Escribe de cuál tambor o balde empacaste.' };
+        var build = function () {
+          var r = baseRecord('Empacar desde tambor');
+          r.TamborID = tambor;
+          r.Presentacion = pres;
+          r.CantidadPresentacion = nPres;
+          r.Accesorio = acc;
+          r.Etiqueta = etiq;
+          return [r];
+        };
+        if (!tamborExiste(tambor)) {
+          return {
+            confirmar: 'El tambor/balde "' + tambor + '" no aparece en la lista de preparados.\n\n¿Ya registraste la preparación?\n\n· Aceptar = guardar de todas formas\n· Cancelar = ir a registrar la preparación primero',
+            alCancelar: 'Preparación',
+            build: build
+          };
+        }
+        return { records: build() };
+      }
+
+      // materia prima directa
+      var item = valueOf('Item');
+      if (!item) return { error: 'Escribe cuál materia prima empacaste.' };
+      var e1 = validarItemCatalogo(item, document.getElementById('CrearNuevoItem').checked ? 'Sí' : 'No', unique(getCatalog('materiasPrimas')));
+      if (e1) return { error: e1 };
+      var rm = baseRecord('Empacar materia prima');
+      rm.Categoria = 'Materia prima';
+      rm.Item = item;
+      rm.Variante = valueOf('Variante');
+      rm.Presentacion = pres;
+      rm.CantidadPresentacion = nPres;
+      rm.Accesorio = acc;
+      rm.Etiqueta = etiq;
+      return { records: [rm] };
+    }
+
+    function validarItemCatalogo(item, nuevoItem, opciones) {
+      var options = opciones || getItemOptions();
+      var existe = options.some(function (x) { return normalize(x) === normalize(item); });
+      if (!existe && nuevoItem !== 'Sí') {
+        return 'El ítem "' + item + '" no existe exacto en el catálogo. Selecciona una sugerencia o marca “Crear como nuevo en catálogo, pendiente de revisar”.';
+      }
+      return '';
+    }
+    function validarReglas(categoria, item, variante) {
+      if (categoria === 'Envase' && item && !hasSize(item)) {
+        return 'Para envases debes escribir el tamaño. Ejemplo: Galón 4 L, Botella 500 ml, Bolsa 1 kg.';
+      }
+      if (categoria === 'Fragancia / Color' && !variante) {
+        return 'Para Fragancia / Color debes poner la variante. Ejemplo: Chicle, Canela, Azul.';
+      }
+      if (normalize(item) === 'fragancia' && !variante) return 'Si el ítem es Fragancia, pon la variante/aroma.';
+      if (normalize(item) === 'color' && !variante) return 'Si el ítem es Color, pon la variante.';
+      if (normalize(item) === 'etiqueta' && categoria === 'Etiqueta' && !variante) {
+        return 'Para etiquetas pon de qué producto es. Ejemplo: Genérica, Deterfull.';
+      }
+      return '';
+    }
+    function validarPresentacion(pres) {
+      if (pres && !/recarga|bulto/i.test(pres) && !hasSize(pres)) {
+        return 'La presentación debe tener tamaño. Ejemplo: Galón 4 L, Botella 500 ml, Bolsa 500 g. Si es recarga escribe “Recarga litros”; si es bulto, “Bulto”.';
+      }
+      return '';
+    }
     function esNumero(v, permitirCero) {
       var n = parseFloat(v);
       if (isNaN(n)) return false;
@@ -1117,111 +1515,165 @@
     function hasSize(text) {
       return /\d+([.,]\d+)?\s*(ml|mililitro|mililitros|l|lt|litro|litros|g|gr|gramo|gramos|kg|kilo|kilos)\b/i.test(text);
     }
-    function isRecargaOBulto(text) {
-      return /recarga|bulto/i.test(text);
-    }
 
-    function validatePayload(data) {
-      if (!data.TipoRegistro) return 'Selecciona qué vas a registrar (toca uno de los botones de arriba).';
-      if (!data.Responsable) return 'Selecciona responsable.';
-      if (tiposConCategoria.includes(data.TipoRegistro) && !valueOf('Categoria')) {
-        return 'Selecciona categoría.';
-      }
-      var tiposConItem = ['Entrada mercancía', 'Consumo materia prima', 'Salida directa/Baja', 'Novedad/Corrección', 'Empacar sólido/polvo', 'Fabricar palos', 'Conteo inventario'];
-      if (tiposConItem.includes(data.TipoRegistro) && !data.Item) {
-        return 'Debes escribir o seleccionar un ítem.';
-      }
-      if (['Entrada mercancía', 'Consumo materia prima', 'Salida directa/Baja', 'Novedad/Corrección'].includes(data.TipoRegistro)) {
-        if (!esNumero(data.Cantidad, false)) return 'Debes poner una cantidad mayor que cero.';
-        if (!data.Unidad) return 'Debes seleccionar unidad.';
-      }
-      if (data.TipoRegistro === 'Conteo inventario') {
-        if (!esNumero(data.Cantidad, true)) return 'Debes poner la cantidad contada (puede ser 0 si está agotado).';
-        if (!data.Unidad) return 'Debes seleccionar unidad.';
-      }
-      if (data.TipoRegistro === 'Preparar tambor') {
-        if (!data.Producto) return 'Debes escribir el producto.';
-        if (!data.Tanque) return 'Debes seleccionar tanque.';
-        if (!esNumero(data.LitrosPreparados, false)) return 'Debes poner los litros preparados.';
-      }
-      if (data.TipoRegistro === 'Empacar desde tambor') {
-        if (!data.TamborID) return 'Debes escribir el tambor o producto que empacas.';
-        if (!data.Presentacion) return 'Debes poner presentación.';
-        if (!esNumero(data.CantidadPresentacion, false)) return 'Debes poner cuántas presentaciones empacaste.';
-        if (!data.Etiqueta) return 'Indica la etiqueta usada. Si no lleva, escribe “Sin etiqueta”.';
-      }
-      if (data.TipoRegistro === 'Empacar sólido/polvo') {
-        if (!data.Presentacion) return 'Debes poner presentación (bolsa o tarro con tamaño).';
-        if (!esNumero(data.CantidadPresentacion, false)) return 'Debes poner cuántas presentaciones empacaste.';
-        if (!data.Etiqueta) return 'Indica la etiqueta usada. Si no lleva, escribe “Sin etiqueta”.';
-      }
-      if (data.TipoRegistro === 'Fabricar palos') {
-        if (!/palo/i.test(data.Item)) return 'En fabricar palos, el ítem debe ser un tipo de palo.';
-        if (!esNumero(data.Cantidad, false)) return 'Debes poner cantidad de palos.';
-      }
-
-      // Anti-duplicados
-      if (tiposConItem.includes(data.TipoRegistro) && data.Item) {
-        var options = getItemOptions();
-        var itemExists = options.some(function (x) { return normalize(x) === normalize(data.Item); });
-        if (!itemExists && data.NuevoItem !== 'Sí') {
-          return 'Este ítem no existe exacto en la categoría seleccionada. Selecciona una sugerencia del listado o marca “Crear como nuevo en catálogo, pendiente de revisar”.';
+    // ================== CHEQUEO DE EXISTENCIAS ==================
+    function faltantesDe(records) {
+      if (!state.inventario || !state.inventario.length) return [];
+      var faltan = [];
+      function check(item, variante, categoria, unidad) {
+        if (!item) return;
+        var n = normalize(item);
+        var nv = normalize(variante);
+        var hay = state.inventario.some(function (r) {
+          return normalize(r.item) === n && normalize(r.variante || '') === nv && r.stock > 0;
+        });
+        if (!hay) {
+          var ya = faltan.some(function (f) { return normalize(f.item) === n && normalize(f.variante) === nv; });
+          if (!ya) faltan.push({ item: item, variante: variante || '', categoria: categoria || '', unidad: unidad || 'und' });
         }
       }
+      records.forEach(function (r) {
+        var t = r.TipoRegistro;
+        if (t === 'Consumo materia prima') check(r.Item, r.Variante, 'Materia prima', r.Unidad);
+        if (t === 'Salida directa/Baja') check(r.Item, r.Variante, r.Categoria, r.Unidad);
+        if (t === 'Empacar sólido/polvo') {
+          check(r.Item, '', 'Materia prima', 'kg');
+          if (!/recarga|bulto/i.test(r.Presentacion)) check(r.Presentacion, '', 'Envase', 'und');
+          if (r.Etiqueta && !/^sin etiqueta/i.test(r.Etiqueta)) check('Etiqueta', r.Etiqueta, 'Etiqueta', 'und');
+        }
+        if (t === 'Empacar desde tambor' || t === 'Empacar materia prima') {
+          if (t === 'Empacar materia prima') check(r.Item, r.Variante, 'Materia prima', 'und');
+          if (!/recarga|bulto/i.test(r.Presentacion)) check(r.Presentacion, '', 'Envase', 'und');
+          if (r.Etiqueta && !/^sin etiqueta/i.test(r.Etiqueta)) check('Etiqueta', r.Etiqueta, 'Etiqueta', 'und');
+          if (r.Accesorio && !/^sin accesorio/i.test(r.Accesorio)) check(r.Accesorio, '', 'Accesorio', 'und');
+        }
+        if (t === 'Fabricar palos') {
+          var largo = /1[.,]?5/.test(r.Item) ? '1.50 m' : '1.20 m';
+          var receta = /mariposa/i.test(r.Item) ? BOM_PALOS_JS.mariposa : BOM_PALOS_JS.rosca;
+          receta.forEach(function (mat) { check(mat.replace('{largo}', largo), '', 'Material palo', 'und'); });
+        }
+      });
+      return faltan;
+    }
 
-      // Tamaños obligatorios
-      var cat = valueOf('Categoria');
-      if (cat === 'Envase' && data.Item && !hasSize(data.Item)) {
-        return 'Para envases debes escribir el tamaño. Ejemplo: Galón 4 L, Botella 500 ml, Bolsa 1 kg.';
-      }
-      if (data.Presentacion && !isRecargaOBulto(data.Presentacion) && !hasSize(data.Presentacion)) {
-        return 'La presentación debe tener tamaño. Ejemplo: Galón 4 L, Botella 500 ml, Bolsa 500 g. Si es recarga escribe “Recarga litros”; si es bulto, “Bulto”.';
-      }
-
-      // Variantes obligatorias
-      if (cat === 'Fragancia / Color' && !data.Variante) {
-        return 'Para Fragancia / Color debes poner la variante. Ejemplo: Chicle, Canela, Azul.';
-      }
-      if (normalize(data.Item) === 'fragancia' && !data.Variante) {
-        return 'Si el ítem es Fragancia, debes poner la variante/aroma. Ejemplo: Chicle.';
-      }
-      if (normalize(data.Item) === 'color' && !data.Variante) {
-        return 'Si el ítem es Color, debes poner la variante. Ejemplo: Azul.';
-      }
-      if (normalize(data.Item) === 'etiqueta' && cat === 'Etiqueta' && !data.Variante) {
-        return 'Para etiquetas pon de qué producto es. Ejemplo: Genérica, Deterfull.';
-      }
-      return '';
+    function mostrarStockAviso(faltantes) {
+      var cont = document.getElementById('stockFilas');
+      cont.innerHTML = '';
+      faltantes.forEach(function (f) {
+        var fila = document.createElement('div');
+        fila.className = 'stock-fila';
+        var nombre = f.item + (f.variante ? ' · ' + f.variante : '');
+        fila.innerHTML =
+          '<div class="nombre">' + escapeHtml(nombre) + '</div>' +
+          '<input type="number" step="0.001" min="0" placeholder="¿Cuánto hay?" />' +
+          '<select><option>und</option><option>L</option><option>ml</option><option>kg</option><option>g</option></select>' +
+          '<button type="button">Registrar</button>';
+        var uniSel = fila.querySelector('select');
+        if (['L', 'ml', 'kg', 'g', 'und'].indexOf(f.unidad) >= 0) uniSel.value = f.unidad;
+        fila.querySelector('button').addEventListener('click', function () {
+          var cant = fila.querySelector('input').value;
+          if (!esNumero(cant, true)) {
+            fila.querySelector('input').focus();
+            return;
+          }
+          var btn = fila.querySelector('button');
+          btn.disabled = true;
+          btn.textContent = '...';
+          var rec = baseRecord('Conteo inventario');
+          rec.Categoria = f.categoria;
+          rec.Item = f.item;
+          rec.Variante = f.variante;
+          rec.Cantidad = cant;
+          rec.Unidad = uniSel.value;
+          rec.NuevoItem = 'No';
+          rec.PendienteAprobacion = 'No';
+          rec.Observacion = 'Existencia registrada porque no estaba en inventario.';
+          enviarRegistro(rec).then(function () {
+            if (!state.inventario) state.inventario = [];
+            var n = normalize(f.item);
+            var nv = normalize(f.variante);
+            var ex = state.inventario.find(function (r) { return normalize(r.item) === n && normalize(r.variante || '') === nv; });
+            var conv = parseFloat(cant);
+            if (ex) { ex.stock = conv; } else {
+              state.inventario.push({ item: f.item, variante: f.variante, categoria: f.categoria, stock: conv, unidad: uniSel.value, minimo: NaN });
+            }
+            fila.remove();
+            if (!document.querySelectorAll('.stock-fila').length) {
+              ocultarStockAviso();
+              showStatus('Existencias registradas. Ahora presiona “Guardar registro” de nuevo para guardar tu movimiento.', 'warn');
+            }
+          }).catch(function () {
+            btn.disabled = false;
+            btn.textContent = 'Registrar';
+          });
+        });
+        cont.appendChild(fila);
+      });
+      document.getElementById('stockAviso').style.display = 'block';
+      document.getElementById('stockAviso').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+    function ocultarStockAviso() {
+      document.getElementById('stockAviso').style.display = 'none';
+      document.getElementById('stockFilas').innerHTML = '';
     }
 
     // ================== ENVÍO ==================
+    function enviarRegistro(record) {
+      return fetch(APPS_SCRIPT_URL, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify(record)
+      });
+    }
+
     async function submitForm(e) {
       e.preventDefault();
       clearStatus();
-      var data = collectPayload();
-      var error = validatePayload(data);
-      if (error) {
-        showStatus(error, 'err');
+      var res = buildRecords();
+      if (res.error) {
+        showStatus(res.error, 'err');
         return;
       }
+      var records = res.records;
+      if (res.confirmar) {
+        if (window.confirm(res.confirmar)) {
+          records = res.build();
+        } else {
+          selectType(res.alCancelar);
+          return;
+        }
+      }
+      if (!state.omitirStock) {
+        var faltantes = faltantesDe(records);
+        if (faltantes.length) {
+          showStatus('Algunos ítems no tienen existencia registrada. Regístralas abajo o presiona “Guardar de todas formas”.', 'warn');
+          mostrarStockAviso(faltantes);
+          return;
+        }
+      }
+      ocultarStockAviso();
       var btn = document.getElementById('btnSubmit');
       btn.disabled = true;
       btn.textContent = 'Guardando...';
       try {
-        await fetch(APPS_SCRIPT_URL, {
-          method: 'POST',
-          mode: 'no-cors',
-          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-          body: JSON.stringify(data)
-        });
-        showStatus('✔ Enviado: ' + data.TipoRegistro + (data.Item ? ' · ' + data.Item : '') + (data.Presentacion ? ' · ' + data.Presentacion : ''), 'ok');
-        var keepType = data.TipoRegistro;
-        var keepResp = data.Responsable;
+        for (var i = 0; i < records.length; i++) {
+          await enviarRegistro(records[i]);
+        }
+        var resumen = records.map(function (r) {
+          return r.TipoRegistro + (r.Item ? ' · ' + r.Item : (r.TamborID ? ' · ' + r.TamborID : ''));
+        }).join(' | ');
+        showStatus('✔ Enviado (' + records.length + (records.length === 1 ? ' registro' : ' registros') + '): ' + resumen, 'ok');
+        var keepType = state.selectedType;
+        var keepResp = valueOf('Responsable');
         resetForm(false);
         selectType(keepType);
         document.getElementById('Responsable').value = keepResp;
-        state.inventario = null;
         state.registros = null;
+        state.omitirStock = false;
+        jsonp({ action: 'inventario' }, function (data) {
+          if (data && !data.error) state.inventario = parseInventario(data);
+        }, function () {});
       } catch (err) {
         showStatus('No se pudo enviar. Revisa tu conexión a internet e intenta de nuevo. Error: ' + (err.message || String(err)), 'err');
       } finally {
@@ -1234,9 +1686,12 @@
       var currentType = state.selectedType;
       document.getElementById('mainForm').reset();
       document.getElementById('CrearNuevoItem').checked = false;
+      limpiarFilasMp();
       clearStatus();
+      ocultarStockAviso();
       hideSuggestions();
       setWarning(document.getElementById('itemWarning'), '');
+      state.omitirStock = false;
       if (clearType) {
         state.selectedType = '';
         document.getElementById('formTitle').textContent = 'Registro';
@@ -1279,21 +1734,20 @@
       jsonp({ action: 'inventario' }, function (data) {
         if (data && data.error) {
           estado.className = 'status err';
-          estado.textContent = 'El script respondió con un error: ' + data.error + '. Revisa que el ID_HOJA del Apps Script sea el de tu hoja y que exista la pestaña REGISTRO_APP.';
+          estado.textContent = 'El script respondió con un error: ' + data.error + '. Ejecuta "probarConfiguracion" en el editor de Apps Script para ver el detalle.';
           return;
         }
         state.inventario = parseInventario(data);
         if (!state.inventario.length) {
           estado.className = 'status warn';
-          estado.textContent = 'La conexión funciona, pero no hay movimientos en REGISTRO_APP todavía. Registra entradas o conteos y aparecerán aquí.';
+          estado.textContent = 'La conexión funciona, pero no hay movimientos en REGISTRO_APP todavía. Registra entradas y aparecerán aquí.';
           return;
         }
         estado.className = 'status';
         estado.textContent = '';
         renderInventario();
       }, function () {
-        estado.className = 'status err';
-        estado.textContent = MSG_SCRIPT;
+        diagnosticarConexion(estado);
       }, 20000);
     }
 
@@ -1302,6 +1756,7 @@
       if (Array.isArray(data)) rows = data;
       else if (data && Array.isArray(data.items)) rows = data.items;
       else if (data && Array.isArray(data.inventario)) rows = data.inventario;
+      if (data && Array.isArray(data.tambores)) state.catalogos.tambores = data.tambores;
       return rows.map(function (r) {
         return {
           item: pickField(r, ['item', 'nombre', 'producto', 'descripcion']),
@@ -1372,7 +1827,7 @@
       return Math.round(n * 100) / 100;
     }
 
-    // ================== MOVIMIENTOS (TRAZABILIDAD) ==================
+    // ================== MOVIMIENTOS ==================
     function loadMovimientos() {
       var estado = document.getElementById('movEstado');
       estado.className = 'status warn';
@@ -1397,8 +1852,7 @@
         estado.textContent = '';
         renderMovimientos();
       }, function () {
-        estado.className = 'status err';
-        estado.textContent = MSG_SCRIPT;
+        diagnosticarConexion(estado);
       }, 20000);
     }
 
@@ -1408,7 +1862,7 @@
     function renderMovimientos() {
       var lista = document.getElementById('movLista');
       var filtro = normalize(valueOf('movBuscar'));
-      var rows = (state.registros || []).slice().reverse(); // más recientes primero
+      var rows = (state.registros || []).slice().reverse();
       if (filtro) {
         rows = rows.filter(function (r) {
           return normalize(JSON.stringify(r)).includes(filtro);
@@ -1427,6 +1881,8 @@
         var cant = campoReg(r, ['cantidad']);
         var uni = campoReg(r, ['unidad']);
         if (cant) detalles.push('Cantidad: ' + cant + (uni ? ' ' + uni : ''));
+        var tambor = campoReg(r, ['tamborid']);
+        if (tambor && tambor !== item) detalles.push('Tambor: ' + tambor);
         var pres = campoReg(r, ['presentacion']);
         var cantPres = campoReg(r, ['cantidadpresentacion']);
         if (pres) detalles.push(cantPres ? cantPres + ' × ' + pres : pres);
@@ -1444,7 +1900,7 @@
           '<div class="mov-titulo">' + escapeHtml(item + (variante ? ' · ' + variante : '')) + '</div>' +
           '<div class="mov-detalle">' + escapeHtml(fechaTxt) + (detalles.length ? ' — ' + escapeHtml(detalles.join(' · ')) : '') + '</div>' +
           '<div class="mov-badges">' +
-          '<span class="badge ' + (esConteo ? 'conteo' : 'tipo') + '">' + escapeHtml(esConteo ? 'CONTEO / AJUSTE' : (tipo || 'Registro')) + '</span>' +
+          '<span class="badge ' + (esConteo ? 'conteo' : 'tipo') + '">' + escapeHtml(esConteo ? 'CONTEO / EXISTENCIA' : (tipo || 'Registro')) + '</span>' +
           (esNuevo ? '<span class="badge nuevo">ÍTEM NUEVO · pendiente revisar</span>' : '') +
           '</div></div>';
       }).join('') || '<div class="hint" style="padding:14px">Nada que coincida con el filtro.</div>';
@@ -1495,7 +1951,6 @@
           estado.textContent = 'Descargados ' + regs.length + ' movimientos.';
           return;
         }
-        // Resumen de materia prima gastada
         var grupos = {};
         regs.forEach(function (r) {
           var t = normalize(campoReg(r, ['tiporegistro', 'tipo']));
@@ -1504,7 +1959,6 @@
           var variante = campoReg(r, ['variante']);
           var uni = normalize(campoReg(r, ['unidad']));
           var cant = parseFloat(String(campoReg(r, ['cantidad'])).replace(',', '.')) || 0;
-          // convertir a unidad base
           var uniBase = uni;
           if (uni === 'ml') { cant = cant / 1000; uniBase = 'l'; }
           if (uni === 'g') { cant = cant / 1000; uniBase = 'kg'; }
@@ -1517,7 +1971,7 @@
         var filas = Object.keys(grupos).map(function (k) { return grupos[k]; });
         if (!filas.length) {
           estado.className = 'status warn';
-          estado.textContent = 'En ese rango no hay registros de “Usé materia prima”.';
+          estado.textContent = 'En ese rango no hay registros de consumo de materia prima.';
           return;
         }
         filas.sort(function (a, b) { return a.item.localeCompare(b.item, 'es'); });
@@ -1528,14 +1982,12 @@
         descargarCsv(lineas2, 'materia_prima_gastada_' + rango + '.csv');
         estado.className = 'status ok';
         estado.textContent = 'Reporte descargado: ' + filas.length + ' materias primas.';
-        // vista previa
         vista.innerHTML = filas.slice(0, 50).map(function (f) {
           return '<div class="inv-row"><div class="inv-nombre">' + escapeHtml(f.item + (f.variante ? ' · ' + f.variante : '')) + '</div>' +
             '<div class="inv-stock">' + escapeHtml(redondear(f.total) + ' ' + f.unidad) + '</div></div>';
         }).join('');
       }, function () {
-        estado.className = 'status err';
-        estado.textContent = MSG_SCRIPT;
+        diagnosticarConexion(estado);
       }, 25000);
     }
     function numCsv(n) {
