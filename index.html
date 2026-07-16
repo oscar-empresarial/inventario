@@ -297,9 +297,12 @@
     .inv-top input { flex: 1; }
     .inv-resumen {
       display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
+      grid-template-columns: repeat(4, minmax(0, 1fr));
       gap: 10px;
       margin-bottom: 14px;
+    }
+    @media (max-width: 700px) {
+      .inv-resumen { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     }
     .inv-chip {
       border-radius: 14px;
@@ -334,9 +337,22 @@
     .badge.ok { background: #dcfce7; color: #166534; }
     .badge.low { background: #ffedd5; color: #9a3412; }
     .badge.out { background: #fee2e2; color: #991b1b; }
+    .badge.urg { background: #fecaca; color: #7f1d1d; }
     .badge.tipo { background: var(--blue-soft); color: var(--blue); }
     .badge.conteo { background: #ede9fe; color: var(--purple); }
     .badge.nuevo { background: #ffedd5; color: #9a3412; }
+    .inv-chip.urg { background: #fecaca; color: #7f1d1d; }
+    .cat-chip {
+      border: 1px solid var(--line);
+      background: white;
+      color: #334155;
+      border-radius: 999px;
+      padding: 8px 14px;
+      font-size: 13px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+    .cat-chip.active { background: var(--blue); border-color: var(--blue); color: white; }
 
     /* ===== Movimientos ===== */
     .filtros {
@@ -426,6 +442,9 @@
         </div>
         <form id="mainForm" autocomplete="off">
           <div class="section-title" id="formTitle">Registro</div>
+          <div id="novedadAyuda" class="status warn" style="display:none">
+            ¿Para qué sirve Novedad/Corrección? Para dejar constancia de cosas raras: daños, derrames, faltantes o sobrantes que encuentres, o errores de un registro anterior. NO cambia el inventario (solo queda en la trazabilidad para revisar), EXCEPTO el motivo “Traslado a otro ítem”, que pasa la existencia de un ítem a otro (útil si un envase quedó mal creado).
+          </div>
           <div class="row">
             <div class="field" data-field="responsable">
               <label for="Responsable">Responsable</label>
@@ -458,8 +477,8 @@
             <div class="field hidden" data-field="destino">
               <label for="Destino">¿Dónde lo usaste?</label>
               <select id="Destino">
-                <option value="existente">En un tambor que ya existe</option>
-                <option value="nuevo">Tambor nuevo (enumerado)</option>
+                <option value="existente">En un tanque que ya existe</option>
+                <option value="nuevo">Tanque nuevo (enumerado)</option>
                 <option value="balde">Balde / se empaca de una vez</option>
                 <option value="directo">Uso directo / otro</option>
               </select>
@@ -467,7 +486,7 @@
             <div class="field hidden" data-field="subempaque">
               <label for="Subempaque">¿Qué empacas?</label>
               <select id="Subempaque">
-                <option value="tambor">Producto de un tambor o balde</option>
+                <option value="tambor">Producto de un tanque o balde</option>
                 <option value="materia">Materia prima directa (ej: ácido, varsol)</option>
               </select>
             </div>
@@ -475,24 +494,25 @@
 
           <div class="row">
             <div class="field hidden" data-field="tambor">
-              <label for="TamborID" id="tamborLabel">Tambor (número o nombre)</label>
+              <label for="TamborID" id="tamborLabel">Tanque (número o nombre)</label>
               <div class="suggest-wrapper">
-                <input id="TamborID" placeholder="Ej: Tambor 1, Balde jabón" />
+                <input id="TamborID" placeholder="Ej: Tanque 1, Balde jabón" />
                 <div id="tamborSuggestions" class="suggest-box"></div>
               </div>
-              <div class="hint" id="tamborHint">Enumera los tambores: Tambor 1, Tambor 2… Los baldes con nombre: Balde jabón.</div>
+              <div class="hint" id="tamborHint">Enumera los tanques: Tanque 1, Tanque 2… Los baldes con nombre: Balde jabón. Al escribir verás qué tiene cada uno.</div>
             </div>
             <div class="field hidden" data-field="producto">
               <label for="Producto">Producto que se prepara</label>
               <div class="suggest-wrapper">
-                <input id="Producto" placeholder="Ej: Deterfull, Ambientador" />
+                <input id="Producto" placeholder="Ej: Deterfull, CMC preparado" />
                 <div id="productoSuggestions" class="suggest-box"></div>
               </div>
+              <div class="hint">Si es una base, ponle nombre de base: CMC preparado, Genapol preparado, Menta preparada, Color preparado, Base múltiple…</div>
             </div>
           </div>
           <div class="row">
             <div class="field hidden" data-field="tanque">
-              <label for="Tanque">Tamaño del tambor</label>
+              <label for="Tanque">Tamaño del tanque</label>
               <select id="Tanque">
                 <option value="">Seleccionar</option>
                 <option>20 L</option>
@@ -507,6 +527,32 @@
             <div class="field hidden" data-field="litros">
               <label for="LitrosPreparados" id="litrosLabel">Litros preparados</label>
               <input id="LitrosPreparados" type="number" step="0.001" min="0" placeholder="Ej: 120" />
+            </div>
+          </div>
+
+          <div class="row">
+            <div class="field hidden" data-field="baseusada">
+              <label for="BaseTanque">¿Usaste base de otro tanque? (opcional)</label>
+              <div class="suggest-wrapper">
+                <input id="BaseTanque" placeholder="Ej: Tanque 2 (CMC preparado)" />
+                <div id="baseSuggestions" class="suggest-box"></div>
+              </div>
+              <div class="hint">Si este producto parte de una base (CMC preparado, Genapol preparado…), elige el tanque donde está la base. Se descuentan los litros de ese tanque.</div>
+            </div>
+            <div class="field hidden" data-field="baselitros">
+              <label for="BaseLitros">Litros de base que sacaste</label>
+              <input id="BaseLitros" type="number" step="0.001" min="0" placeholder="Ej: 20" />
+            </div>
+          </div>
+          <div class="row">
+            <div class="field hidden" data-field="estanque">
+              <label for="EstadoTanque">Estado del tanque</label>
+              <select id="EstadoTanque">
+                <option value="">Sin cambio</option>
+                <option value="En proceso">Queda EN PROCESO (se termina otro día)</option>
+                <option value="Listo">Ya quedó LISTO</option>
+              </select>
+              <div class="hint">Hay productos que tardan días: márcalo “en proceso”, y cuando lo termines vuelve aquí y márcalo “Listo”.</div>
             </div>
           </div>
 
@@ -574,11 +620,19 @@
             </div>
           </div>
           <div class="row">
+            <div class="field hidden" data-field="contapa">
+              <label>¿El envase llegó con tapa o accesorio?</label>
+              <label class="check-row" style="margin-top:4px">
+                <input type="checkbox" id="ConTapa" />
+                <span>Sí, llegó con tapa/accesorio (se registra también esa entrada al inventario)</span>
+              </label>
+            </div>
+          </div>
+          <div class="row">
             <div class="field hidden" data-field="accesorio">
-              <label for="Accesorio">Accesorio usado</label>
+              <label for="Accesorio" id="accesorioLabel">Tapa / accesorio usado</label>
               <select id="Accesorio">
                 <option value="">Seleccionar</option>
-                <option>Sin accesorio</option>
                 <option>Tapa normal</option>
                 <option>Gatillo / pistola</option>
                 <option>Válvula jabón</option>
@@ -609,8 +663,17 @@
                 <option>Derrame</option>
                 <option>Uso interno</option>
                 <option>Corrección</option>
+                <option>Traslado a otro ítem</option>
                 <option>Otro</option>
               </select>
+            </div>
+            <div class="field hidden" data-field="itemdestino">
+              <label for="ItemDestino">Ítem destino (a dónde pasa el inventario)</label>
+              <div class="suggest-wrapper">
+                <input id="ItemDestino" placeholder="Ej: Galón 4 L transparente" />
+                <div id="itemDestinoSuggestions" class="suggest-box"></div>
+              </div>
+              <div class="hint">Si dejas la cantidad vacía, se traslada TODO el inventario del ítem al destino. El historial no se borra.</div>
             </div>
           </div>
           <div class="row">
@@ -646,6 +709,7 @@
           <input id="invBuscar" placeholder="Buscar ítem…" />
           <button type="button" class="btn-azul" id="btnInvRecargar">Actualizar</button>
         </div>
+        <div id="invChips" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px"></div>
         <div id="invResumen" class="inv-resumen" style="display:none"></div>
         <div id="invEstado" class="status"></div>
         <div id="invLista"></div>
@@ -690,11 +754,36 @@
             <label for="expHasta">Hasta</label>
             <input type="date" id="expHasta" />
           </div>
+          <div>
+            <label for="expResponsable">Responsable (movimientos)</label>
+            <select id="expResponsable">
+              <option value="">Todos</option>
+              <option>Carlos</option>
+              <option>Neyder</option>
+              <option>Leandro</option>
+            </select>
+          </div>
+        </div>
+        <div class="filtros">
+          <div>
+            <label for="expCategoria">Categoría (inventario)</label>
+            <select id="expCategoria">
+              <option value="">Todo el inventario</option>
+              <option>Materia prima</option>
+              <option>Fragancia / Color</option>
+              <option>Envase</option>
+              <option>Accesorio</option>
+              <option>Etiqueta</option>
+              <option>Material palo</option>
+              <option>Producto terminado</option>
+            </select>
+          </div>
         </div>
         <div class="actions" style="margin-top:6px; flex-wrap:wrap">
           <button type="button" class="btn-verde" id="btnExpMateria">Materia prima gastada (Excel/CSV)</button>
-          <button type="button" class="btn-azul" id="btnExpTodo">Todos los movimientos (Excel/CSV)</button>
-          <button type="button" class="btn-azul" id="btnExpInventario">Inventario actual (Excel/CSV)</button>
+          <button type="button" class="btn-azul" id="btnExpTodo">Movimientos (Excel/CSV)</button>
+          <button type="button" class="btn-azul" id="btnExpInventario">Inventario (Excel/CSV)</button>
+          <button type="button" class="btn-azul" id="btnExpTanques">Tanques (Excel/CSV)</button>
         </div>
         <div id="expEstado" class="status"></div>
         <div id="expVista"></div>
@@ -783,6 +872,7 @@
         'Perfume de interiores', 'After-shave', 'Agua de rosas', 'Shampoo de jacuzzi',
         'Exfoliante de cuerpo', 'Alcohol electrónico / isopropílico',
         'Shampoo con cera para vehículos', 'Jabón con clorhexidina',
+        'CMC preparado', 'Genapol preparado', 'Menta preparada', 'Color preparado', 'Base múltiple',
         'Palo aluminio rosca 1.50 m', 'Palo aluminio rosca 1.20 m',
         'Palo aluminio mariposa 1.50 m', 'Palo aluminio mariposa 1.20 m'
       ],
@@ -798,7 +888,7 @@
 
     var visibility = {
       'Entrada mercancía': ['responsable', 'categoria', 'item', 'variante', 'cantidad', 'unidad', 'observacion'],
-      'Preparación': ['responsable', 'destino', 'materias', 'observacion'],
+      'Preparación': ['responsable', 'destino', 'materias', 'baseusada', 'baselitros', 'estanque', 'observacion'],
       'Empacar producto': ['responsable', 'subempaque', 'observacion'],
       'Empacar sólido/polvo': ['responsable', 'item', 'presentacion', 'cantpres', 'etiqueta', 'observacion'],
       'Salida directa/Baja': ['responsable', 'categoria', 'item', 'variante', 'cantidad', 'unidad', 'motivo', 'observacion'],
@@ -844,6 +934,11 @@
       setupSuggest('Etiqueta', 'etiquetaSuggestions', function () {
         return unique(['Sin etiqueta', 'Genérica'].concat(getCatalog('productos')));
       });
+      setupSuggest('BaseTanque', 'baseSuggestions', getTamborOptions);
+      setupSuggest('ItemDestino', 'itemDestinoSuggestions', getItemOptions);
+      document.getElementById('ConTapa').addEventListener('change', toggleTapaAccesorio);
+      document.getElementById('Motivo').addEventListener('change', toggleItemDestino);
+      document.getElementById('btnExpTanques').addEventListener('click', function () { exportar('tanques'); });
 
       var hoy = new Date();
       var hace7 = new Date(hoy.getTime() - 7 * 86400000);
@@ -951,7 +1046,9 @@
         'etiquetas', 'materialesPalos', 'solidos', 'palosTerminados', 'productos', 'presentaciones'
       ].forEach(function (key) {
         if (data[key] && data[key].length) {
-          state.catalogos[key] = unique(getCatalog(key).concat(data[key]));
+          // La hoja CATALOGOS manda: si trae la lista, se usa SOLO esa.
+          // Los catálogos locales son solo respaldo cuando no hay conexión.
+          state.catalogos[key] = unique(data[key]);
         }
       });
       if (data.tambores) state.catalogos.tambores = data.tambores;
@@ -989,6 +1086,10 @@
       if (type === 'Fabricar palos') document.getElementById('Unidad').value = 'und';
       if (type === 'Preparación') updateDestino();
       if (type === 'Empacar producto') updateSubempaque();
+      document.getElementById('novedadAyuda').style.display = (type === 'Novedad/Corrección') ? 'block' : 'none';
+      document.getElementById('ConTapa').checked = false;
+      toggleTapaAccesorio();
+      toggleItemDestino();
       window.scrollTo({ top: document.getElementById('mainForm').offsetTop - 20, behavior: 'smooth' });
     }
 
@@ -1016,13 +1117,13 @@
       var hint = document.getElementById('tamborHint');
       if (d === 'existente') {
         mostrarCampos(['tambor', 'litros']);
-        tamborLbl.textContent = '¿En cuál tambor?';
-        hint.textContent = 'Elige el tambor de la lista. Si no aparece, créalo como “Tambor nuevo”.';
-        lbl.textContent = 'Litros adicionados (solo si el tambor creció, si no deja vacío)';
+        tamborLbl.textContent = '¿En cuál tanque?';
+        hint.textContent = 'Elige el tanque de la lista: muestra qué tiene y cuánto le queda. Si no aparece, créalo como “Tanque nuevo”.';
+        lbl.textContent = 'Litros adicionados (solo si el tanque creció, si no deja vacío)';
       } else if (d === 'nuevo') {
         mostrarCampos(['tambor', 'producto', 'tanque', 'litros']);
-        tamborLbl.textContent = 'Número o nombre del tambor nuevo';
-        hint.textContent = 'Enuméralos: Tambor 1, Tambor 2… así todos saben cuál es cuál.';
+        tamborLbl.textContent = 'Número del tanque nuevo';
+        hint.textContent = 'Enuméralos: Tanque 1, Tanque 2… así todos saben cuál es cuál.';
         lbl.textContent = 'Litros preparados';
       } else if (d === 'balde') {
         mostrarCampos(['tambor', 'producto', 'litros']);
@@ -1040,8 +1141,8 @@
       var hint = document.getElementById('tamborHint');
       if (s === 'tambor') {
         mostrarCampos(['tambor', 'presentacion', 'cantpres', 'accesorio', 'etiqueta']);
-        tamborLbl.textContent = '¿De cuál tambor o balde?';
-        hint.textContent = 'Elige el tambor/balde de la lista. Si no existe, primero registra la preparación.';
+        tamborLbl.textContent = '¿De cuál tanque o balde?';
+        hint.textContent = 'Elige el tanque/balde de la lista: muestra qué tiene cada uno. Si no existe, primero registra la preparación.';
       } else {
         mostrarCampos(['item', 'variante', 'presentacion', 'cantpres', 'accesorio', 'etiqueta']);
         document.getElementById('itemLabel').textContent = 'Materia prima que empacas';
@@ -1057,8 +1158,29 @@
       if (['Envase', 'Accesorio', 'Etiqueta', 'Material palo'].indexOf(categoria) >= 0) {
         document.getElementById('Unidad').value = 'und';
       }
+      // Envases que llegan: preguntar si vienen con tapa
+      var esEnvaseEntrada = (state.selectedType === 'Entrada mercancía' && categoria === 'Envase');
+      document.querySelectorAll('[data-field="contapa"]').forEach(function (f) { f.classList.toggle('hidden', !esEnvaseEntrada); });
+      document.getElementById('ConTapa').checked = false;
+      toggleTapaAccesorio();
       validateItemSoft();
       hideSuggestions();
+    }
+
+    function toggleTapaAccesorio() {
+      var mostrar = state.selectedType === 'Entrada mercancía' &&
+        valueOf('Categoria') === 'Envase' &&
+        document.getElementById('ConTapa').checked;
+      document.querySelectorAll('[data-field="accesorio"]').forEach(function (f) {
+        if (state.selectedType === 'Entrada mercancía') f.classList.toggle('hidden', !mostrar);
+      });
+      document.getElementById('accesorioLabel').textContent =
+        (state.selectedType === 'Entrada mercancía') ? '¿Cuál tapa / accesorio llegó?' : 'Tapa / accesorio usado';
+    }
+
+    function toggleItemDestino() {
+      var mostrar = state.selectedType === 'Novedad/Corrección' && valueOf('Motivo') === 'Traslado a otro ítem';
+      document.querySelectorAll('[data-field="itemdestino"]').forEach(function (f) { f.classList.toggle('hidden', !mostrar); });
     }
 
     // ================== MATERIAS PRIMAS DINÁMICAS ==================
@@ -1200,8 +1322,10 @@
       return (state.catalogos.tambores || []).map(function (t) {
         if (typeof t === 'string') return { value: t, label: t };
         var id = t.id || t.producto || '';
+        var enProceso = normalize(t.estado || '') === 'en proceso';
         var label = [id, (t.producto && t.producto !== id) ? t.producto : '', t.variante, t.tanque,
-          (t.disponible != null ? 'quedan aprox ' + t.disponible + ' L' : '')]
+          (t.disponible != null ? 'quedan aprox ' + t.disponible + ' L' : ''),
+          enProceso ? '⏳ EN PROCESO' : '']
           .filter(Boolean).join(' · ');
         return { value: id, label: label || id };
       });
@@ -1320,15 +1444,39 @@
       r.Motivo = valueOf('Motivo');
 
       if (type === 'Entrada mercancía' || type === 'Salida directa/Baja' || type === 'Novedad/Corrección') {
+        var esTraslado = (type === 'Novedad/Corrección' && r.Motivo === 'Traslado a otro ítem');
         if (!r.Categoria) return { error: 'Selecciona categoría.' };
         if (!r.Item) return { error: 'Debes escribir o seleccionar un ítem.' };
-        if (!esNumero(r.Cantidad, false)) return { error: 'Debes poner una cantidad mayor que cero.' };
-        if (!r.Unidad) return { error: 'Debes seleccionar unidad.' };
+        if (esTraslado) {
+          var destinoT = valueOf('ItemDestino');
+          if (!destinoT) return { error: 'Escribe el ítem destino del traslado.' };
+          if (r.Cantidad && !esNumero(r.Cantidad, false)) return { error: 'La cantidad del traslado debe ser mayor que cero, o déjala vacía para trasladar todo.' };
+          r.TipoRegistro = 'Traslado inventario';
+          r.Producto = destinoT;
+        } else {
+          if (!esNumero(r.Cantidad, false)) return { error: 'Debes poner una cantidad mayor que cero.' };
+          if (!r.Unidad) return { error: 'Debes seleccionar unidad.' };
+        }
         var e1 = validarItemCatalogo(r.Item, r.NuevoItem);
         if (e1) return { error: e1 };
         var e2 = validarReglas(r.Categoria, r.Item, r.Variante);
         if (e2) return { error: e2 };
-        return { records: [r] };
+        var lista = [r];
+        // Envase que llega con tapa: registrar también la entrada de la tapa
+        if (type === 'Entrada mercancía' && r.Categoria === 'Envase' && document.getElementById('ConTapa').checked) {
+          var tapa = valueOf('Accesorio');
+          if (!tapa) return { error: 'Marcaste que el envase llegó con tapa: selecciona cuál tapa/accesorio.' };
+          var rT = baseRecord('Entrada mercancía');
+          rT.Categoria = 'Accesorio';
+          rT.Item = tapa;
+          rT.Cantidad = r.Cantidad;
+          rT.Unidad = 'und';
+          rT.NuevoItem = 'No';
+          rT.PendienteAprobacion = 'No';
+          rT.Observacion = ('Tapa que llegó con: ' + r.Item + '. ' + valueOf('Observacion')).trim();
+          lista.push(rT);
+        }
+        return { records: lista };
       }
 
       if (type === 'Empacar sólido/polvo') {
@@ -1374,7 +1522,7 @@
       var nombreDestino = '';
 
       if (destino === 'existente') {
-        if (!tambor) return { error: 'Elige o escribe en cuál tambor usaste la materia prima.' };
+        if (!tambor) return { error: 'Elige o escribe en cuál tanque usaste la materia prima.' };
         nombreDestino = tambor;
         if (litros && esNumero(litros, false)) {
           var rAdd = baseRecord('Preparar tambor');
@@ -1384,7 +1532,7 @@
           records.push(rAdd);
         }
       } else if (destino === 'nuevo' || destino === 'balde') {
-        if (!tambor) return { error: destino === 'balde' ? 'Ponle un nombre al balde (Ej: Balde jabón).' : 'Ponle número o nombre al tambor nuevo (Ej: Tambor 1).' };
+        if (!tambor) return { error: destino === 'balde' ? 'Ponle un nombre al balde (Ej: Balde jabón).' : 'Ponle número al tanque nuevo (Ej: Tanque 1).' };
         if (!producto) return { error: 'Escribe qué producto se prepara.' };
         if (!esNumero(litros, false)) return { error: 'Debes poner los litros preparados.' };
         if (destino === 'nuevo' && !tanque) return { error: 'Selecciona el tamaño del tambor.' };
@@ -1399,9 +1547,42 @@
         nombreDestino = 'Uso directo';
       }
 
+      // Base usada de otro tanque (opcional)
+      var baseTanque = valueOf('BaseTanque');
+      var baseLitros = valueOf('BaseLitros');
+      if (baseTanque || baseLitros) {
+        if (!baseTanque) return { error: 'Elige de cuál tanque sacaste la base.' };
+        if (!esNumero(baseLitros, false)) return { error: 'Pon cuántos litros de base sacaste.' };
+        var rB = baseRecord('Consumo base');
+        rB.TamborID = baseTanque;
+        rB.Cantidad = baseLitros;
+        rB.Unidad = 'L';
+        rB.Producto = producto;
+        rB.Observacion = ('Base tomada para: ' + (nombreDestino || 'preparación') + '. ' + valueOf('Observacion')).trim();
+        records.push(rB);
+      }
+
+      // Estado del tanque (en proceso / listo)
+      var estadoT = valueOf('EstadoTanque');
+      if (estadoT) {
+        var rPrepRef = null;
+        for (var p = 0; p < records.length; p++) {
+          if (records[p].TipoRegistro === 'Preparar tambor') rPrepRef = records[p];
+        }
+        if (rPrepRef) {
+          rPrepRef.Motivo = estadoT;
+        } else if (destino === 'existente' && tambor) {
+          var rE = baseRecord('Preparar tambor');
+          rE.TamborID = tambor;
+          rE.Motivo = estadoT;
+          rE.Observacion = ('Cambio de estado del tanque a: ' + estadoT + '. ' + valueOf('Observacion')).trim();
+          records.push(rE);
+        }
+      }
+
       var mpsValidas = mps.filter(function (m) { return m.item; });
       if (!mpsValidas.length && !records.length) {
-        return { error: 'Agrega al menos una materia prima con su cantidad.' };
+        return { error: 'Agrega al menos una materia prima con su cantidad, o registra el tanque/base.' };
       }
       var catalogoMp = unique(getCatalog('materiasPrimas').concat(getCatalog('fraganciasColores')));
       for (var i = 0; i < mpsValidas.length; i++) {
@@ -1440,10 +1621,11 @@
       var eP = validarPresentacion(pres);
       if (eP) return { error: eP };
       if (!etiq) return { error: 'Indica la etiqueta usada. Si no lleva, escribe “Sin etiqueta”.' };
+      if (!acc) return { error: 'Selecciona la tapa o accesorio usado (siempre va tapado con algo).' };
 
       if (sub === 'tambor') {
         var tambor = valueOf('TamborID');
-        if (!tambor) return { error: 'Escribe de cuál tambor o balde empacaste.' };
+        if (!tambor) return { error: 'Escribe de cuál tanque o balde empacaste.' };
         var build = function () {
           var r = baseRecord('Empacar desde tambor');
           r.TamborID = tambor;
@@ -1455,7 +1637,7 @@
         };
         if (!tamborExiste(tambor)) {
           return {
-            confirmar: 'El tambor/balde "' + tambor + '" no aparece en la lista de preparados.\n\n¿Ya registraste la preparación?\n\n· Aceptar = guardar de todas formas\n· Cancelar = ir a registrar la preparación primero',
+            confirmar: 'El tanque/balde "' + tambor + '" no aparece en la lista de preparados.\n\n¿Ya registraste la preparación?\n\n· Aceptar = guardar de todas formas\n· Cancelar = ir a registrar la preparación primero',
             alCancelar: 'Preparación',
             build: build
           };
@@ -1764,7 +1946,8 @@
           categoria: pickField(r, ['categoria', 'tipo', 'grupo']),
           stock: parseFloat(String(pickField(r, ['stock', 'existencia', 'existencias', 'saldo', 'disponible', 'cantidad'])).replace(',', '.')),
           unidad: pickField(r, ['unidad', 'und', 'um']),
-          minimo: parseFloat(String(pickField(r, ['minimo', 'stockminimo', 'min', 'alerta', 'nivelminimo'])).replace(',', '.'))
+          minimo: parseFloat(String(pickField(r, ['minimo', 'stockminimo', 'min', 'alerta', 'nivelminimo'])).replace(',', '.')),
+          referencia: parseFloat(String(pickField(r, ['referencia', 'maximo', 'nivelreferencia'])).replace(',', '.'))
         };
       }).filter(function (r) { return r.item; });
     }
@@ -1775,28 +1958,85 @@
       }
       return '';
     }
+    // Semáforo de compras:
+    // AGOTADO = 0 · MUY POCO (urgente) = menos del 10% de lo que había · POCO (comprar) = menos de 1/3
     function estadoDe(r) {
       if (!isNaN(r.stock) && r.stock <= 0) return 'out';
-      if (!isNaN(r.stock) && !isNaN(r.minimo) && r.minimo > 0 && r.stock <= r.minimo) return 'low';
+      if (!isNaN(r.minimo) && r.minimo > 0) {
+        if (r.stock <= r.minimo / 3) return 'urg';
+        if (r.stock <= r.minimo) return 'low';
+        return 'ok';
+      }
+      if (!isNaN(r.referencia) && r.referencia > 0) {
+        if (r.stock <= r.referencia * 0.1) return 'urg';
+        if (r.stock <= r.referencia / 3) return 'low';
+      }
       return 'ok';
     }
+    var ETIQ_ESTADO = { out: 'AGOTADO', urg: 'MUY POCO · URGENTE', low: 'POCO · comprar', ok: 'OK' };
     function nombreDe(r) {
       return r.item + (r.variante ? ' · ' + r.variante : '');
+    }
+
+    var INV_CATEGORIAS = ['Todo', 'Tanques', 'Materia prima', 'Fragancia / Color', 'Envase', 'Accesorio', 'Etiqueta', 'Material palo', 'Producto terminado'];
+    function renderInvChips() {
+      var chips = document.getElementById('invChips');
+      if (!state.invCat) state.invCat = 'Todo';
+      chips.innerHTML = '';
+      INV_CATEGORIAS.forEach(function (c) {
+        var b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'cat-chip' + (state.invCat === c ? ' active' : '');
+        b.textContent = c === 'Tanques' ? '🛢 Tanques' : c;
+        b.addEventListener('click', function () {
+          state.invCat = c;
+          renderInventario();
+        });
+        chips.appendChild(b);
+      });
+    }
+
+    function renderTanques(lista, resumen) {
+      resumen.style.display = 'none';
+      var tanques = state.catalogos.tambores || [];
+      if (!tanques.length) {
+        lista.innerHTML = '<div class="hint" style="padding:14px">No hay tanques ni baldes con contenido en este momento. Se crean desde “Preparé / usé materia prima”.</div>';
+        return;
+      }
+      lista.innerHTML = tanques.map(function (t) {
+        var enProceso = normalize(t.estado || '') === 'en proceso';
+        return '<div class="inv-row">' +
+          '<div><div class="inv-nombre">' + escapeHtml(t.id || t.producto || 'Tanque') + '</div>' +
+          '<div class="inv-cat">' + escapeHtml([t.producto, t.variante, t.tanque].filter(Boolean).join(' · ') || 'Contenido sin nombre') + '</div></div>' +
+          '<div style="display:flex;align-items:center;gap:10px">' +
+          '<span class="inv-stock">' + escapeHtml(t.disponible != null ? t.disponible + ' L' : '—') + '</span>' +
+          '<span class="badge ' + (enProceso ? 'low' : 'ok') + '">' + (enProceso ? '⏳ EN PROCESO' : 'LISTO') + '</span>' +
+          '</div></div>';
+      }).join('');
     }
 
     function renderInventario() {
       var lista = document.getElementById('invLista');
       var resumen = document.getElementById('invResumen');
+      renderInvChips();
+      if (state.invCat === 'Tanques') {
+        renderTanques(lista, resumen);
+        return;
+      }
       var filtro = normalize(valueOf('invBuscar'));
       var rows = (state.inventario || []).slice();
       if (!rows.length) return;
+      if (state.invCat && state.invCat !== 'Todo') {
+        rows = rows.filter(function (r) { return normalize(r.categoria) === normalize(state.invCat); });
+      }
 
-      var counts = { ok: 0, low: 0, out: 0 };
+      var counts = { ok: 0, low: 0, urg: 0, out: 0 };
       rows.forEach(function (r) { counts[estadoDe(r)]++; });
       resumen.style.display = 'grid';
       resumen.innerHTML =
         '<div class="inv-chip out"><span class="num">' + counts.out + '</span>Agotados</div>' +
-        '<div class="inv-chip low"><span class="num">' + counts.low + '</span>Por acabarse</div>' +
+        '<div class="inv-chip urg"><span class="num">' + counts.urg + '</span>Urgente comprar</div>' +
+        '<div class="inv-chip low"><span class="num">' + counts.low + '</span>Poco · comprar</div>' +
         '<div class="inv-chip ok"><span class="num">' + counts.ok + '</span>Con stock</div>';
 
       if (filtro) {
@@ -1804,13 +2044,12 @@
           return normalize(nombreDe(r)).includes(filtro) || normalize(r.categoria).includes(filtro);
         });
       }
-      var orden = { out: 0, low: 1, ok: 2 };
+      var orden = { out: 0, urg: 1, low: 2, ok: 3 };
       rows.sort(function (a, b) {
         var d = orden[estadoDe(a)] - orden[estadoDe(b)];
         return d !== 0 ? d : String(nombreDe(a)).localeCompare(String(nombreDe(b)), 'es');
       });
 
-      var etiq = { out: 'AGOTADO', low: 'POCO', ok: 'OK' };
       lista.innerHTML = rows.map(function (r) {
         var est = estadoDe(r);
         var stockTxt = isNaN(r.stock) ? '—' : (redondear(r.stock) + (r.unidad ? ' ' + r.unidad : ''));
@@ -1819,9 +2058,9 @@
           (r.categoria ? '<div class="inv-cat">' + escapeHtml(r.categoria) + '</div>' : '') + '</div>' +
           '<div style="display:flex;align-items:center;gap:10px">' +
           '<span class="inv-stock">' + escapeHtml(stockTxt) + '</span>' +
-          '<span class="badge ' + est + '">' + etiq[est] + '</span>' +
+          '<span class="badge ' + est + '">' + ETIQ_ESTADO[est] + '</span>' +
           '</div></div>';
-      }).join('') || '<div class="hint" style="padding:14px">No hay ítems que coincidan con la búsqueda.</div>';
+      }).join('') || '<div class="hint" style="padding:14px">No hay ítems que coincidan con la búsqueda en esta categoría.</div>';
     }
     function redondear(n) {
       return Math.round(n * 100) / 100;
@@ -1911,20 +2150,45 @@
       var estado = document.getElementById('expEstado');
       var vista = document.getElementById('expVista');
       vista.innerHTML = '';
+      if (tipo === 'tanques') {
+        var tanques = state.catalogos.tambores || [];
+        if (!tanques.length) {
+          estado.className = 'status warn';
+          estado.textContent = 'No hay tanques con contenido para exportar (o abre primero la pestaña Inventario para cargar los datos).';
+          return;
+        }
+        var lineasT = [['Tanque', 'Producto', 'Variante', 'Tamaño', 'Disponible (L)', 'Estado']];
+        tanques.forEach(function (t) {
+          lineasT.push([t.id, t.producto, t.variante, t.tanque, numCsv(t.disponible), t.estado || 'Listo']);
+        });
+        descargarCsv(lineasT, 'tanques_' + fechaInput(new Date()) + '.csv');
+        estado.className = 'status ok';
+        estado.textContent = 'Tanques descargados.';
+        return;
+      }
       if (tipo === 'inventario') {
         if (!state.inventario || !state.inventario.length) {
           estado.className = 'status warn';
           estado.textContent = 'Primero abre la pestaña Inventario para cargar los datos, y vuelve a intentar.';
           return;
         }
-        var lineas = [['Ítem', 'Variante', 'Categoría', 'Existencia', 'Unidad', 'Mínimo', 'Estado']];
-        state.inventario.forEach(function (r) {
-          var etiq = { out: 'AGOTADO', low: 'POCO', ok: 'OK' };
-          lineas.push([r.item, r.variante, r.categoria, numCsv(r.stock), r.unidad, numCsv(r.minimo), etiq[estadoDe(r)]]);
+        var cat = valueOf('expCategoria');
+        var items = state.inventario.filter(function (r) {
+          return !cat || normalize(r.categoria) === normalize(cat);
         });
-        descargarCsv(lineas, 'inventario_full_company_' + fechaInput(new Date()) + '.csv');
+        if (!items.length) {
+          estado.className = 'status warn';
+          estado.textContent = 'No hay ítems en esa categoría.';
+          return;
+        }
+        var lineas = [['Ítem', 'Variante', 'Categoría', 'Existencia', 'Unidad', 'Estado']];
+        items.forEach(function (r) {
+          lineas.push([r.item, r.variante, r.categoria, numCsv(r.stock), r.unidad, ETIQ_ESTADO[estadoDe(r)]]);
+        });
+        var nombreCat = cat ? cat.toLowerCase().replace(/[^a-z]+/g, '_') : 'todo';
+        descargarCsv(lineas, 'inventario_' + nombreCat + '_' + fechaInput(new Date()) + '.csv');
         estado.className = 'status ok';
-        estado.textContent = 'Inventario descargado.';
+        estado.textContent = 'Inventario descargado (' + items.length + ' ítems).';
         return;
       }
       estado.className = 'status warn';
@@ -1934,12 +2198,18 @@
       if (valueOf('expHasta')) params.hasta = valueOf('expHasta');
       jsonp(params, function (data) {
         var regs = (data && data.registros) || [];
+        var respFiltro = valueOf('expResponsable');
+        if (respFiltro) {
+          regs = regs.filter(function (r) {
+            return normalize(campoReg(r, ['responsable'])) === normalize(respFiltro);
+          });
+        }
         if (!regs.length) {
           estado.className = 'status warn';
-          estado.textContent = 'No hay movimientos en ese rango de fechas.';
+          estado.textContent = 'No hay movimientos en ese rango de fechas' + (respFiltro ? ' para ' + respFiltro : '') + '.';
           return;
         }
-        var rango = (params.desde || 'inicio') + '_a_' + (params.hasta || 'hoy');
+        var rango = (params.desde || 'inicio') + '_a_' + (params.hasta || 'hoy') + (respFiltro ? '_' + respFiltro : '');
         if (tipo === 'todo') {
           var claves = Object.keys(regs[0]);
           var lineas = [claves];
