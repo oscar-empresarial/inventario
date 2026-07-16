@@ -173,6 +173,7 @@
       font-size: 14px;
     }
     .suggest-item:hover { background: var(--blue-soft); }
+    .suggest-crear { color: var(--blue); font-weight: bold; background: var(--blue-soft); }
     .warning-box {
       display: none;
       margin-top: 8px;
@@ -648,7 +649,7 @@
                 <div id="itemSuggestions" class="suggest-box"></div>
               </div>
               <div id="itemWarning" class="warning-box"></div>
-              <label class="check-row" id="crearNuevoRow">
+              <label class="check-row" id="crearNuevoRow" style="display:none">
                 <input type="checkbox" id="CrearNuevoItem" />
                 <span>Crear como nuevo en catálogo, pendiente de revisar</span>
               </label>
@@ -691,15 +692,6 @@
             <div class="field hidden" data-field="cantpres">
               <label for="CantidadPresentacion">Cantidad de presentaciones</label>
               <input id="CantidadPresentacion" type="number" step="0.001" min="0" placeholder="Ej: 20" />
-            </div>
-          </div>
-          <div class="row">
-            <div class="field hidden" data-field="contapa">
-              <label>¿El envase llegó con tapa o accesorio?</label>
-              <label class="check-row" style="margin-top:4px">
-                <input type="checkbox" id="ConTapa" />
-                <span>Sí, llegó con tapa/accesorio (se registra también esa entrada al inventario)</span>
-              </label>
             </div>
           </div>
           <div class="row">
@@ -808,6 +800,7 @@
           </div>
         </div>
         <div id="movResumen" style="margin-bottom:12px"></div>
+        <div id="pendItems" style="margin-bottom:12px"></div>
         <input id="movBuscar" placeholder="Filtrar por ítem, responsable, tipo…" style="margin-bottom:12px" />
         <div id="movEstado" class="status"></div>
         <div id="movLista"></div>
@@ -943,15 +936,9 @@
         'Chicle', 'Canela', 'Bouquet', 'Lavanda', 'Limón', 'Dulce', 'Cítrico',
         'Azul', 'Verde', 'Amarillo', 'Rojo', 'Morado'
       ],
-      envases: [
-        'Perfumero 30 ml', 'Botella 60 ml', 'Gotero 60 ml', 'Botella 120 ml',
-        'Spray 120 ml', 'Spray 250 ml', 'Botella 250 ml', 'Botella 500 ml',
-        'Spray 500 ml', 'Botella 810 ml', 'Botella 1 L', 'Galón 2 L', 'Galón 4 L',
-        'Pimpina 20 L', 'Jarabero 250 ml ámbar', 'Botella 500 ml ámbar',
-        'Botella 1 L ámbar', 'Tarro 500 g', 'Tarro 1 kg', 'Tarro detergente 1 L',
-        'Tarro detergente 2 L', 'Bomba fumigadora 800 ml', 'Bomba fumigadora 2 L',
-        'Bolsa 60 g', 'Bolsa 250 g', 'Bolsa 500 g', 'Bolsa 1 kg'
-      ],
+      // Los envases los crean ellos mismos con la lógica: nombre + capacidad
+      // (Ej: Galón 4 L transparente, Tarro 30 ml, Bolsa 1 lb)
+      envases: [],
       accesorios: [
         'Tapa normal', 'Gatillo / pistola', 'Válvula jabón', 'Pull push',
         'Press top', 'Tapa medidora'
@@ -1038,7 +1025,7 @@
       document.getElementById('btnExpTodo').addEventListener('click', function () { exportar('todo'); });
       document.getElementById('btnExpInventario').addEventListener('click', function () { exportar('inventario'); });
 
-      setupSuggest('Item', 'itemSuggestions', getItemOptions, validateItemSoft);
+      setupSuggest('Item', 'itemSuggestions', getItemOptions, validateItemSoft, true);
       setupSuggest('Variante', 'varianteSuggestions', getVarianteOptions);
       setupSuggest('Producto', 'productoSuggestions', function () { return getCatalog('productos'); });
       setupSuggest('Presentacion', 'presentacionSuggestions', getPresentacionOptions);
@@ -1048,7 +1035,10 @@
       });
       setupSuggest('BaseTanque', 'baseSuggestions', getTamborOptions);
       setupSuggest('ItemDestino', 'itemDestinoSuggestions', getItemOptions);
-      setupSuggest('Accesorio', 'accesorioSuggestions', function () { return getCatalog('accesorios'); });
+      setupSuggest('Accesorio', 'accesorioSuggestions', function () {
+        var l = getCatalog('accesorios');
+        return state.selectedType === 'Entrada mercancía' ? unique(['Sin tapa'].concat(l)) : l;
+      });
       document.getElementById('invOrden').addEventListener('change', renderInventario);
       document.getElementById('btnTour').addEventListener('click', function () { abrirTour(0); });
       document.getElementById('tourAtras').addEventListener('click', function () {
@@ -1059,7 +1049,6 @@
         else document.getElementById('tour').classList.remove('visible');
       });
       iniciarBienvenida();
-      document.getElementById('ConTapa').addEventListener('change', toggleTapaAccesorio);
       document.getElementById('Motivo').addEventListener('change', toggleItemDestino);
       document.getElementById('btnExpTanques').addEventListener('click', function () { exportar('tanques'); });
 
@@ -1213,7 +1202,6 @@
       if (type === 'Preparación') updateDestino();
       if (type === 'Empacar producto') updateSubempaque();
       document.getElementById('novedadAyuda').style.display = (type === 'Novedad/Corrección') ? 'block' : 'none';
-      document.getElementById('ConTapa').checked = false;
       toggleTapaAccesorio();
       toggleItemDestino();
       window.scrollTo({ top: document.getElementById('mainForm').offsetTop - 20, behavior: 'smooth' });
@@ -1284,24 +1272,20 @@
       if (['Envase', 'Accesorio', 'Etiqueta', 'Material palo'].indexOf(categoria) >= 0) {
         document.getElementById('Unidad').value = 'und';
       }
-      // Envases que llegan: preguntar si vienen con tapa
-      var esEnvaseEntrada = (state.selectedType === 'Entrada mercancía' && categoria === 'Envase');
-      document.querySelectorAll('[data-field="contapa"]').forEach(function (f) { f.classList.toggle('hidden', !esEnvaseEntrada); });
-      document.getElementById('ConTapa').checked = false;
       toggleTapaAccesorio();
       validateItemSoft();
       hideSuggestions();
     }
 
+    // Al llegar envases se pregunta con qué llegaron tapados (o "Sin tapa")
     function toggleTapaAccesorio() {
-      var mostrar = state.selectedType === 'Entrada mercancía' &&
-        valueOf('Categoria') === 'Envase' &&
-        document.getElementById('ConTapa').checked;
+      var esEnvaseEntrada = (state.selectedType === 'Entrada mercancía' && valueOf('Categoria') === 'Envase');
       document.querySelectorAll('[data-field="accesorio"]').forEach(function (f) {
-        if (state.selectedType === 'Entrada mercancía') f.classList.toggle('hidden', !mostrar);
+        if (state.selectedType === 'Entrada mercancía') f.classList.toggle('hidden', !esEnvaseEntrada);
       });
       document.getElementById('accesorioLabel').textContent =
-        (state.selectedType === 'Entrada mercancía') ? '¿Cuál tapa / accesorio llegó?' : 'Tapa / accesorio usado';
+        esEnvaseEntrada ? '¿Con qué llegó tapado? Elige o escribe “Sin tapa”' : 'Tapa / accesorio usado';
+      if (esEnvaseEntrada) document.getElementById('Accesorio').value = '';
     }
 
     function toggleItemDestino() {
@@ -1351,22 +1335,23 @@
     }
 
     // ================== SUGERENCIAS ==================
-    function setupSuggest(inputId, boxId, optionsProvider, afterPick) {
+    function setupSuggest(inputId, boxId, optionsProvider, afterPick, allowCreate) {
       var input = document.getElementById(inputId);
       var box = document.getElementById(boxId);
       input.addEventListener('input', function () {
-        renderSuggestions(input, box, optionsProvider(), afterPick);
+        if (allowCreate) document.getElementById('CrearNuevoItem').checked = false;
+        renderSuggestions(input, box, optionsProvider(), afterPick, allowCreate);
         if (typeof afterPick === 'function') afterPick();
       });
       input.addEventListener('focus', function () {
-        renderSuggestions(input, box, optionsProvider(), afterPick);
+        renderSuggestions(input, box, optionsProvider(), afterPick, allowCreate);
       });
       document.addEventListener('click', function (e) {
         if (!box.contains(e.target) && e.target !== input) box.style.display = 'none';
       });
     }
     // options: lista de strings o de objetos {value, label}
-    function renderSuggestions(input, box, options, afterPick) {
+    function renderSuggestions(input, box, options, afterPick, allowCreate) {
       var value = normalize(input.value);
       var list = (options || []).map(function (o) {
         return (typeof o === 'string') ? { value: o, label: o } : o;
@@ -1378,21 +1363,30 @@
         vistos[k] = true;
         return true;
       });
+      var hayExacto = list.some(function (o) { return normalize(o.value) === value; });
       if (value) {
         list = list.filter(function (o) { return normalize(o.label).includes(value) || normalize(o.value).includes(value); });
       }
       list = list.slice(0, 10);
-      if (!list.length) {
+      var puedeCrear = allowCreate && input.value.trim() && !hayExacto;
+      if (!list.length && !puedeCrear) {
         box.innerHTML = '';
         box.style.display = 'none';
         return;
       }
       box.innerHTML = list.map(function (o) {
         return '<div class="suggest-item" data-value="' + escapeHtml(o.value) + '">' + escapeHtml(o.label) + '</div>';
-      }).join('');
+      }).join('') + (puedeCrear
+        ? '<div class="suggest-item suggest-crear" data-crear="1">+ Crear nuevo: “' + escapeHtml(cap(input.value.trim())) + '”</div>'
+        : '');
       box.querySelectorAll('.suggest-item').forEach(function (el) {
         el.addEventListener('click', function () {
-          input.value = el.dataset.value;
+          if (el.dataset.crear) {
+            input.value = cap(input.value.trim());
+            document.getElementById('CrearNuevoItem').checked = true;
+          } else {
+            input.value = el.dataset.value;
+          }
           box.style.display = 'none';
           if (typeof afterPick === 'function') afterPick();
         });
@@ -1428,7 +1422,12 @@
       var categoria = valueOf('Categoria');
       var item = normalize(valueOf('Item'));
       if (categoria === 'Fragancia / Color' || item === 'fragancia' || item === 'color') {
-        return getCatalog('variantesFragancia');
+        // Se despliegan las fragancias/colores que ya existen en el inventario + las del catálogo
+        var deInv = (state.inventario || []).filter(function (x) {
+          var n = normalize(x.item);
+          return n === 'fragancia' || n === 'color';
+        }).map(function (x) { return x.variante; });
+        return unique(deInv.concat(getCatalog('variantesFragancia')));
       }
       if (categoria === 'Etiqueta' || item === 'etiqueta') {
         return unique(['Genérica'].concat(getCatalog('productos')));
@@ -1487,8 +1486,10 @@
       }
       var options = getItemOptions();
       var exact = options.some(function (x) { return normalize(x) === normalize(item); });
+      // El check de "crear nuevo" solo aparece cuando el ítem NO existe
+      document.getElementById('crearNuevoRow').style.display = (item && !exact) ? 'flex' : 'none';
       if (checked) {
-        setWarning(warning, 'Se guardará como ítem NUEVO pendiente de revisar. Verifica que el nombre esté bien escrito y con tamaño si es envase o bolsa (Ej: Botella 500 ml).');
+        setWarning(warning, '✓ Se creará como ítem NUEVO, pendiente de revisar/aprobar. Verifica que el nombre esté bien escrito y con tamaño si es envase o bolsa (Ej: Tarro 30 ml, Bolsa 1 lb).');
         return;
       }
       if (!exact) {
@@ -1497,9 +1498,9 @@
             normalize(x).includes(normalize(item)) ||
             normalize(item).includes(normalize(x));
         }).slice(0, 3);
-        var msg = 'No encontré este ítem exacto en la categoría seleccionada.';
+        var msg = 'Este ítem no existe todavía.';
         if (similar.length) msg += ' ¿Será uno de estos?: ' + similar.join(', ') + '.';
-        msg += ' Si de verdad es nuevo, marca “Crear como nuevo en catálogo, pendiente de revisar”.';
+        msg += ' Si de verdad es nuevo, toca “+ Crear nuevo” en la lista desplegable.';
         setWarning(warning, msg);
         return;
       }
@@ -1609,19 +1610,21 @@
           }
         }
         var lista = [r];
-        // Envase que llega con tapa: registrar también la entrada de la tapa
-        if (type === 'Entrada mercancía' && r.Categoria === 'Envase' && document.getElementById('ConTapa').checked) {
+        // Envase que llega: siempre se indica con qué llegó tapado (o "Sin tapa")
+        if (type === 'Entrada mercancía' && r.Categoria === 'Envase') {
           var tapa = valueOf('Accesorio');
-          if (!tapa) return { error: 'Marcaste que el envase llegó con tapa: selecciona cuál tapa/accesorio.' };
-          var rT = baseRecord('Entrada mercancía');
-          rT.Categoria = 'Accesorio';
-          rT.Item = tapa;
-          rT.Cantidad = r.Cantidad;
-          rT.Unidad = 'und';
-          rT.NuevoItem = 'No';
-          rT.PendienteAprobacion = 'No';
-          rT.Observacion = ('Tapa que llegó con: ' + r.Item + '. ' + valueOf('Observacion')).trim();
-          lista.push(rT);
+          if (!tapa) return { error: 'Indica con qué llegó tapado el envase (Tapa normal, Spray, Gatillo…) o escribe “Sin tapa”.' };
+          if (!/^sin tapa|^sin accesorio/i.test(tapa)) {
+            var rT = baseRecord('Entrada mercancía');
+            rT.Categoria = 'Accesorio';
+            rT.Item = tapa;
+            rT.Cantidad = r.Cantidad;
+            rT.Unidad = 'und';
+            rT.NuevoItem = 'No';
+            rT.PendienteAprobacion = 'No';
+            rT.Observacion = ('Tapa que llegó con: ' + r.Item + '. ' + valueOf('Observacion')).trim();
+            lista.push(rT);
+          }
         }
         return { records: lista };
       }
@@ -1744,7 +1747,7 @@
           return { error: 'Para "' + m.item + '" pon la variante (aroma o color) en su casilla.' };
         }
         var rC = baseRecord('Consumo materia prima');
-        rC.Categoria = 'Materia prima';
+        rC.Categoria = (normalize(m.item) === 'fragancia' || normalize(m.item) === 'color') ? 'Fragancia / Color' : 'Materia prima';
         rC.Item = m.item;
         rC.Variante = m.variante;
         rC.Cantidad = m.cantidad;
@@ -1812,7 +1815,7 @@
       var options = opciones || getItemOptions();
       var existe = options.some(function (x) { return normalize(x) === normalize(item); });
       if (!existe && nuevoItem !== 'Sí') {
-        return 'El ítem "' + item + '" no existe exacto en el catálogo. Selecciona una sugerencia o marca “Crear como nuevo en catálogo, pendiente de revisar”.';
+        return 'El ítem "' + item + '" no existe exacto en el catálogo. Selecciónalo de la lista, o toca “+ Crear nuevo” en el desplegable para crearlo.';
       }
       return '';
     }
@@ -1847,7 +1850,7 @@
       return permitirCero ? n >= 0 : n > 0;
     }
     function hasSize(text) {
-      return /\d+([.,]\d+)?\s*(ml|mililitro|mililitros|l|lt|litro|litros|g|gr|gramo|gramos|kg|kilo|kilos)\b/i.test(text);
+      return /\d+([.,]\d+)?\s*(ml|mililitro|mililitros|l|lt|litro|litros|g|gr|gramo|gramos|kg|kilo|kilos|lb|libra|libras)\b/i.test(text);
     }
 
     // ================== CHEQUEO DE EXISTENCIAS ==================
@@ -1901,7 +1904,7 @@
         fila.innerHTML =
           '<div class="nombre">' + escapeHtml(nombre) + '</div>' +
           '<input type="number" step="0.001" min="0" placeholder="¿Cuánto hay?" />' +
-          '<select><option value="">Unidad</option><option>und</option><option>L</option><option>ml</option><option>kg</option><option>g</option></select>' +
+          '<select><option value="">Elegir unidad…</option><option>und</option><option>L</option><option>ml</option><option>kg</option><option>g</option><option>lb</option></select>' +
           '<button type="button">Registrar</button>';
         var uniSel = fila.querySelector('select');
         fila.querySelector('button').addEventListener('click', function () {
@@ -2140,6 +2143,11 @@
     }
     var ETIQ_ESTADO = { out: 'AGOTADO', urg: 'MUY POCO · URGENTE', low: 'POCO · comprar', ok: 'OK' };
     function nombreDe(r) {
+      var ni = normalize(r.item);
+      // Fragancias y colores se muestran por su nombre: "Citrux" y no "Fragancia · Citrux"
+      if ((ni === 'fragancia' || ni === 'color') && r.variante) {
+        return r.variante + (ni === 'color' ? ' (color)' : '');
+      }
       return r.item + (r.variante ? ' · ' + r.variante : '');
     }
 
@@ -2168,17 +2176,67 @@
         lista.innerHTML = '<div class="hint" style="padding:14px">No hay tanques ni baldes registrados todavía. Se crean desde “Preparé / usé materia prima”.</div>';
         return;
       }
-      lista.innerHTML = tanques.map(function (t) {
-        var est = normalize(t.estado || '');
-        var badge = est === 'vacio' ? ['out', '🔴 VACÍO'] : (est === 'en proceso' ? ['low', '⏳ EN PROCESO'] : ['ok', 'LISTO']);
-        return '<div class="inv-row">' +
-          '<div><div class="inv-nombre">' + escapeHtml(t.id || t.producto || 'Tanque') + '</div>' +
-          '<div class="inv-cat">' + escapeHtml([t.producto, t.variante, t.tanque].filter(Boolean).join(' · ') || 'Contenido sin nombre') + '</div></div>' +
-          '<div style="display:flex;align-items:center;gap:10px">' +
-          '<span class="inv-stock">' + escapeHtml(t.disponible != null ? t.disponible + ' L' : '—') + '</span>' +
-          '<span class="badge ' + badge[0] + '">' + badge[1] + '</span>' +
-          '</div></div>';
-      }).join('');
+      lista.innerHTML = '<div class="hint" style="margin-bottom:8px">Toca un tanque para ver su LOTE: qué se le echó, quién lo hizo, qué se empacó y cuándo.</div>' +
+        tanques.map(function (t) {
+          var est = normalize(t.estado || '');
+          var badge = est === 'vacio' ? ['out', '🔴 VACÍO'] : (est === 'en proceso' ? ['low', '⏳ EN PROCESO'] : ['ok', 'LISTO']);
+          return '<div class="inv-row" data-tanque="' + escapeHtml(t.id || '') + '" style="cursor:pointer">' +
+            '<div><div class="inv-nombre">' + escapeHtml(t.id || t.producto || 'Tanque') + '</div>' +
+            '<div class="inv-cat">' + escapeHtml([t.producto, t.variante, t.tanque].filter(Boolean).join(' · ') || 'Contenido sin nombre') + '</div></div>' +
+            '<div style="display:flex;align-items:center;gap:10px">' +
+            '<span class="inv-stock">' + escapeHtml(t.disponible != null ? t.disponible + ' L' : '—') + '</span>' +
+            '<span class="badge ' + badge[0] + '">' + badge[1] + '</span>' +
+            '</div></div>';
+        }).join('');
+      lista.querySelectorAll('[data-tanque]').forEach(function (fila) {
+        fila.addEventListener('click', function () {
+          verLoteTanque(fila.dataset.tanque, fila);
+        });
+      });
+    }
+
+    // LOTE: toda la historia de un tanque (composición, quién, cuándo, qué salió)
+    function verLoteTanque(id, fila) {
+      var sig = fila.nextElementSibling;
+      if (sig && sig.classList.contains('lote-det')) { sig.remove(); return; }
+      document.querySelectorAll('.lote-det').forEach(function (d) { d.remove(); });
+      var pinta = function (regs) {
+        var listaReg = regs.filter(function (r) {
+          return normalize(campoReg(r, ['tamborid'])) === normalize(id);
+        });
+        var html = listaReg.map(function (r) {
+          var tipo = campoReg(r, ['tiporegistro', 'tipo']);
+          var fecha = campoReg(r, ['fecha', 'timestamp', 'fechacliente']);
+          var f = new Date(fecha);
+          var ftxt = isNaN(f.getTime()) ? String(fecha) : f.toLocaleString('es-CO', { dateStyle: 'short', timeStyle: 'short' });
+          var partes = [];
+          var item = campoReg(r, ['item']);
+          var vari = campoReg(r, ['variante']);
+          var cant = campoReg(r, ['cantidad']);
+          var uni = campoReg(r, ['unidad']);
+          if (item) partes.push(item + (vari ? ' ' + vari : '') + (cant ? ': ' + cant + ' ' + uni : ''));
+          var litros = campoReg(r, ['litrospreparados']);
+          if (litros) partes.push(litros + ' L' + (campoReg(r, ['producto']) ? ' de ' + campoReg(r, ['producto']) : ''));
+          var pres = campoReg(r, ['presentacion']);
+          var nP = campoReg(r, ['cantidadpresentacion']);
+          if (pres) partes.push(nP + ' × ' + pres);
+          var motivo = campoReg(r, ['motivo']);
+          if (motivo) partes.push(motivo);
+          var resp = campoReg(r, ['responsable']);
+          if (resp) partes.push('por ' + resp);
+          return '<div class="mov-detalle" style="padding:4px 0">· <b>' + escapeHtml(tipo) + '</b> — ' + escapeHtml(ftxt + (partes.length ? ' — ' + partes.join(' · ') : '')) + '</div>';
+        }).join('') || '<div class="hint">No hay registros de este tanque.</div>';
+        var det = document.createElement('div');
+        det.className = 'lote-det';
+        det.style.cssText = 'background:#f8fafc;border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin:4px 0 10px';
+        det.innerHTML = '<div style="font-weight:bold;font-size:13px;margin-bottom:4px">📋 Lote / historia de ' + escapeHtml(id) + '</div>' + html;
+        fila.insertAdjacentElement('afterend', det);
+      };
+      if (state.registrosTodos) { pinta(state.registrosTodos); return; }
+      jsonp({ action: 'registros' }, function (data) {
+        state.registrosTodos = (data && data.registros) || [];
+        pinta(state.registrosTodos);
+      }, function () { pinta(state.registros || []); }, 20000);
     }
 
     function renderInventario() {
@@ -2260,6 +2318,7 @@
         estado.className = 'status';
         estado.textContent = '';
         renderResumenMov();
+        renderPendientes();
         renderMovimientos();
       }, function () {
         diagnosticarConexion(estado);
@@ -2287,7 +2346,7 @@
         if (t.indexOf('fabricar') === 0) s.palos += cant;
         if (t.indexOf('entrada') === 0) s.entradas++;
       });
-      cont.innerHTML = '<div class="section-title" style="font-size:15px;margin:4px 0 8px">Qué hizo cada uno en este rango</div>' +
+      cont.innerHTML = '<div class="section-title" style="font-size:15px;margin:4px 0 8px">Qué hizo cada uno en este rango <span class="hint" style="display:inline">(toca un nombre para ver solo sus registros)</span></div>' +
         Object.keys(por).sort().map(function (resp) {
           var s = por[resp];
           var partes = [];
@@ -2296,24 +2355,121 @@
           if (s.palos) partes.push('fabricó ' + redondear(s.palos) + ' palos');
           if (s.consumos) partes.push(s.consumos + ' usos de materia prima');
           if (s.entradas) partes.push('recibió ' + s.entradas + ' entradas de mercancía');
-          return '<div class="inv-row"><div><div class="inv-nombre">' + escapeHtml(resp) + '</div>' +
+          var activo = state.movResp === resp;
+          return '<div class="inv-row" data-resp="' + escapeHtml(resp) + '" style="cursor:pointer' + (activo ? ';background:var(--blue-soft);border-radius:12px' : '') + '">' +
+            '<div><div class="inv-nombre">' + escapeHtml(resp) + (activo ? ' ✓' : '') + '</div>' +
             '<div class="inv-cat">' + escapeHtml(partes.join(' · ') || 'Solo registros varios') + '</div></div>' +
             '<span class="badge tipo">' + s.registros + ' registros</span></div>';
         }).join('');
+      cont.querySelectorAll('[data-resp]').forEach(function (el) {
+        el.addEventListener('click', function () {
+          state.movResp = (state.movResp === el.dataset.resp) ? '' : el.dataset.resp;
+          renderResumenMov();
+          renderMovimientos();
+        });
+      });
+    }
+
+    // Ítems nuevos pendientes de revisar/aprobar, con trazabilidad de la aprobación
+    function renderPendientes() {
+      var cont = document.getElementById('pendItems');
+      var regs = state.registros || [];
+      if (!regs.length) { cont.innerHTML = ''; return; }
+      var aprobados = {};
+      regs.forEach(function (r) {
+        var t = normalize(campoReg(r, ['tiporegistro', 'tipo']));
+        if (t.indexOf('aprobacion') === 0) {
+          aprobados[normalize(campoReg(r, ['item'])) + '|' + normalize(campoReg(r, ['variante']))] = {
+            fecha: campoReg(r, ['fecha', 'timestamp', 'fechacliente']),
+            por: campoReg(r, ['responsable'])
+          };
+        }
+      });
+      var pend = {};
+      regs.forEach(function (r) {
+        if (!/^s/i.test(campoReg(r, ['nuevoitem', 'pendienteaprobacion']))) return;
+        var item = campoReg(r, ['item']);
+        if (!item) return;
+        var variante = campoReg(r, ['variante']);
+        var k = normalize(item) + '|' + normalize(variante);
+        if (!pend[k]) {
+          pend[k] = {
+            item: item, variante: variante,
+            categoria: campoReg(r, ['categoria']),
+            por: campoReg(r, ['responsable']),
+            aprobado: aprobados[k]
+          };
+        }
+      });
+      var keys = Object.keys(pend);
+      if (!keys.length) { cont.innerHTML = ''; return; }
+      cont.innerHTML = '<div class="section-title" style="font-size:15px;margin:4px 0 8px">Ítems nuevos por revisar</div>' +
+        keys.map(function (k) {
+          var p = pend[k];
+          var nombre = p.item + (p.variante ? ' · ' + p.variante : '');
+          if (p.aprobado) {
+            var f = new Date(p.aprobado.fecha);
+            var ftxt = isNaN(f.getTime()) ? String(p.aprobado.fecha) : f.toLocaleString('es-CO', { dateStyle: 'short', timeStyle: 'short' });
+            return '<div class="inv-row"><div><div class="inv-nombre">' + escapeHtml(nombre) + '</div>' +
+              '<div class="inv-cat">' + escapeHtml((p.categoria || '') + ' · creado por ' + (p.por || '?')) + '</div></div>' +
+              '<span class="badge ok">✓ Aprobado ' + escapeHtml(ftxt + (p.aprobado.por ? ' por ' + p.aprobado.por : '')) + '</span></div>';
+          }
+          return '<div class="inv-row"><div><div class="inv-nombre">' + escapeHtml(nombre) + '</div>' +
+            '<div class="inv-cat">' + escapeHtml((p.categoria || '') + ' · creado por ' + (p.por || '?')) + '</div></div>' +
+            '<button type="button" class="btn-morado" data-k="' + escapeHtml(k) + '" style="padding:8px 12px;font-size:12px">Aprobar</button></div>';
+        }).join('');
+      cont.querySelectorAll('button[data-k]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          var p = pend[btn.dataset.k];
+          var quien = window.prompt('¿Quién aprueba “' + p.item + (p.variante ? ' · ' + p.variante : '') + '”? Escribe tu nombre:');
+          if (!quien) return;
+          btn.disabled = true;
+          btn.textContent = '...';
+          var rec = {
+            FechaCliente: new Date().toISOString(),
+            TipoRegistro: 'Aprobación item',
+            Responsable: cap(quien),
+            Categoria: p.categoria,
+            Item: p.item,
+            Variante: p.variante,
+            NuevoItem: 'No',
+            PendienteAprobacion: 'No',
+            Observacion: 'Ítem aprobado desde la app y agregado al catálogo.',
+            Origen: 'GitHub Pages'
+          };
+          enviarRegistro(rec).then(function () {
+            rec.Fecha = new Date().toISOString();
+            state.registros.push(rec);
+            renderPendientes();
+          });
+        });
+      });
     }
 
     function campoReg(r, nombres) {
       return String(pickField(r, nombres) || '');
     }
+    function nombreTanque(id) {
+      var t = (state.catalogos.tambores || []).find(function (x) {
+        return normalize(x.id || '') === normalize(id);
+      });
+      return (t && t.producto) ? id + ' (' + t.producto + ')' : id;
+    }
     function renderMovimientos() {
       var lista = document.getElementById('movLista');
       var filtro = normalize(valueOf('movBuscar'));
       var rows = (state.registros || []).slice().reverse();
+      if (state.movResp) {
+        rows = rows.filter(function (r) {
+          return normalize(campoReg(r, ['responsable'])) === normalize(state.movResp);
+        });
+      }
       if (filtro) {
         rows = rows.filter(function (r) {
           return normalize(JSON.stringify(r)).includes(filtro);
         });
       }
+      var diaAnterior = '';
       lista.innerHTML = rows.slice(0, 300).map(function (r) {
         var tipo = campoReg(r, ['tiporegistro', 'tipo']);
         var esConteo = /conteo|ajuste/i.test(tipo);
@@ -2328,7 +2484,7 @@
         var uni = campoReg(r, ['unidad']);
         if (cant) detalles.push('Cantidad: ' + cant + (uni ? ' ' + uni : ''));
         var tambor = campoReg(r, ['tamborid']);
-        if (tambor && tambor !== item) detalles.push('Tanque: ' + tambor);
+        if (tambor && tambor !== item) detalles.push('Tanque: ' + nombreTanque(tambor));
         var pres = campoReg(r, ['presentacion']);
         var cantPres = campoReg(r, ['cantidadpresentacion']);
         if (pres) detalles.push(cantPres ? cantPres + ' × ' + pres : pres);
@@ -2342,7 +2498,16 @@
         if (resp) detalles.push('Por: ' + resp);
         var obs = campoReg(r, ['observacion']);
         if (obs) detalles.push('Obs: ' + obs);
-        return '<div class="mov-row">' +
+        // Encabezado por día para leer fácil qué se hizo cada día
+        var dia = String(fecha).slice(0, 10);
+        var encabezadoDia = '';
+        if (dia && dia !== diaAnterior) {
+          diaAnterior = dia;
+          var fd = new Date(dia + 'T12:00:00');
+          var diaTxt = isNaN(fd.getTime()) ? dia : fd.toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' });
+          encabezadoDia = '<div class="section-title" style="font-size:14px;margin:12px 0 2px;color:var(--blue)">📅 ' + escapeHtml(diaTxt) + '</div>';
+        }
+        return encabezadoDia + '<div class="mov-row">' +
           '<div class="mov-titulo">' + escapeHtml(item + (variante ? ' · ' + variante : '')) + '</div>' +
           '<div class="mov-detalle">' + escapeHtml(fechaTxt) + (detalles.length ? ' — ' + escapeHtml(detalles.join(' · ')) : '') + '</div>' +
           '<div class="mov-badges">' +
@@ -2515,6 +2680,16 @@
         URL.revokeObjectURL(a.href);
         a.remove();
       }, 500);
+      // Trazabilidad: cada exportación queda registrada con fecha y hora
+      try {
+        enviarRegistro({
+          FechaCliente: new Date().toISOString(),
+          TipoRegistro: 'Exportación',
+          Item: nombreArchivo,
+          Observacion: 'Descarga de reporte desde la app.',
+          Origen: 'GitHub Pages'
+        });
+      } catch (e) {}
     }
     var BOMCSV = String.fromCharCode(65279); // BOM para que Excel abra bien las tildes
 
@@ -2560,16 +2735,16 @@
 
     var TOUR = [
       { t: 'Bienvenido a la app de Full Company', x: 'Aquí se registra TODO lo que pasa en el laboratorio: lo que llega, lo que se prepara, lo que se empaca y lo que sale. Con eso el inventario se calcula solo, sin cuadernos.\n\nEste tour te explica cada parte. Puedes volver a verlo cuando quieras con el botón ❔ Ayuda.' },
-      { t: '📦 Llegó mercancía', x: 'Registra TODO apenas llegue: materia prima, envases, etiquetas, fragancias, accesorios.\n\n· Elige categoría y busca el ítem en la lista.\n· Si el envase llega con tapas, marca la casilla y las tapas quedan registradas solas.\n· Fragancias y colores: SIEMPRE con su nombre (Chicle, Canela, Azul…).\n· ¿No está en la lista? Escríbelo bien escrito y marca “Crear como nuevo”.' },
+      { t: '📦 Llegó mercancía', x: 'Registra TODO apenas llegue: materia prima, envases, etiquetas, fragancias, accesorios.\n\n· Elige categoría y busca el ítem en la lista. Si no existe, toca “+ Crear nuevo” en el desplegable.\n· Envases: escríbelos con nombre + capacidad (Tarro 30 ml, Bolsa 1 lb) e indica con qué llegaron tapados (o “Sin tapa”): las tapas quedan registradas solas.\n· Fragancias y colores: SIEMPRE con su nombre (Chicle, Canela, Citrux…).' },
       { t: '🧪 Preparé / usé materia prima', x: 'Todo en un solo paso: eliges DÓNDE lo usaste y anotas todas las materias primas con sus cantidades.\n\n· Tanque nuevo: enuméralo (Tanque 1, Tanque 2…) y pon qué producto lleva.\n· Bases: si preparas CMC preparado, Genapol preparado, etc., ese es el “producto”. Después, cuando un producto use esa base, indicas de cuál tanque la sacaste y cuántos litros.\n· ¿El tanque queda incompleto (falta disolver o reposar)? Marca “Queda EN PROCESO”. Cuando esté, entra de nuevo, elige el tanque existente, marca “Ya quedó LISTO” y guarda: no necesitas poner nada más.' },
-      { t: '🧴 Empaqué producto', x: 'Elige el tanque o balde (la lista te muestra qué tiene y cuántos litros le quedan), la presentación, cuántas unidades, la tapa y la etiqueta.\n\nLa app descuenta sola: los litros del tanque, los envases, las tapas y las etiquetas.\n\n¿Presentación nueva? Escribe nombre + capacidad: “Tarro 30 ml” — con esa capacidad se descuenta del tanque.\n\nTambién puedes empacar materia prima directa (ácido, varsol) sin tanque.' },
+      { t: '🧴 Empaqué producto', x: 'Elige el tanque o balde (la lista te muestra qué tiene y cuántos litros le quedan), la presentación, cuántas unidades, la tapa y la etiqueta.\n\nLa app descuenta sola: los litros del tanque, los envases, las tapas y las etiquetas. Y el producto terminado queda con su LOTE (el tanque del que salió).\n\n¿Presentación nueva? Escribe nombre + capacidad: “Tarro 30 ml” — con esa capacidad se descuenta del tanque.\n\nTambién puedes empacar materia prima directa (ácido, varsol) sin tanque.' },
       { t: '⚖️ Sólidos y 🧹 Palos', x: 'Sólidos/polvos: eliges el polvo, la bolsa o tarro y cuántas unidades. Se descuenta el polvo por peso y las bolsas por unidad.\n\nFabricar palos: pones cuántos hiciste y se descuentan solos los tubos, mangos, roscas o piezas de mariposa.' },
       { t: '🚚 Salida directa / baja', x: 'Solo para lo que sale de bodega SIN pasar por empaque: venta de mercancía tal cual (un bulto, un producto ya empacado), muestras, exhibición, o pérdidas por daño o derrame.\n\nSi lo que haces es empacar y vender, usa “Empaqué producto” y luego la venta sale por acá.' },
       { t: '⚠️ Novedad / corrección', x: 'Para dejar constancia de algo raro: un daño, un derrame, un error en un registro anterior. No cambia el inventario, solo queda en la trazabilidad para que el jefe lo revise.\n\nEl motivo “Traslado a otro ítem” sí mueve inventario: pasa la existencia de un ítem mal creado al nombre correcto, sin borrar el historial.' },
       { t: '🟠 Cuando algo no está registrado', x: 'Si vas a usar algo que no tiene existencia en el sistema, sale un recuadro amarillo con la lista de lo que falta.\n\nVe, cuenta físicamente cuánto hay, escríbelo ahí mismo con su unidad y presiona “Registrar”. Luego vuelve a Guardar. Así el inventario se cuadra solo, sin frenar el trabajo.' },
-      { t: '📋 Inventario', x: 'Cuánto hay de todo, por categorías, con buscador y orden alfabético o por urgencia. El semáforo avisa para comprar:\n\n🔴 AGOTADO · 🟥 MUY POCO (urgente) · 🟠 POCO (comprar) · 🟢 OK\n\nLa pestaña 🛢 Tanques muestra cada tanque con su contenido, litros y estado: LISTO, EN PROCESO o VACÍO (para volver a usarlo).' },
-      { t: '🕐 Movimientos', x: 'La trazabilidad completa: quién registró qué y cuándo, con el resumen de rendimiento por persona: cuántos tanques preparó, cuántas unidades empacó, cuántos palos hizo.\n\nLos conteos de existencia salen en morado y los ítems nuevos quedan marcados “pendiente de revisar” (se oficializan agregándolos a la hoja CATALOGOS).' },
-      { t: '⬇️ Exportar', x: 'Descarga reportes en Excel: lo gastado (materia prima, fragancias, envases, etiquetas, accesorios), los movimientos por fechas y por responsable, el inventario por categoría y los tanques.\n\nIdeal para el contador cada semana y para planear las compras. ¡Que Dios bendiga el trabajo!' }
+      { t: '📋 Inventario', x: 'Cuánto hay de todo, por categorías (las fragancias salen por su nombre), con buscador y orden alfabético o por urgencia. El semáforo avisa para comprar:\n\n🔴 AGOTADO · 🟥 MUY POCO (urgente) · 🟠 POCO (comprar) · 🟢 OK\n\nEn 🛢 Tanques, toca cualquier tanque para ver su LOTE: qué se le echó, quién, cuándo y qué se empacó de ahí.' },
+      { t: '🕐 Movimientos', x: 'La trazabilidad completa, organizada por día: quién registró qué y cuándo. Toca el nombre de una persona en el resumen para ver solo sus registros.\n\nAhí mismo están los “Ítems nuevos por revisar”: el jefe los aprueba con un toque y quedan agregados al catálogo oficial, con fecha y hora de aprobación.' },
+      { t: '⬇️ Exportar', x: 'Descarga reportes en Excel: lo gastado (materia prima, fragancias, envases, etiquetas, accesorios), los movimientos por fechas y por responsable, el inventario por categoría y los tanques.\n\nCada exportación queda registrada en la trazabilidad. ¡Que Dios bendiga el trabajo!' }
     ];
     var tourIdx = 0;
     function abrirTour(i) {
