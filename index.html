@@ -522,7 +522,7 @@
         <form id="mainForm" autocomplete="off">
           <div class="section-title" id="formTitle">Registro</div>
           <div id="novedadAyuda" class="status warn" style="display:none">
-            ¿Para qué sirve Novedad/Corrección? Para dejar constancia de cosas raras: daños, derrames, faltantes o sobrantes que encuentres, o errores de un registro anterior. NO cambia el inventario (solo queda en la trazabilidad para revisar), EXCEPTO el motivo “Traslado a otro ítem”, que pasa la existencia de un ítem a otro (útil si un envase quedó mal creado).
+            Novedad/Corrección: para arreglar y dejar constancia. Según el motivo, SÍ ajusta el inventario: Sobrante SUMA · Faltante/merma y Registro de más RESTAN · Desempaque DEVUELVE al inventario · Traslado pasa todo a otro ítem. Los demás motivos (daño ya descontado, quejas, notas) solo quedan en la trazabilidad. Todo queda con fecha, hora y responsable — nada se borra.
           </div>
           <div class="row">
             <div class="field" data-field="responsable">
@@ -717,6 +717,20 @@
             </div>
           </div>
           <div class="row">
+            <div class="field hidden" data-field="merma">
+              <label>¿Sobró o faltó al empacar? (opcional)</label>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+                <select id="MermaTipo">
+                  <option value="">Salió exacto</option>
+                  <option value="Sobró">Sobró</option>
+                  <option value="Faltó">Faltó / merma</option>
+                </select>
+                <input id="MermaCantidad" type="number" step="0.001" min="0" placeholder="¿Cuánto?" />
+              </div>
+              <div class="hint">Ej: el bulto de 20 kg rindió 20.1 kg → “Sobró 0.1”. Queda registrado y el inventario se ajusta solo.</div>
+            </div>
+          </div>
+          <div class="row">
             <div class="field hidden" data-field="motivo">
               <label for="Motivo">Motivo</label>
               <select id="Motivo">
@@ -728,6 +742,10 @@
                 <option>Derrame</option>
                 <option>Uso interno</option>
                 <option>Corrección</option>
+                <option>Sobrante (suma al inventario)</option>
+                <option>Faltante / merma (resta)</option>
+                <option>Registro de más (resta lo que sobró del registro)</option>
+                <option>Desempaque (vuelve al inventario)</option>
                 <option>Traslado a otro ítem</option>
                 <option>Otro</option>
               </select>
@@ -960,8 +978,8 @@
     };
 
     var BOM_PALOS_JS = {
-      rosca: ['Tubo aluminio {largo}', 'Mango', 'Caucho', 'Rosca'],
-      mariposa: ['Tubo aluminio {largo}', 'Mango', 'Cabezote mariposa', 'Lámina', 'Tornillo', 'Tuerca mariposa']
+      rosca: ['Tubo aluminio {largo}', 'Mango', 'Caucho', 'Rosca', 'Etiqueta'],
+      mariposa: ['Tubo aluminio {largo}', 'Mango', 'Caucho', 'Cabezote mariposa', 'Etiqueta', 'Lámina', 'Tornillo']
     };
 
     var catalogosLocales = {
@@ -1025,9 +1043,9 @@
 
     var visibility = {
       'Entrada mercancía': ['responsable', 'categoria', 'item', 'variante', 'cantidad', 'unidad', 'observacion'],
-      'Preparación': ['responsable', 'destino', 'materias', 'baseusada', 'baselitros', 'estanque', 'observacion'],
+      'Preparación': ['responsable', 'destino', 'materias', 'baseusada', 'baselitros', 'observacion'],
       'Empacar producto': ['responsable', 'subempaque', 'observacion'],
-      'Empacar sólido/polvo': ['responsable', 'item', 'presentacion', 'cantpres', 'etiqueta', 'observacion'],
+      'Empacar sólido/polvo': ['responsable', 'item', 'variante', 'presentacion', 'cantpres', 'etiqueta', 'merma', 'observacion'],
       'Salida directa/Baja': ['responsable', 'categoria', 'item', 'variante', 'cantidad', 'unidad', 'motivo', 'observacion'],
       'Fabricar palos': ['responsable', 'item', 'cantidad', 'observacion'],
       'Novedad/Corrección': ['responsable', 'categoria', 'item', 'variante', 'cantidad', 'unidad', 'motivo', 'observacion']
@@ -1206,6 +1224,8 @@
         state.catalogos.tambores = data.tambores;
         state.tamboresCargados = true;
       }
+      // El agua siempre disponible como materia prima (no se registra su ingreso)
+      state.catalogos.materiasPrimas = unique(['Agua'].concat(getCatalog('materiasPrimas')));
     }
     function llenarDatalistMp() {
       var dl = document.getElementById('dlMp');
@@ -1317,7 +1337,7 @@
       var tamborLbl = document.getElementById('tamborLabel');
       var hint = document.getElementById('tamborHint');
       if (s === 'tambor') {
-        mostrarCampos(['tambor', 'presentacion', 'cantpres', 'accesorio', 'etiqueta']);
+        mostrarCampos(['tambor', 'presentacion', 'cantpres', 'accesorio', 'etiqueta', 'merma']);
         tamborLbl.textContent = '¿De cuál tanque o balde?';
         hint.textContent = 'Elige el tanque/balde de la lista: muestra qué tiene cada uno. Si no existe, primero registra la preparación.';
       } else {
@@ -1489,29 +1509,30 @@
       document.querySelectorAll('.suggest-box').forEach(function (box) { box.style.display = 'none'; });
     }
 
+    // Ítems que ya existen en el inventario de una categoría (creados por el equipo):
+    // se pueden usar de inmediato, sin esperar aprobación
+    function invItems(categoria) {
+      return (state.inventario || []).filter(function (x) {
+        return normalize(x.categoria) === normalize(categoria);
+      }).map(function (x) { return x.item; });
+    }
     function getItemOptions() {
       var type = state.selectedType;
       var categoria = valueOf('Categoria');
       if (type === 'Empacar producto') {
-        return unique(getCatalog('materiasPrimas'));
+        return unique(getCatalog('materiasPrimas').concat(invItems('Materia prima')));
       }
-      if (type === 'Empacar sólido/polvo') return getCatalog('solidos');
+      if (type === 'Empacar sólido/polvo') return unique(getCatalog('solidos').concat(invItems('Materia prima').filter(function (x) { return true; })));
       if (type === 'Fabricar palos') return getCatalog('palosTerminados');
       if (tiposConCategoria.indexOf(type) >= 0) {
-        if (categoria === 'Materia prima') return getCatalog('materiasPrimas');
-        if (categoria === 'Fragancia' || categoria === 'Color') {
-          // Se despliegan las fragancias/colores existentes en inventario + catálogo
-          var catKey = categoria === 'Fragancia' ? 'fragancias' : 'colores';
-          var deInv = (state.inventario || []).filter(function (x) {
-            return normalize(x.categoria) === normalize(categoria);
-          }).map(function (x) { return x.item; });
-          return unique(getCatalog(catKey).concat(deInv));
-        }
-        if (categoria === 'Envase') return getCatalog('envases');
-        if (categoria === 'Accesorio') return getCatalog('accesorios');
+        if (categoria === 'Materia prima') return unique(getCatalog('materiasPrimas').concat(invItems('Materia prima')));
+        if (categoria === 'Fragancia') return unique(getCatalog('fragancias').concat(invItems('Fragancia')));
+        if (categoria === 'Color') return unique(getCatalog('colores').concat(invItems('Color')));
+        if (categoria === 'Envase') return unique(getCatalog('envases').concat(invItems('Envase')));
+        if (categoria === 'Accesorio') return unique(getCatalog('accesorios').concat(invItems('Accesorio')));
         if (categoria === 'Etiqueta') return getCatalog('etiquetas');
-        if (categoria === 'Material palo') return getCatalog('materialesPalos');
-        if (categoria === 'Producto terminado') return getCatalog('productos');
+        if (categoria === 'Material palo') return unique(getCatalog('materialesPalos').concat(invItems('Material palo')));
+        if (categoria === 'Producto terminado') return unique(getCatalog('productos').concat(invItems('Producto terminado')));
         return [];
       }
       return [];
@@ -1527,9 +1548,10 @@
     }
 
     function getPresentacionOptions() {
-      var lista = getCatalog('presentaciones');
+      // Presentaciones = envases del inventario + recargas/bulto + lo que traiga la hoja
+      var lista = unique(getCatalog('presentaciones').concat(invItems('Envase')).concat(getCatalog('envases')));
       if (state.selectedType === 'Empacar sólido/polvo') {
-        return lista.filter(function (p) { return /bolsa|tarro|bulto/i.test(p); });
+        return lista.filter(function (p) { return /bolsa|tarro|bulto|lb|kg|\bg\b|gr/i.test(p); });
       }
       return lista;
     }
@@ -1730,7 +1752,10 @@
         if (e3) return { error: e3 };
         var e4 = validarPresentacion(r.Presentacion);
         if (e4) return { error: e4 };
-        return { records: [r] };
+        var listaS = [r];
+        var rM = recordMerma(r.Item, r.Variante, '', 'kg');
+        if (rM) listaS.push(rM);
+        return { records: listaS };
       }
 
       if (type === 'Fabricar palos') {
@@ -1833,11 +1858,9 @@
       if (!mpsValidas.length && !records.length) {
         return { error: 'Agrega al menos una materia prima con su cantidad, o registra el tanque/base.' };
       }
-      var listaFrag = getCatalog('fragancias').concat(
-        (state.inventario || []).filter(function (x) { return normalize(x.categoria) === 'fragancia'; }).map(function (x) { return x.item; }));
-      var listaCol = getCatalog('colores').concat(
-        (state.inventario || []).filter(function (x) { return normalize(x.categoria) === 'color'; }).map(function (x) { return x.item; }));
-      var catalogoMp = unique(getCatalog('materiasPrimas').concat(listaFrag).concat(listaCol));
+      var listaFrag = getCatalog('fragancias').concat(invItems('Fragancia'));
+      var listaCol = getCatalog('colores').concat(invItems('Color'));
+      var catalogoMp = unique(getCatalog('materiasPrimas').concat(invItems('Materia prima')).concat(listaFrag).concat(listaCol));
       for (var i = 0; i < mpsValidas.length; i++) {
         var m = mpsValidas[i];
         if (!esNumero(m.cantidad, false)) return { error: 'Ponle cantidad a "' + m.item + '".' };
@@ -1894,7 +1917,10 @@
             build: build
           };
         }
-        return { records: build() };
+        var listaE = build();
+        var rME = recordMerma('', '', tambor, 'L');
+        if (rME) listaE.push(rME);
+        return { records: listaE };
       }
 
       // materia prima directa
@@ -1913,6 +1939,25 @@
       return { records: [rm] };
     }
 
+    // Sobrante o faltante detectado durante el empaque (ajusta el inventario o el tanque)
+    function recordMerma(itemRef, varianteRef, tamborRef, unidad) {
+      var tipoM = valueOf('MermaTipo');
+      var cantM = valueOf('MermaCantidad');
+      if (!tipoM) return null;
+      if (!esNumero(cantM, false)) return null;
+      var rM = baseRecord('Novedad/Corrección');
+      rM.Motivo = tipoM === 'Sobró' ? 'Sobrante (suma al inventario)' : 'Faltante / merma (resta)';
+      rM.Item = itemRef || '';
+      rM.Variante = varianteRef || '';
+      rM.TamborID = tamborRef || '';
+      rM.Cantidad = cantM;
+      rM.Unidad = unidad;
+      rM.Categoria = itemRef ? 'Materia prima' : '';
+      rM.NuevoItem = 'No';
+      rM.PendienteAprobacion = 'No';
+      rM.Observacion = ('Detectado durante el empaque. ' + valueOf('Observacion')).trim();
+      return rM;
+    }
     function validarItemCatalogo(item, nuevoItem, opciones) {
       var options = opciones || getItemOptions();
       var existe = options.some(function (x) { return normalize(x) === normalize(item); });
@@ -2109,6 +2154,7 @@
           return r.TipoRegistro + (r.Item ? ' · ' + r.Item : (r.TamborID ? ' · ' + r.TamborID : ''));
         }).join(' | ');
         showStatus('✔ Enviado (' + records.length + (records.length === 1 ? ' registro' : ' registros') + '): ' + resumen, 'ok');
+        explosionBurbujas();
         var keepType = state.selectedType;
         var keepResp = valueOf('Responsable');
         resetForm(false);
@@ -2274,6 +2320,8 @@
       if ((ni === 'fragancia' || ni === 'color') && r.variante) {
         return r.variante + (ni === 'color' ? ' (color)' : '');
       }
+      // Etiquetas: solo el nombre del producto
+      if (ni === 'etiqueta' && r.variante) return r.variante + ' (etiqueta)';
       return r.item + (r.variante ? ' · ' + r.variante : '');
     }
 
@@ -2569,60 +2617,84 @@
           }
           return '<div class="inv-row"><div><div class="inv-nombre">' + escapeHtml(nombre) + '</div>' +
             '<div class="inv-cat">' + escapeHtml((p.categoria || '') + ' · creado por ' + (p.por || '?')) + '</div></div>' +
-            '<div style="display:flex;gap:6px">' +
+            '<div style="display:flex;gap:6px;flex-wrap:wrap">' +
             '<button type="button" class="btn-morado" data-k="' + escapeHtml(k) + '" data-accion="aprobar" style="padding:8px 12px;font-size:12px">Aprobar</button>' +
+            '<button type="button" class="btn-azul" data-k="' + escapeHtml(k) + '" data-accion="editar" style="padding:8px 12px;font-size:12px">Editar nombre</button>' +
             '<button type="button" class="btn-azul" data-k="' + escapeHtml(k) + '" data-accion="relacionar" style="padding:8px 12px;font-size:12px">Relacionar</button>' +
+            '<button type="button" class="mp-quitar" data-k="' + escapeHtml(k) + '" data-accion="eliminar" style="padding:8px 12px;font-size:12px">Eliminar</button>' +
             '</div></div>';
         }).join('');
       cont.querySelectorAll('button[data-k]').forEach(function (btn) {
         btn.addEventListener('click', function () {
           var p = pend[btn.dataset.k];
+          var accion = btn.dataset.accion;
           var nombreP = p.item + (p.variante ? ' · ' + p.variante : '');
           var destinoRel = '';
-          if (btn.dataset.accion === 'relacionar') {
+          var nuevoNombre = '';
+          if (accion === 'relacionar') {
             destinoRel = window.prompt('“' + nombreP + '” ya existía con otro nombre.\n\nEscribe el nombre EXACTO del ítem correcto (el inventario se trasladará allá):');
             if (!destinoRel) return;
           }
-          var quien = window.prompt('¿Quién ' + (destinoRel ? 'relaciona' : 'aprueba') + ' este ítem? Escribe tu nombre:');
+          if (accion === 'editar') {
+            nuevoNombre = window.prompt('Nombre corregido para “' + nombreP + '”:');
+            if (!nuevoNombre) return;
+          }
+          if (accion === 'eliminar' && !window.confirm('¿Eliminar “' + nombreP + '” del inventario? El historial NO se borra, solo desaparece del inventario.')) return;
+          var quien = window.prompt('¿Quién hace este cambio? Escribe tu nombre:');
           if (!quien) return;
           btn.disabled = true;
           btn.textContent = '...';
-          var rec = {
-            FechaCliente: new Date().toISOString(),
-            TipoRegistro: 'Aprobación item',
-            Responsable: cap(quien),
-            Categoria: p.categoria,
-            Item: p.item,
-            Variante: p.variante,
-            NuevoItem: 'No',
-            PendienteAprobacion: 'No',
-            Observacion: destinoRel
-              ? 'Relacionado con el ítem existente: ' + cap(destinoRel) + ' (no se agrega al catálogo).'
-              : 'Ítem aprobado desde la app y agregado al catálogo.',
-            Origen: 'GitHub Pages',
-            Motivo: destinoRel ? 'Relacionado' : 'Aprobado'
-          };
-          var envio = enviarRegistro(rec);
-          if (destinoRel) {
-            envio = envio.then(function () {
-              return enviarRegistro({
-                FechaCliente: new Date().toISOString(),
-                TipoRegistro: 'Traslado inventario',
-                Responsable: cap(quien),
-                Categoria: p.categoria,
-                Item: p.item,
-                Variante: p.variante,
-                Producto: cap(destinoRel),
-                Observacion: 'Traslado por relación de ítem duplicado.',
-                Origen: 'GitHub Pages'
-              });
+          function recAprob(itemA, motivoA, obsA) {
+            return {
+              FechaCliente: new Date().toISOString(),
+              TipoRegistro: 'Aprobación item',
+              Responsable: cap(quien),
+              Categoria: p.categoria,
+              Item: itemA,
+              Variante: p.variante,
+              NuevoItem: 'No',
+              PendienteAprobacion: 'No',
+              Observacion: obsA,
+              Origen: 'GitHub Pages',
+              Motivo: motivoA
+            };
+          }
+          var recs = [];
+          if (accion === 'aprobar') {
+            recs.push(recAprob(p.item, 'Aprobado', 'Ítem aprobado desde la app y agregado al catálogo.'));
+          } else if (accion === 'relacionar') {
+            recs.push(recAprob(p.item, 'Relacionado', 'Relacionado con el ítem existente: ' + cap(destinoRel) + '.'));
+            recs.push({
+              FechaCliente: new Date().toISOString(), TipoRegistro: 'Traslado inventario',
+              Responsable: cap(quien), Categoria: p.categoria, Item: p.item, Variante: p.variante,
+              Producto: cap(destinoRel), Observacion: 'Traslado por relación de ítem duplicado.', Origen: 'GitHub Pages'
+            });
+          } else if (accion === 'editar') {
+            recs.push(recAprob(p.item, 'Renombrado', 'Renombrado a: ' + cap(nuevoNombre) + '.'));
+            recs.push({
+              FechaCliente: new Date().toISOString(), TipoRegistro: 'Traslado inventario',
+              Responsable: cap(quien), Categoria: p.categoria, Item: p.item, Variante: p.variante,
+              Producto: cap(nuevoNombre), Observacion: 'Corrección de nombre.', Origen: 'GitHub Pages'
+            });
+            recs.push(recAprob(cap(nuevoNombre), 'Aprobado', 'Nombre corregido y agregado al catálogo.'));
+          } else if (accion === 'eliminar') {
+            recs.push(recAprob(p.item, 'Eliminado', 'Ítem eliminado del inventario desde la app.'));
+            recs.push({
+              FechaCliente: new Date().toISOString(), TipoRegistro: 'Eliminar item',
+              Responsable: cap(quien), Categoria: p.categoria, Item: p.item, Variante: p.variante,
+              Observacion: 'Eliminación aprobada desde Revisar.', Origen: 'GitHub Pages'
             });
           }
+          var envio = Promise.resolve();
+          recs.forEach(function (rc) {
+            envio = envio.then(function () { return enviarRegistro(rc); });
+          });
           envio.then(function () {
-            rec.Fecha = new Date().toISOString();
-            state.registros.push(rec);
+            recs[0].Fecha = new Date().toISOString();
+            state.registros.push(recs[0]);
             state.inventario = null;
             renderPendientes();
+            explosionBurbujas();
           });
         });
       });
@@ -2887,6 +2959,18 @@
       '“Los pensamientos del diligente ciertamente tienden a la abundancia.” — Proverbios 21:5',
       '“Todo lo que te viniere a la mano para hacer, hazlo según tus fuerzas.” — Eclesiastés 9:10'
     ];
+    // 🎉 Explosión de burbujas cuando se guarda bien
+    function explosionBurbujas() {
+      for (var i = 0; i < 18; i++) {
+        var b = document.createElement('div');
+        var s = 8 + Math.random() * 32;
+        b.style.cssText = 'position:fixed;bottom:-40px;left:' + (Math.random() * 100) + '%;width:' + s + 'px;height:' + s +
+          'px;z-index:99;background:rgba(29,78,216,.22);border:1px solid rgba(29,78,216,.5);border-radius:50%;pointer-events:none;' +
+          'animation:subir ' + (1.4 + Math.random() * 1.6) + 's linear forwards;animation-delay:' + (Math.random() * 0.5) + 's';
+        document.body.appendChild(b);
+        (function (el) { setTimeout(function () { el.remove(); }, 4000); })(b);
+      }
+    }
     function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
     function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
 
