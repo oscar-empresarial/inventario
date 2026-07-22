@@ -642,6 +642,10 @@
               <div id="mpLista"></div>
               <button type="button" class="mp-agregar" id="btnMpAgregar">+ Agregar otra materia prima</button>
               <div class="hint">Escribe cada materia prima con su cantidad. Para fragancia o color, pon el aroma/color en la casilla "variante".</div>
+              <label class="check-row" style="margin-top:12px">
+                <input type="checkbox" id="FormulaCompleta" />
+                <span>Confirmo que registré la fórmula completa, incluida el agua y todas las bases usadas.</span>
+              </label>
             </div>
           </div>
 
@@ -760,6 +764,11 @@
             </div>
           </div>
           <div class="row">
+            <div class="field hidden" data-field="referencia">
+              <label for="ReferenciaOriginal">Referencia del movimiento que corriges</label>
+              <input id="ReferenciaOriginal" placeholder="Ej: OP-ABC123, fecha/lote o número de fila" />
+              <div class="hint">Permite saber exactamente qué registro originó la corrección. No se borra el movimiento anterior.</div>
+            </div>
             <div class="field full hidden" data-field="observacion">
               <label for="Observacion">Observación</label>
               <textarea id="Observacion" placeholder="Opcional"></textarea>
@@ -779,7 +788,7 @@
             <button type="submit" class="submit" id="btnSubmit">Guardar registro</button>
           </div>
           <div id="status" class="status"></div>
-          <div class="small-note">Si el mensaje dice “Enviado”, el registro quedó en la hoja REGISTRO_APP.</div>
+          <div class="small-note">Solo cuando el mensaje diga “Guardado y confirmado”, el movimiento quedó registrado.</div>
         </form>
       </div>
     </section>
@@ -798,6 +807,7 @@
         </div>
         <div id="invChips" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px"></div>
         <div id="invResumen" class="inv-resumen" style="display:none"></div>
+        <div id="conciliacionEstado" class="status" style="display:none"></div>
         <div id="invEstado" class="status"></div>
         <div id="invLista"></div>
         <div class="small-note">El inventario se calcula solo con los movimientos de REGISTRO_APP: entradas suman, consumos y empaques restan (envases, etiquetas y accesorios se descuentan automáticamente al empacar) y los conteos fijan el valor real.</div>
@@ -1043,12 +1053,12 @@
 
     var visibility = {
       'Entrada mercancía': ['responsable', 'categoria', 'item', 'variante', 'cantidad', 'unidad', 'observacion'],
-      'Preparación': ['responsable', 'destino', 'materias', 'baseusada', 'baselitros', 'observacion'],
+      'Preparación': ['responsable', 'destino', 'materias', 'baseusada', 'baselitros', 'estanque', 'observacion'],
       'Empacar producto': ['responsable', 'subempaque', 'observacion'],
       'Empacar sólido/polvo': ['responsable', 'item', 'variante', 'presentacion', 'cantpres', 'etiqueta', 'merma', 'observacion'],
       'Salida directa/Baja': ['responsable', 'categoria', 'item', 'variante', 'cantidad', 'unidad', 'motivo', 'observacion'],
       'Fabricar palos': ['responsable', 'item', 'cantidad', 'observacion'],
-      'Novedad/Corrección': ['responsable', 'categoria', 'item', 'variante', 'cantidad', 'unidad', 'motivo', 'observacion']
+      'Novedad/Corrección': ['responsable', 'categoria', 'item', 'variante', 'cantidad', 'unidad', 'motivo', 'referencia', 'observacion']
     };
     var tiposConCategoria = ['Entrada mercancía', 'Salida directa/Baja', 'Novedad/Corrección'];
 
@@ -1640,9 +1650,15 @@
     }
 
     // ================== CONSTRUIR REGISTROS A GUARDAR ==================
+    function nuevoRequestId() {
+      if (window.crypto && typeof window.crypto.randomUUID === 'function') return window.crypto.randomUUID();
+      return 'req-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2) + '-' + Math.random().toString(36).slice(2);
+    }
+
     function baseRecord(tipo) {
       var esNuevo = document.getElementById('CrearNuevoItem').checked;
       return {
+        RequestId: nuevoRequestId(),
         FechaCliente: new Date().toISOString(),
         TipoRegistro: tipo,
         Responsable: valueOf('Responsable'),
@@ -1660,6 +1676,7 @@
         Accesorio: '',
         Etiqueta: '',
         Motivo: '',
+        ReferenciaOriginal: '',
         NuevoItem: esNuevo ? 'Sí' : 'No',
         PendienteAprobacion: esNuevo ? 'Sí' : 'No',
         Observacion: valueOf('Observacion'),
@@ -1683,6 +1700,7 @@
       r.Cantidad = valueOf('Cantidad');
       r.Unidad = valueOf('Unidad');
       r.Motivo = valueOf('Motivo');
+      r.ReferenciaOriginal = valueOf('ReferenciaOriginal');
 
       if (type === 'Entrada mercancía' || type === 'Salida directa/Baja' || type === 'Novedad/Corrección') {
         var esTraslado = (type === 'Novedad/Corrección' && r.Motivo === 'Traslado a otro ítem');
@@ -1697,6 +1715,10 @@
         } else {
           if (!esNumero(r.Cantidad, false)) return { error: 'Debes poner una cantidad mayor que cero.' };
           if (!r.Unidad) return { error: 'Debes seleccionar unidad.' };
+        }
+        if (type === 'Novedad/Corrección') {
+          if (!r.Motivo) return { error: 'Selecciona el motivo de la corrección.' };
+          if (!r.ReferenciaOriginal) return { error: 'Escribe la referencia del movimiento que estás corrigiendo.' };
         }
         var e1 = validarItemCatalogo(r.Item, r.NuevoItem);
         if (e1) return { error: e1 };
@@ -1778,109 +1800,126 @@
       var tanque = valueOf('Tanque');
       var litros = valueOf('LitrosPreparados');
       var mps = leerFilasMp();
-
       var records = [];
-      var nombreDestino = '';
+      var produccion = null;
+      var nombreDestino = destino === 'directo' ? 'Uso directo' : tambor;
 
+      if (!destino) return { error: 'Selecciona dónde usaste las materias primas.' };
       if (destino === 'tanque') {
-        if (!tambor) return { error: 'Elige o escribe en cuál tanque usaste la materia prima.' };
-        nombreDestino = tambor;
+        if (!tambor) return { error: 'Elige o escribe en cuál tanque preparaste el producto.' };
         var infoT = infoTanque(tambor);
         if (infoT && !infoT.vacio) {
-          // Tanque con contenido: adición opcional de litros
-          if (litros && esNumero(litros, false)) {
-            var rAdd = baseRecord('Preparar tambor');
-            rAdd.TamborID = tambor;
-            rAdd.LitrosPreparados = litros;
-            rAdd.Observacion = ('Adición de litros al tanque. ' + valueOf('Observacion')).trim();
-            records.push(rAdd);
+          if (litros && !esNumero(litros, false)) return { error: 'Los litros adicionados deben ser mayores que cero.' };
+          if (litros) {
+            produccion = baseRecord('Preparar tambor');
+            produccion.TamborID = tambor;
+            produccion.Producto = infoT.producto || producto;
+            produccion.LitrosPreparados = litros;
+            produccion.Observacion = ('Adición de litros al tanque. ' + valueOf('Observacion')).trim();
+            records.push(produccion);
           }
         } else {
-          // Tanque nuevo o VACÍO: se crea/reinicia el lote con producto nuevo
           if (!producto) return { error: 'Escribe qué producto se prepara en el tanque.' };
           if (!esNumero(litros, false)) return { error: 'Debes poner los litros preparados.' };
-          var rNew = baseRecord('Preparar tambor');
-          rNew.TamborID = tambor;
-          rNew.Producto = producto;
-          rNew.Tanque = tanque;
-          rNew.LitrosPreparados = litros;
-          records.push(rNew);
+          produccion = baseRecord('Preparar tambor');
+          produccion.TamborID = tambor;
+          produccion.Producto = producto;
+          produccion.Tanque = tanque;
+          produccion.LitrosPreparados = litros;
+          records.push(produccion);
         }
       } else if (destino === 'balde') {
         if (!tambor) return { error: 'Ponle un nombre al balde (Ej: Balde jabón).' };
         if (!producto) return { error: 'Escribe qué producto se prepara.' };
         if (!esNumero(litros, false)) return { error: 'Debes poner los litros preparados.' };
-        nombreDestino = tambor;
-        var rB2 = baseRecord('Preparar tambor');
-        rB2.TamborID = tambor;
-        rB2.Producto = producto;
-        rB2.Tanque = 'Balde';
-        rB2.LitrosPreparados = litros;
-        records.push(rB2);
-      } else {
-        nombreDestino = 'Uso directo';
+        produccion = baseRecord('Preparar tambor');
+        produccion.TamborID = tambor;
+        produccion.Producto = producto;
+        produccion.Tanque = 'Balde';
+        produccion.LitrosPreparados = litros;
+        records.push(produccion);
       }
 
-      // Base usada de otro tanque (opcional)
       var baseTanque = valueOf('BaseTanque');
       var baseLitros = valueOf('BaseLitros');
       if (baseTanque || baseLitros) {
         if (!baseTanque) return { error: 'Elige de cuál tanque sacaste la base.' };
         if (!esNumero(baseLitros, false)) return { error: 'Pon cuántos litros de base sacaste.' };
-        var rB = baseRecord('Consumo base');
-        rB.TamborID = baseTanque;
-        rB.Cantidad = baseLitros;
-        rB.Unidad = 'L';
-        rB.Producto = producto;
-        rB.Observacion = ('Base tomada para: ' + (nombreDestino || 'preparación') + '. ' + valueOf('Observacion')).trim();
-        records.push(rB);
+        if (normalize(baseTanque) === normalize(tambor)) return { error: 'El tanque de base no puede ser el mismo tanque de destino.' };
+        if (produccion) {
+          produccion.BaseTanque = baseTanque;
+          produccion.BaseLitros = baseLitros;
+        } else {
+          var rBase = baseRecord('Consumo base');
+          rBase.TamborID = baseTanque;
+          rBase.Cantidad = baseLitros;
+          rBase.Unidad = 'L';
+          rBase.Producto = producto;
+          rBase.Observacion = ('Base tomada para: ' + nombreDestino + '. ' + valueOf('Observacion')).trim();
+          records.push(rBase);
+        }
       }
 
-      // Estado del tanque (en proceso / listo)
       var estadoT = valueOf('EstadoTanque');
-      if (estadoT) {
-        var rPrepRef = null;
-        for (var p = 0; p < records.length; p++) {
-          if (records[p].TipoRegistro === 'Preparar tambor') rPrepRef = records[p];
-        }
-        if (rPrepRef) {
-          rPrepRef.Motivo = estadoT;
-        } else if (destino === 'tanque' && tambor) {
-          var rE = baseRecord('Preparar tambor');
-          rE.TamborID = tambor;
-          rE.Motivo = estadoT;
-          rE.Observacion = ('Cambio de estado del tanque a: ' + estadoT + '. ' + valueOf('Observacion')).trim();
-          records.push(rE);
-        }
+      if (estadoT && produccion) {
+        produccion.Motivo = estadoT;
+      } else if (estadoT && destino === 'tanque' && tambor) {
+        var rEstado = baseRecord('Estado tambor');
+        rEstado.TamborID = tambor;
+        rEstado.Motivo = estadoT;
+        rEstado.Observacion = ('Cambio de estado del tanque a: ' + estadoT + '. ' + valueOf('Observacion')).trim();
+        records.push(rEstado);
       }
 
       var mpsValidas = mps.filter(function (m) { return m.item; });
-      if (!mpsValidas.length && !records.length) {
-        return { error: 'Agrega al menos una materia prima con su cantidad, o registra el tanque/base.' };
-      }
       var listaFrag = getCatalog('fragancias').concat(invItems('Fragancia'));
       var listaCol = getCatalog('colores').concat(invItems('Color'));
       var catalogoMp = unique(getCatalog('materiasPrimas').concat(invItems('Materia prima')).concat(listaFrag).concat(listaCol));
+      var componentes = [];
+      var vistos = {};
       for (var i = 0; i < mpsValidas.length; i++) {
         var m = mpsValidas[i];
         if (!esNumero(m.cantidad, false)) return { error: 'Ponle cantidad a "' + m.item + '".' };
-        var itemMp = m.item;
-        var existe = catalogoMp.some(function (x) { return normalize(x) === normalize(itemMp); });
-        if (!existe) {
-          return { error: 'La materia prima "' + m.item + '" no está en el catálogo. Escríbela igual a como aparece en la lista (o regístrala primero en "Llegó mercancía" creándola como nueva).' };
+        var existe = catalogoMp.some(function (x) { return normalize(x) === normalize(m.item); });
+        if (!existe) return { error: 'La materia prima "' + m.item + '" no está en el catálogo. Regístrala primero en “Llegó mercancía” o selecciónala de la lista.' };
+        var claveMp = normalize(m.item) + '|' + normalize(m.variante);
+        if (vistos[claveMp]) return { error: 'La materia prima "' + m.item + '" está repetida. Déjala en una sola fila con la cantidad total.' };
+        vistos[claveMp] = true;
+        var componente = { Item:m.item, Variante:m.variante, Cantidad:m.cantidad, Unidad:m.unidad };
+        componentes.push(componente);
+        if (!produccion) {
+          var rConsumo = baseRecord('Consumo materia prima');
+          var esF = listaFrag.some(function (x) { return normalize(x) === normalize(m.item); });
+          var esC = listaCol.some(function (x) { return normalize(x) === normalize(m.item); });
+          rConsumo.Categoria = esF ? 'Fragancia' : (esC ? 'Color' : 'Materia prima');
+          rConsumo.Item = m.item;
+          rConsumo.Variante = m.variante;
+          rConsumo.Cantidad = m.cantidad;
+          rConsumo.Unidad = m.unidad;
+          rConsumo.TamborID = nombreDestino;
+          rConsumo.Producto = producto;
+          records.push(rConsumo);
         }
-        var rC = baseRecord('Consumo materia prima');
-        var esF = listaFrag.some(function (x) { return normalize(x) === normalize(itemMp); });
-        var esC = listaCol.some(function (x) { return normalize(x) === normalize(itemMp); });
-        rC.Categoria = esF ? 'Fragancia' : (esC ? 'Color' : 'Materia prima');
-        rC.Item = m.item;
-        rC.Variante = m.variante;
-        rC.Cantidad = m.cantidad;
-        rC.Unidad = m.unidad;
-        rC.TamborID = nombreDestino;
-        rC.Producto = producto;
-        records.push(rC);
       }
+
+      if (produccion) {
+        var totalComponentes = componentes.length + (baseLitros ? 1 : 0);
+        if (totalComponentes < 2) return { error: 'Producción incompleta: registra al menos dos componentes, incluida el agua o una base.' };
+        if (!document.getElementById('FormulaCompleta').checked) return { error: 'Confirma que registraste la fórmula completa, incluida el agua y las bases.' };
+        var volumenExplicado = parseFloat(baseLitros || 0);
+        componentes.forEach(function (c) {
+          var q = parseFloat(String(c.Cantidad).replace(',', '.'));
+          var u = normalize(c.Unidad);
+          if (u === 'l' || u === 'lt' || u === 'litro' || u === 'litros') volumenExplicado += q;
+          if (u === 'ml' || u === 'mililitro' || u === 'mililitros') volumenExplicado += q / 1000;
+        });
+        var cobertura = volumenExplicado / parseFloat(litros);
+        if (cobertura < 0.80) return { error: 'La fórmula parece incompleta: solo explica ' + volumenExplicado.toFixed(3) + ' L de ' + litros + ' L. Revisa agua, bases y cantidades.' };
+        if (cobertura > 1.05) return { error: 'La fórmula declara más volumen que la producción. Revisa cantidades y unidades.' };
+        produccion.FormulaCompleta = true;
+        produccion.Componentes = componentes;
+      }
+
       if (!records.length) return { error: 'No hay nada para guardar.' };
       return { records: records };
     }
@@ -2014,6 +2053,9 @@
       }
       records.forEach(function (r) {
         var t = r.TipoRegistro;
+        (r.Componentes || []).forEach(function (c) {
+          check(c.Item || c.item, c.Variante || c.variante, 'Materia prima', c.Unidad || c.unidad);
+        });
         if (t === 'Consumo materia prima') check(r.Item, r.Variante, r.Categoria || 'Materia prima', r.Unidad);
         if (t === 'Salida directa/Baja') check(r.Item, r.Variante, r.Categoria, r.Unidad);
         if (t === 'Empacar sólido/polvo') {
@@ -2101,13 +2143,31 @@
     }
 
     // ================== ENVÍO ==================
-    function enviarRegistro(record) {
-      return fetch(APPS_SCRIPT_URL, {
+    function esperar(ms) { return new Promise(function (resolve) { setTimeout(resolve, ms); }); }
+
+    function consultarOperacion(requestId) {
+      return new Promise(function (resolve, reject) {
+        jsonp({ action: 'operacion', requestId: requestId }, resolve, reject, 10000);
+      });
+    }
+
+    async function enviarRegistro(record) {
+      if (!record.RequestId) record.RequestId = nuevoRequestId();
+      await fetch(APPS_SCRIPT_URL, {
         method: 'POST',
         mode: 'no-cors',
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
         body: JSON.stringify(record)
       });
+      for (var intento = 0; intento < 6; intento++) {
+        await esperar(500 + intento * 350);
+        var estado = await consultarOperacion(record.RequestId);
+        if (estado && estado.encontrada) {
+          if (!estado.ok) throw new Error(String(estado.error || 'El servidor rechazó el movimiento.').replace(/^Error:\s*/i, ''));
+          return estado;
+        }
+      }
+      throw new Error('El servidor recibió el envío, pero no fue posible confirmar que quedara guardado. No repitas el movimiento todavía; revisa la conexión o la trazabilidad.');
     }
 
     async function submitForm(e) {
@@ -2153,7 +2213,7 @@
         var resumen = records.map(function (r) {
           return r.TipoRegistro + (r.Item ? ' · ' + r.Item : (r.TamborID ? ' · ' + r.TamborID : ''));
         }).join(' | ');
-        showStatus('✔ Enviado (' + records.length + (records.length === 1 ? ' registro' : ' registros') + '): ' + resumen, 'ok');
+        showStatus('✔ Guardado y confirmado (' + records.length + (records.length === 1 ? ' operación' : ' operaciones') + '): ' + resumen, 'ok');
         explosionBurbujas();
         var keepType = state.selectedType;
         var keepResp = valueOf('Responsable');
@@ -2166,7 +2226,7 @@
           if (data && !data.error) state.inventario = parseInventario(data);
         }, function () {});
       } catch (err) {
-        showStatus('No se pudo enviar. Revisa tu conexión a internet e intenta de nuevo. Error: ' + (err.message || String(err)), 'err');
+        showStatus('No se guardó: ' + (err.message || String(err)), 'err');
       } finally {
         btn.disabled = false;
         btn.textContent = 'Guardar registro';
@@ -2200,6 +2260,7 @@
         ['producto', 'Producto'], ['presentaci', 'Presentacion'], ['cuantas presentaciones', 'CantidadPresentacion'],
         ['etiqueta', 'Etiqueta'], ['tapa', 'Accesorio'], ['accesorio', 'Accesorio'],
         ['unidad', 'Unidad'], ['cantidad', 'Cantidad'], ['destino del traslado', 'ItemDestino'],
+        ['referencia', 'ReferenciaOriginal'], ['formula completa', 'FormulaCompleta'],
         ['item', 'Item'], ['materia prima', 'mpLista']
       ];
       var m = normalize(msg);
@@ -2265,9 +2326,27 @@
         estado.className = 'status';
         estado.textContent = '';
         renderInventario();
+        loadConciliacion();
       }, function () {
         diagnosticarConexion(estado);
       }, 20000);
+    }
+
+    function loadConciliacion() {
+      var aviso = document.getElementById('conciliacionEstado');
+      jsonp({ action: 'conciliacion' }, function (data) {
+        if (!data || data.error || data.ok === false) return;
+        var total = data.resumen ? Number(data.resumen.total || 0) : 0;
+        var altos = data.resumen ? Number(data.resumen.altos || 0) : 0;
+        aviso.style.display = 'block';
+        if (!total) {
+          aviso.className = 'status ok';
+          aviso.textContent = '✔ Conciliación automática: no se detectaron descuadres.';
+        } else {
+          aviso.className = 'status ' + (altos ? 'err' : 'warn');
+          aviso.textContent = 'Conciliación automática: ' + total + ' hallazgo(s), ' + altos + ' de prioridad alta. Revisa la trazabilidad antes de ajustar inventario.';
+        }
+      }, function () { aviso.style.display = 'none'; }, 15000);
     }
 
     function parseInventario(data) {

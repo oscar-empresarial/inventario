@@ -1,0 +1,7 @@
+{
+  "name": "full-company-inventario",
+  "private": true,
+  "scripts": {
+    "test": "node --test tests/*.test.js"
+  }
+}

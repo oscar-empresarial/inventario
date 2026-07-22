@@ -88,6 +88,10 @@ function doGet(e) {
       data = getInventario();
     } else if (p.action === 'registros') {
       data = getRegistros(p.desde, p.hasta);
+    } else if (p.action === 'conciliacion') {
+      data = getConciliacion();
+    } else if (p.action === 'operacion') {
+      data = getEstadoOperacion_(p.requestId || p.idempotencyKey);
     } else {
       data = { ok: true, mensaje: 'API Full Company v2 activa' };
     }
@@ -95,6 +99,43 @@ function doGet(e) {
     data = { ok: false, error: String(err) };
   }
   return salida(data, p.callback);
+}
+
+// Confirma desde la interfaz si un POST opaco se guardó o fue rechazado.
+// Es importante porque Apps Script no siempre permite leer directamente la
+// respuesta de un POST hecho desde GitHub Pages.
+function getEstadoOperacion_(requestId) {
+  requestId = String(requestId || '').trim();
+  if (requestId.length < 8) return {ok:false,encontrada:false,error:'RequestId inválido.'};
+  var libro = getHoja();
+  var hoja = libro.getSheetByName(HOJA_REGISTRO);
+  if (hoja && hoja.getLastRow() > 1) {
+    var encabezados = hoja.getRange(1,1,1,hoja.getLastColumn()).getDisplayValues()[0];
+    var iReq = indiceEncabezado_(encabezados,'IdempotencyKey');
+    var iOp = indiceEncabezado_(encabezados,'OperacionID');
+    if (iReq >= 0) {
+      var valores = hoja.getRange(2,1,hoja.getLastRow()-1,hoja.getLastColumn()).getDisplayValues();
+      var movimientos = 0;
+      var operacionId = '';
+      valores.forEach(function(fila) {
+        if (String(fila[iReq] || '').trim() === requestId) {
+          movimientos++;
+          if (iOp >= 0 && !operacionId) operacionId = String(fila[iOp] || '');
+        }
+      });
+      if (movimientos) return {ok:true,encontrada:true,requestId:requestId,operacionId:operacionId,movimientos:movimientos};
+    }
+  }
+  var errores = libro.getSheetByName('_API_ERRORES');
+  if (errores && errores.getLastRow() > 1) {
+    var datos = errores.getRange(2,1,errores.getLastRow()-1,errores.getLastColumn()).getDisplayValues();
+    for (var i=datos.length-1;i>=0;i--) {
+      if (String(datos[i][0] || '').trim() === requestId) {
+        return {ok:false,encontrada:true,requestId:requestId,error:String(datos[i][2] || 'Movimiento rechazado.')};
+      }
+    }
+  }
+  return {ok:false,encontrada:false,requestId:requestId,mensaje:'La operación aún no aparece.'};
 }
 
 function salida(data, callback) {
@@ -212,6 +253,57 @@ function getRegistros(desde, hasta) {
   return { registros: filas };
 }
 
+// ================== CONCILIACIÓN (action=conciliacion) ==================
+function getConciliacion() {
+  var filas = leerRegistros().filas;
+  var hallazgos = [];
+  var lotes = {};
+  function add(codigo,prioridad,entidad,detalle,esperado,real) {
+    hallazgos.push({codigo:codigo,prioridad:prioridad,entidad:entidad,detalle:detalle,esperado:esperado,real:real,diferencia:redondear_(num(real)-num(esperado),3)});
+  }
+  filas.forEach(function(r) {
+    var tipo=normalizar(campo(r,['tiporegistro','tipo']));
+    var tambor=String(campo(r,['tamborid','tambor'])||'').trim();
+    if (tambor) {
+      if (!lotes[tambor]) lotes[tambor]={producciones:[],componentes:[],preparado:0,empacado:0};
+      if (tipo.indexOf('preparar tambor')===0) {
+        lotes[tambor].producciones.push(r);
+        lotes[tambor].preparado += num(campo(r,['litrospreparados','cantidad']));
+      } else if (tipo.indexOf('consumo materia prima')===0) {
+        lotes[tambor].componentes.push(r);
+      } else if (tipo.indexOf('empacar desde tambor')===0 || tipo.indexOf('empacar producto')===0) {
+        lotes[tambor].empacado += litrosPresentacion_(String(campo(r,['presentacion'])||''),num(campo(r,['cantidadpresentacion'])));
+      }
+    }
+    if (tipo.indexOf('consumo base')===0) {
+      var destinoBase=String(campo(r,['destinotambor'])||'').trim();
+      if (destinoBase) {
+        if (!lotes[destinoBase]) lotes[destinoBase]={producciones:[],componentes:[],preparado:0,empacado:0};
+        lotes[destinoBase].componentes.push(r);
+      }
+    }
+    var id=campo(r,['id']); var fecha=campo(r,['fecha','timestamp','fechaservidor','fechahora']); var usuario=campo(r,['usuario']);
+    if (!id || !fecha || !usuario) add('AUDITORIA-INCOMPLETA','Media',id||tipo,'Registro sin ID, fecha o usuario.','ID+fecha+usuario','Incompleto');
+  });
+  for (var idTambor in lotes) {
+    var l=lotes[idTambor];
+    if (l.producciones.length>1) add('LOTE-DUPLICADO','Alta',idTambor,'TamborID reutilizado en varias producciones.',1,l.producciones.length);
+    if (l.empacado>l.preparado+0.001) add('SALDO-TAMBOR-NEGATIVO','Alta',idTambor,'Se empacó más de lo preparado.',l.preparado,l.empacado);
+    l.producciones.forEach(function(p) {
+      var op=String(campo(p,['operacionid'])||'').trim();
+      var comps=l.componentes.filter(function(c){var oc=String(campo(c,['operacionid'])||'').trim();return !op||!oc||op===oc;});
+      var volumen=0;
+      comps.forEach(function(c){var conv=aBase(num(campo(c,['cantidad'])),String(campo(c,['unidad'])||''));if(conv.u==='L')volumen+=conv.v;});
+      var litros=num(campo(p,['litrospreparados','cantidad']));
+      if(comps.length<2) add('BOM-INCOMPLETA','Alta',idTambor,'Producción con menos de dos componentes trazados.',2,comps.length);
+      if(litros>0 && volumen/litros<0.80) add('RENDIMIENTO-IMPOSIBLE','Alta',idTambor,'Los componentes no explican el volumen producido.',litros,volumen);
+    });
+  }
+  var inv=getInventario();
+  (inv.items||[]).filter(function(i){return Number(i.Stock)<-0.000001;}).forEach(function(i){add('INVENTARIO-NEGATIVO','Alta',i.Item+(i.Variante?' · '+i.Variante:''),'Saldo negativo.',0,i.Stock);});
+  return {ok:true,fecha:new Date().toISOString(),resumen:{total:hallazgos.length,altos:hallazgos.filter(function(h){return h.prioridad==='Alta';}).length},hallazgos:hallazgos};
+}
+
 // ================== INVENTARIO CALCULADO (action=inventario) ==================
 function getInventario() {
   var datos = leerRegistros();
@@ -277,6 +369,16 @@ function getInventario() {
           var qb = Math.min(tbb.disponible, litrosBase);
           tbb.disponible -= qb;
           litrosBase -= qb;
+        }
+      }
+
+    } else if (tipo.indexOf('estado tambor') === 0) {
+      var idEstado = String(campo(r, ['tamborid', 'tambor']) || '').trim();
+      var nuevoEstado = String(campo(r, ['motivo']) || '').trim();
+      for (var et = 0; et < tambores.length; et++) {
+        if (normalizar(tambores[et].id) === normalizar(idEstado)) {
+          tambores[et].estado = nuevoEstado || tambores[et].estado;
+          break;
         }
       }
 
@@ -440,6 +542,15 @@ function getInventario() {
     }
   });
 
+  // El producto preparado también es inventario disponible. Antes solo vivía
+  // en la lista de tambores y por eso la vista general podía mostrar 40 L
+  // aunque existiera un lote de 120 L.
+  tambores.forEach(function (t) {
+    if (t.producto && t.disponible > 0.0001) {
+      mover(t.producto, 'A granel · ' + (t.id || 'sin lote'), 'Producto preparado', t.disponible, 'L');
+    }
+  });
+
   // mínimos para alertas (hoja MINIMOS opcional: Item | Variante | Minimo)
   var minimos = leerMinimos();
   var items = [];
@@ -514,24 +625,63 @@ function leerMinimos() {
 
 // ================== GUARDAR (POST) ==================
 function doPost(e) {
+  var lock = LockService.getScriptLock();
   try {
+    if (!lock.tryLock(30000)) throw new Error('Hay otro movimiento en proceso. Espera unos segundos e intenta nuevamente.');
     var payload = JSON.parse(e.postData.contents);
     var hoja = getHoja().getSheetByName(HOJA_REGISTRO);
     if (!hoja) throw new Error('No existe la pestaña ' + HOJA_REGISTRO);
-
-    var encabezados = hoja.getRange(1, 1, 1, hoja.getLastColumn()).getValues()[0];
-    var campos = {};
-    for (var k in payload) campos[normalizar(k).replace(/[ _]/g, '')] = payload[k];
-
-    var fila = encabezados.map(function (titulo) {
-      var n = normalizar(titulo).replace(/[ _]/g, '');
-      if (n === 'fecha' || n === 'timestamp' || n === 'fechaservidor') {
-        return new Date();
+    var encabezados = asegurarColumnasAuditoria_(hoja);
+    var requestId = String(payload.RequestId || payload.requestId || payload.IdempotencyKey || payload.idempotencyKey || '').trim();
+    if (requestId.length < 8) throw new Error('Falta RequestId. Actualiza la app: cada envío debe llevar una clave de idempotencia.');
+    var idxRequest = indiceEncabezado_(encabezados, 'IdempotencyKey');
+    if (idxRequest >= 0 && hoja.getLastRow() > 1) {
+      var anteriores = hoja.getRange(2, idxRequest + 1, hoja.getLastRow() - 1, 1).getDisplayValues();
+      for (var a = 0; a < anteriores.length; a++) {
+        if (String(anteriores[a][0]).trim() === requestId) return salida({ok:true,duplicado:true,mensaje:'La operación ya estaba guardada; no se duplicó.'});
       }
-      return (campos[n] != null) ? campos[n] : '';
-    });
+    }
 
-    hoja.appendRow(fila);
+    var tipo = String(payload.TipoRegistro || payload.tipoRegistro || '').trim();
+    var responsable = String(payload.Responsable || payload.responsable || '').trim();
+    if (!tipo) throw new Error('TipoRegistro es obligatorio.');
+    if (!responsable) throw new Error('Responsable es obligatorio.');
+    var operacionId = 'OP-' + Utilities.getUuid().slice(0, 12).toUpperCase();
+    var ahora = new Date();
+    var usuario = Session.getActiveUser().getEmail() || Session.getEffectiveUser().getEmail() || 'no-identificado';
+    var filasPayload = [];
+
+    if (normalizar(tipo).indexOf('preparar tambor') === 0) {
+      var produccion = validarProduccionPost_(payload);
+      filasPayload.push(payload);
+      produccion.componentes.forEach(function (c, i) {
+        filasPayload.push({
+          TipoRegistro:'Consumo materia prima', Categoria:'Materia prima', Item:c.item, Variante:c.variante || '',
+          Cantidad:c.cantidad, Unidad:c.unidad, Movimiento:'Consumo', Motivo:'Producción', Producto:produccion.producto,
+          TamborID:produccion.tamborId, Responsable:responsable, Observacion:'Componente ' + (i + 1) + ' de ' + operacionId
+        });
+      });
+      if (produccion.baseLitros > 0) {
+        filasPayload.push({
+          TipoRegistro:'Consumo base', Categoria:'Producto preparado', Cantidad:produccion.baseLitros,
+          Unidad:'L', Movimiento:'Consumo', Motivo:'Producción', Producto:produccion.producto,
+          TamborID:produccion.baseTanque, DestinoTambor:produccion.tamborId, Responsable:responsable,
+          Observacion:'Base consumida en ' + produccion.tamborId + ' · ' + operacionId
+        });
+      }
+    } else {
+      validarMovimientoPost_(payload, tipo);
+      filasPayload.push(payload);
+    }
+
+    var filas = filasPayload.map(function (p, i) {
+      return filaDesdePayload_(encabezados, p, {
+        fecha:ahora, usuario:usuario, operacionId:operacionId, requestId:requestId,
+        movimientoId:operacionId + '-' + ('0' + (i + 1)).slice(-2),
+        estadoMovimiento:'ACTIVO', versionBOM:normalizar(tipo).indexOf('preparar tambor') === 0 ? 'MANUAL-v1' : ''
+      });
+    });
+    hoja.getRange(hoja.getLastRow() + 1, 1, filas.length, encabezados.length).setValues(filas);
 
     // Si es una APROBACIÓN de ítem nuevo: agregarlo también a la hoja CATALOGOS (queda oficial)
     // (Los "Relacionado", "Renombrado" y "Eliminado" NO se agregan al catálogo)
@@ -541,10 +691,205 @@ function doPost(e) {
         try { agregarACatalogo(payload.Categoria, payload.Item, payload.Variante); } catch (e2) {}
       }
     }
-    return salida({ ok: true });
+    return salida({ ok: true, operacionId:operacionId, requestId:requestId, movimientos:filas.length });
   } catch (err) {
+    try { registrarErrorPost_(payload, requestId, err); } catch (errorAuditoria) {}
     return salida({ ok: false, error: String(err) });
+  } finally {
+    try { lock.releaseLock(); } catch (ignore) {}
   }
+}
+
+function registrarErrorPost_(payload, requestId, err) {
+  requestId = String(requestId || (payload && (payload.RequestId || payload.requestId)) || '').trim();
+  if (requestId.length < 8) return;
+  var libro = getHoja();
+  var hoja = libro.getSheetByName('_API_ERRORES');
+  if (!hoja) {
+    hoja = libro.insertSheet('_API_ERRORES');
+    hoja.getRange(1,1,1,6).setValues([['RequestId','FechaServidor','Error','TipoRegistro','Responsable','Estado']]);
+    try { hoja.hideSheet(); } catch (ignore) {}
+  }
+  hoja.appendRow([
+    requestId,new Date(),String(err),String((payload && payload.TipoRegistro) || ''),
+    String((payload && payload.Responsable) || ''),'RECHAZADO'
+  ]);
+}
+
+function asegurarColumnasAuditoria_(hoja) {
+  var encabezados = hoja.getRange(1,1,1,Math.max(hoja.getLastColumn(),1)).getValues()[0].map(String);
+  ['OperacionID','IdempotencyKey','EstadoMovimiento','FechaServidor','Usuario','VersionBOM','HashIntegridad','DestinoTambor'].forEach(function (nombre) {
+    if (indiceEncabezado_(encabezados,nombre) < 0) {
+      encabezados.push(nombre);
+      hoja.getRange(1,encabezados.length).setValue(nombre);
+    }
+  });
+  return encabezados;
+}
+
+function indiceEncabezado_(encabezados, nombre) {
+  var objetivo = normalizar(nombre).replace(/[ _]/g,'');
+  for (var i=0;i<encabezados.length;i++) if (normalizar(encabezados[i]).replace(/[ _]/g,'') === objetivo) return i;
+  return -1;
+}
+
+function filaDesdePayload_(encabezados, payload, meta) {
+  var campos = {};
+  for (var k in payload) campos[normalizar(k).replace(/[ _]/g,'')] = payload[k];
+  campos.operacionid = meta.operacionId;
+  if (!campos.id) campos.id = meta.movimientoId;
+  campos.idempotencykey = meta.requestId;
+  campos.estadomovimiento = meta.estadoMovimiento;
+  campos.fechaservidor = meta.fecha;
+  campos.usuario = meta.usuario;
+  campos.versionbom = meta.versionBOM;
+  var fila = encabezados.map(function (titulo) {
+    var n = normalizar(titulo).replace(/[ _]/g,'');
+    if ((n === 'fecha' || n === 'timestamp' || n === 'fechaservidor' || n === 'fechahora') && campos[n] == null) return meta.fecha;
+    if (n === 'hashintegridad') return '';
+    return campos[n] != null ? campos[n] : '';
+  });
+  var idxHash = indiceEncabezado_(encabezados,'HashIntegridad');
+  if (idxHash >= 0) fila[idxHash] = hashFila_(fila.slice(0,idxHash));
+  return fila;
+}
+
+function validarProduccionPost_(payload) {
+  var producto = String(payload.Producto || payload.producto || '').trim();
+  var litros = positivo_(payload.LitrosPreparados || payload.litrosPreparados, 'LitrosPreparados debe ser mayor que cero.');
+  var tamborId = String(payload.TamborID || payload.tamborId || payload.Tambor || '').trim();
+  if (!producto) throw new Error('Producto es obligatorio al preparar un tambor.');
+  if (!tamborId) throw new Error('TamborID es obligatorio y debe ser único por lote.');
+  var confirmada = payload.FormulaCompleta === true || payload.formulaCompleta === true || /^(si|sí|true|1)$/i.test(String(payload.FormulaCompleta || payload.formulaCompleta || ''));
+  if (!confirmada) throw new Error('Debes confirmar FormulaCompleta y registrar todas las materias primas, incluida el agua.');
+  var componentes = payload.Componentes || payload.componentes || payload.MateriasPrimas || payload.materiasPrimas || [];
+  if (!Array.isArray(componentes)) throw new Error('Componentes debe ser una lista de materias primas.');
+  var vistos = {};
+  var volumenL = 0;
+  componentes = componentes.map(function (c) {
+    var item = String(c.Item || c.item || '').trim();
+    var variante = String(c.Variante || c.variante || '').trim();
+    var cantidad = positivo_(c.Cantidad || c.cantidad, 'Cada materia prima debe tener cantidad mayor que cero.');
+    var unidad = String(c.Unidad || c.unidad || '').trim();
+    if (!item || !unidad) throw new Error('Cada materia prima requiere Item y Unidad.');
+    var clave = normalizar(item) + '|' + normalizar(variante);
+    if (vistos[clave]) throw new Error('Materia prima duplicada: ' + item + '. Unifica las cantidades.');
+    vistos[clave] = true;
+    var conv = aBase(cantidad,unidad);
+    if (conv.u === 'L') volumenL += conv.v;
+    return {item:item,variante:variante,cantidad:cantidad,unidad:unidad};
+  });
+  var baseTanque = String(payload.BaseTanque || payload.baseTanque || '').trim();
+  var baseLitros = 0;
+  if (baseTanque || payload.BaseLitros || payload.baseLitros) {
+    if (!baseTanque) throw new Error('Debes indicar BaseTanque cuando registras litros de base.');
+    baseLitros = positivo_(payload.BaseLitros || payload.baseLitros,'BaseLitros debe ser mayor que cero.');
+    if (normalizar(baseTanque) === normalizar(tamborId)) throw new Error('El tanque de base no puede ser el mismo tanque de destino.');
+    validarBaseDisponible_(baseTanque,baseLitros);
+    volumenL += baseLitros;
+  }
+  if (componentes.length + (baseLitros > 0 ? 1 : 0) < 2) throw new Error('Producción incompleta: se requieren al menos dos componentes, incluida el agua o una base.');
+  var cobertura = volumenL / litros;
+  if (cobertura < 0.80) throw new Error('Fórmula incompleta: solo se explican ' + redondear_(volumenL,3) + ' L de ' + litros + ' L (' + redondear_(cobertura*100,1) + '%).');
+  if (cobertura > 1.05) throw new Error('La fórmula declara más volumen que la producción. Revisa cantidades y unidades.');
+  validarStockComponentes_(componentes);
+  return {producto:producto,litros:litros,tamborId:tamborId,componentes:componentes,baseTanque:baseTanque,baseLitros:baseLitros};
+}
+
+function validarMovimientoPost_(payload, tipo) {
+  var nTipo = normalizar(tipo);
+  if (nTipo.indexOf('empacar desde tambor') === 0 || nTipo.indexOf('empacar producto') === 0) validarEmpaquePost_(payload);
+  if (nTipo.indexOf('consumo') === 0 || nTipo.indexOf('salida') === 0 || nTipo.indexOf('baja') >= 0) {
+    validarStockItem_(payload.Item || payload.item,payload.Variante || payload.variante,payload.Cantidad || payload.cantidad,payload.Unidad || payload.unidad);
+  }
+  if (nTipo.indexOf('novedad') === 0) {
+    var motivo = normalizar(payload.Motivo || payload.motivo);
+    if (!motivo) throw new Error('La corrección debe indicar un Motivo explícito.');
+    if (!String(payload.ReferenciaOriginal || payload.referenciaOriginal || '').trim()) throw new Error('La corrección requiere ReferenciaOriginal.');
+  }
+  if (nTipo.indexOf('estado tambor') === 0) {
+    var tanqueEstado = String(payload.TamborID || payload.tamborId || '').trim();
+    var estado = normalizar(payload.Motivo || payload.motivo);
+    if (!tanqueEstado) throw new Error('TamborID es obligatorio para cambiar el estado.');
+    if (['en proceso','listo'].indexOf(estado) < 0) throw new Error('El estado debe ser En proceso o Listo.');
+    var listaTanques = getInventario().tambores || [];
+    var existeTanque = listaTanques.some(function(t){return normalizar(t.id) === normalizar(tanqueEstado);});
+    if (!existeTanque) throw new Error('No existe el tanque ' + tanqueEstado + '.');
+  }
+}
+
+function validarBaseDisponible_(tamborId,litros) {
+  var tambores = getInventario().tambores || [];
+  for (var i=0;i<tambores.length;i++) {
+    if (normalizar(tambores[i].id) === normalizar(tamborId)) {
+      if (litros > Number(tambores[i].disponible) + 0.001) {
+        throw new Error('Base insuficiente en ' + tamborId + ': disponible ' + tambores[i].disponible + ' L, solicitado ' + redondear_(litros,3) + ' L.');
+      }
+      return;
+    }
+  }
+  throw new Error('Tanque de base no encontrado: ' + tamborId + '.');
+}
+
+function validarEmpaquePost_(payload) {
+  var tamborId = String(payload.TamborID || payload.tamborId || payload.Tambor || '').trim();
+  var presentacion = String(payload.Presentacion || payload.presentacion || '').trim();
+  var cantidad = positivo_(payload.CantidadPresentacion || payload.cantidadPresentacion,'CantidadPresentacion debe ser mayor que cero.');
+  var litros = litrosPresentacion_(presentacion,cantidad);
+  if (litros <= 0) throw new Error('La presentación no tiene conversión de volumen configurada.');
+  var tambores = getInventario().tambores || [];
+  var encontrado = null;
+  for (var i=0;i<tambores.length;i++) if (normalizar(tambores[i].id) === normalizar(tamborId)) encontrado = tambores[i];
+  if (!encontrado) throw new Error('Tambor no encontrado: ' + tamborId + '.');
+  if (litros > Number(encontrado.disponible) + 0.001) throw new Error('Inventario insuficiente en ' + tamborId + ': disponible ' + encontrado.disponible + ' L, solicitado ' + redondear_(litros,3) + ' L.');
+}
+
+function litrosPresentacion_(presentacion,cantidad) {
+  var t = tamanoDe(presentacion);
+  if (t && t.u === 'L') return t.v * cantidad;
+  if (/recarga/i.test(presentacion)) return /mililitro|\bml\b/i.test(presentacion) ? cantidad/1000 : cantidad;
+  return 0;
+}
+
+function validarStockComponentes_(componentes) {
+  var acumulado = {};
+  componentes.forEach(function (c) {
+    if (normalizar(c.item) === 'agua') return;
+    var conv = aBase(c.cantidad,c.unidad);
+    var key = normalizar(c.item)+'|'+normalizar(c.variante)+'|'+conv.u;
+    if (!acumulado[key]) acumulado[key] = {item:c.item,variante:c.variante,cantidad:0,unidad:conv.u};
+    acumulado[key].cantidad += conv.v;
+  });
+  for (var k in acumulado) validarStockItem_(acumulado[k].item,acumulado[k].variante,acumulado[k].cantidad,acumulado[k].unidad);
+}
+
+function validarStockItem_(item,variante,cantidad,unidad) {
+  item = String(item || '').trim();
+  if (!item || normalizar(item) === 'agua') return;
+  var solicitado = aBase(positivo_(cantidad,'Cantidad debe ser mayor que cero.'),unidad).v;
+  var base = aBase(1,unidad).u;
+  var items = getInventario().items || [];
+  var disponible = 0;
+  for (var i=0;i<items.length;i++) {
+    if (normalizar(items[i].Item) === normalizar(item) && normalizar(items[i].Variante) === normalizar(variante || '')) {
+      var conv = aBase(items[i].Stock,items[i].Unidad);
+      if (conv.u === base) disponible += conv.v;
+    }
+  }
+  if (solicitado > disponible + 0.000001) throw new Error('Inventario insuficiente de ' + item + ': disponible ' + redondear_(disponible,3) + ' ' + base + ', solicitado ' + redondear_(solicitado,3) + ' ' + base + '.');
+}
+
+function positivo_(valor,mensaje) {
+  var n = Number(String(valor == null ? '' : valor).replace(',','.'));
+  if (!isFinite(n) || n <= 0) throw new Error(mensaje || 'Cantidad inválida.');
+  return n;
+}
+
+function redondear_(n,d) { var p=Math.pow(10,d||2); return Math.round((Number(n)+Number.EPSILON)*p)/p; }
+
+function hashFila_(fila) {
+  var bytes=Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256,JSON.stringify(fila),Utilities.Charset.UTF_8);
+  return bytes.map(function(b){return ('0'+((b+256)%256).toString(16)).slice(-2);}).join('');
 }
 
 // Agrega un ítem aprobado a la columna correspondiente de la hoja CATALOGOS
