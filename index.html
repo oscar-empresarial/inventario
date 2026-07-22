@@ -354,6 +354,15 @@
       cursor: pointer;
     }
     .cat-chip.active { background: var(--blue); border-color: var(--blue); color: white; }
+    .rev-toolbar { display:flex; gap:8px; flex-wrap:wrap; margin:12px 0; }
+    .rev-card { border:1px solid var(--line); border-radius:14px; padding:14px; margin-bottom:10px; background:#fff; }
+    .rev-card.alta { border-left:5px solid #dc2626; }
+    .rev-card.media { border-left:5px solid #f59e0b; }
+    .rev-head { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; }
+    .rev-actions { display:flex; gap:6px; flex-wrap:wrap; margin-top:10px; }
+    .rev-actions button { padding:8px 11px; font-size:12px; }
+    .rev-meta { color:var(--gray); font-size:12px; line-height:1.5; margin-top:3px; }
+    .rev-empty { padding:24px; text-align:center; color:var(--gray); background:#f8fafc; border-radius:14px; }
 
     /* ===== Popup bienvenida y tour ===== */
     .overlay {
@@ -842,8 +851,17 @@
     <!-- ================= VISTA REVISAR ================= -->
     <section id="view-revisar" class="view hidden">
       <div class="card">
-        <div class="section-title">Ítems nuevos por revisar</div>
-        <div class="hint" style="margin-bottom:12px">Aquí llegan los ítems que el equipo creó como nuevos. Al APROBAR, el ítem se agrega solo a la hoja CATALOGOS y queda oficial (con fecha, hora y quién aprobó). Si en realidad era un ítem que ya existía con otro nombre, usa RELACIONAR: el inventario se traslada al ítem correcto.</div>
+        <div class="section-title">Centro de revisiones</div>
+        <div class="hint">Aquí se corrigen nombres y se controlan los ítems creados por el equipo. Ninguna acción borra historial: aprobar oficializa; renombrar corrige; relacionar une un duplicado con un ítem existente; archivar solo cierra solicitudes sin saldo.</div>
+        <div class="rev-toolbar">
+          <button type="button" class="cat-chip active" data-rev-tab="pendientes">Pendientes</button>
+          <button type="button" class="cat-chip" data-rev-tab="historial">Historial</button>
+          <button type="button" class="cat-chip" data-rev-tab="conciliacion">Conciliación</button>
+          <button type="button" class="btn-morado" id="btnRevCorregir" style="padding:8px 13px">Corregir nombre existente</button>
+          <button type="button" class="btn-azul" id="btnRevRecargar" style="margin-left:auto;padding:8px 13px">Actualizar</button>
+        </div>
+        <input id="revBuscar" placeholder="Buscar por nombre, categoría o creador…" style="margin-bottom:10px" />
+        <div id="revResumen" style="margin-bottom:10px"></div>
         <div id="revEstado" class="status"></div>
         <div id="pendItems"></div>
       </div>
@@ -956,6 +974,43 @@
     </div>
   </div>
 
+  <!-- Decisión controlada del Centro de revisiones -->
+  <div id="modalRevision" class="overlay">
+    <div class="tour-caja">
+      <h3 id="revModalTitulo">Resolver revisión</h3>
+      <p id="revModalItem" class="hint" style="margin-bottom:12px"></p>
+      <div id="revOrigenWrap" style="margin-bottom:10px;display:none">
+        <label for="revOrigen">Nombre actual</label>
+        <input id="revOrigen" list="revDestinos" placeholder="Selecciona el ítem que tiene el nombre incorrecto" />
+      </div>
+      <div id="revCategoriaWrap" style="margin-bottom:10px;display:none">
+        <label for="revCategoria">Categoría</label>
+        <select id="revCategoria"><option value="">Seleccionar…</option><option>Materia prima</option><option>Fragancia</option><option>Color</option><option>Envase</option><option>Accesorio</option><option>Etiqueta</option><option>Material palo</option><option>Producto terminado</option></select>
+      </div>
+      <div id="revDestinoWrap" style="margin-bottom:10px;display:none">
+        <label for="revDestino">Nombre destino</label>
+        <input id="revDestino" list="revDestinos" placeholder="Escribe o selecciona el nombre correcto" />
+        <datalist id="revDestinos"></datalist>
+      </div>
+      <div style="margin-bottom:10px">
+        <label for="revResponsable">Responsable de la decisión</label>
+        <select id="revResponsable">
+          <option value="">Seleccionar…</option>
+          <option>Carlos</option><option>Neyder</option><option>Leandro</option>
+        </select>
+      </div>
+      <div style="margin-bottom:10px">
+        <label for="revMotivo">Motivo / soporte</label>
+        <textarea id="revMotivo" rows="3" placeholder="Ej: Se verificó factura y empaque; el nombre oficial es…"></textarea>
+      </div>
+      <div class="hint" id="revModalAviso" style="margin-bottom:12px"></div>
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button type="button" class="clear" id="btnRevCancelar" style="padding:10px 14px">Cancelar</button>
+        <button type="button" class="btn-verde" id="btnRevGuardar">Confirmar decisión</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Tour explicativo -->
   <div id="tour" class="overlay">
     <div class="tour-caja">
@@ -984,6 +1039,9 @@
       catalogos: {},
       inventario: null,
       registros: null,
+      revision: null,
+      conciliacion: null,
+      revTab: 'pendientes',
       omitirStock: false
     };
 
@@ -1087,6 +1145,18 @@
       document.getElementById('invBuscar').addEventListener('input', renderInventario);
       document.getElementById('btnMovCargar').addEventListener('click', loadMovimientos);
       document.getElementById('movBuscar').addEventListener('input', renderMovimientos);
+      document.getElementById('revBuscar').addEventListener('input', renderRevision);
+      document.getElementById('btnRevRecargar').addEventListener('click', function () { loadRevision(true); });
+      document.getElementById('btnRevCorregir').addEventListener('click', abrirCorreccionMaestro);
+      document.querySelectorAll('[data-rev-tab]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          state.revTab = btn.dataset.revTab;
+          renderRevision();
+          if (state.revTab === 'conciliacion' && !state.conciliacion) loadConciliacion();
+        });
+      });
+      document.getElementById('btnRevCancelar').addEventListener('click', cerrarModalRevision);
+      document.getElementById('btnRevGuardar').addEventListener('click', guardarRevision);
       document.getElementById('btnExpMateria').addEventListener('click', function () { exportar('materia'); });
       document.getElementById('btnExpTodo').addEventListener('click', function () { exportar('todo'); });
       document.getElementById('btnExpInventario').addEventListener('click', function () { exportar('inventario'); });
@@ -2207,9 +2277,21 @@
       btn.disabled = true;
       btn.textContent = 'Guardando...';
       try {
-        for (var i = 0; i < records.length; i++) {
-          await enviarRegistro(records[i]);
+        var envioPrincipal=records[0];
+        if (records.length>1) {
+          var requestCompuesto=nuevoRequestId();
+          var hijos=records.map(function(r) {
+            var copia=Object.assign({},r);
+            delete copia.RequestId;
+            if (normalize(copia.TipoRegistro).indexOf('novedad/correccion')===0 && !copia.ReferenciaOriginal) copia.ReferenciaOriginal=requestCompuesto;
+            return copia;
+          });
+          envioPrincipal={
+            RequestId:requestCompuesto,FechaCliente:new Date().toISOString(),TipoRegistro:'Movimiento compuesto',
+            Responsable:records[0].Responsable,Movimientos:hijos,Origen:'GitHub Pages'
+          };
         }
+        await enviarRegistro(envioPrincipal);
         var resumen = records.map(function (r) {
           return r.TipoRegistro + (r.Item ? ' · ' + r.Item : (r.TamborID ? ' · ' + r.TamborID : ''));
         }).join(' | ');
@@ -2298,10 +2380,7 @@
       });
       if (tab === 'inventario') loadInventario(); // siempre se actualiza al abrir
       if (tab === 'movimientos' && !state.registros) loadMovimientos();
-      if (tab === 'revisar') {
-        if (!state.registros) loadMovimientos();
-        else renderPendientes();
-      }
+      if (tab === 'revisar') loadRevision(false);
     }
 
     // ================== INVENTARIO ==================
@@ -2336,16 +2415,26 @@
       var aviso = document.getElementById('conciliacionEstado');
       jsonp({ action: 'conciliacion' }, function (data) {
         if (!data || data.error || data.ok === false) return;
+        state.conciliacion = data;
         var total = data.resumen ? Number(data.resumen.total || 0) : 0;
         var altos = data.resumen ? Number(data.resumen.altos || 0) : 0;
+        var legacy = data.resumen ? Number(data.resumen.filasLegacy || 0) : 0;
         aviso.style.display = 'block';
         if (!total) {
           aviso.className = 'status ok';
           aviso.textContent = '✔ Conciliación automática: no se detectaron descuadres.';
         } else {
           aviso.className = 'status ' + (altos ? 'err' : 'warn');
-          aviso.textContent = 'Conciliación automática: ' + total + ' hallazgo(s), ' + altos + ' de prioridad alta. Revisa la trazabilidad antes de ajustar inventario.';
+          aviso.innerHTML = '<b>Revisión necesaria:</b> ' + altos + ' caso(s) prioritario(s)' +
+            (legacy ? ' y ' + legacy + ' filas históricas sin auditoría moderna' : '') +
+            '. No se hizo ningún ajuste automático. ' +
+            '<button type="button" id="btnAbrirConciliacion" class="btn-azul" style="padding:6px 10px;margin-left:6px">Ver explicación</button>';
+          document.getElementById('btnAbrirConciliacion').addEventListener('click', function () {
+            state.revTab = 'conciliacion';
+            switchTab('revisar');
+          });
         }
+        if (state.revTab === 'conciliacion') renderRevision();
       }, function () { aviso.style.display = 'none'; }, 15000);
     }
 
@@ -2371,11 +2460,17 @@
       }).filter(function (r) { return r.item; });
     }
     function pickField(obj, wanted) {
-      for (var k in obj) {
-        var nk = normalize(k).replace(/[ _]/g, '');
-        if (wanted.indexOf(nk) >= 0) return obj[k] == null ? '' : obj[k];
+      var vacio = '';
+      for (var i = 0; i < wanted.length; i++) {
+        var buscado = normalize(wanted[i]).replace(/[ _]/g, '');
+        for (var k in obj) {
+          if (normalize(k).replace(/[ _]/g, '') !== buscado) continue;
+          var valor = obj[k] == null ? '' : obj[k];
+          if (String(valor).trim() !== '') return valor;
+          vacio = valor;
+        }
       }
-      return '';
+      return vacio;
     }
     // Semáforo de compras:
     // AGOTADO = 0 · MUY POCO (urgente) = menos del 10% de lo que había · POCO (comprar) = menos de 1/3
@@ -2593,7 +2688,7 @@
         estado.className = 'status';
         estado.textContent = '';
         renderResumenMov();
-        renderPendientes();
+        if (state.revision) renderRevision();
         renderMovimientos();
       }, function () {
         diagnosticarConexion(estado);
@@ -2651,132 +2746,172 @@
     }
 
     // Ítems nuevos pendientes de revisar/aprobar, con trazabilidad de la aprobación
-    function renderPendientes() {
-      var cont = document.getElementById('pendItems');
-      var regs = state.registros || [];
-      if (!regs.length) { cont.innerHTML = ''; return; }
-      var aprobados = {};
-      regs.forEach(function (r) {
-        var t = normalize(campoReg(r, ['tiporegistro', 'tipo']));
-        if (t.indexOf('aprobacion') === 0) {
-          aprobados[normalize(campoReg(r, ['item'])) + '|' + normalize(campoReg(r, ['variante']))] = {
-            fecha: campoReg(r, ['fecha', 'timestamp', 'fechacliente']),
-            por: campoReg(r, ['responsable'])
-          };
+    // Centro de revisiones independiente del filtro de fechas de Movimientos.
+    function loadRevision(forzar) {
+      if (state.revision && !forzar) { renderRevision(); return; }
+      var estado = document.getElementById('revEstado');
+      estado.className = 'status warn';
+      estado.textContent = 'Cargando todas las solicitudes de revisión…';
+      document.getElementById('pendItems').innerHTML = '';
+      jsonp({ action:'revision' }, function(data) {
+        if (!data || data.error || data.ok === false || !data.resumen || !Array.isArray(data.pendientes)) {
+          estado.className = 'status err';
+          estado.textContent = 'Revisiones necesita la versión nueva del Apps Script. Copia Código.gs, guarda y publica una nueva versión de la implementación.' + (data && data.error ? ' Detalle: '+data.error : '');
+          return;
         }
+        state.revision = data;
+        estado.className = 'status';
+        estado.textContent = '';
+        renderRevision();
+        if (!state.conciliacion) loadConciliacion();
+      }, function() { diagnosticarConexion(estado); }, 20000);
+    }
+
+    function fechaRevision(valor) {
+      var f = new Date(valor);
+      return isNaN(f.getTime()) ? (valor || 'Sin fecha legible') : f.toLocaleString('es-CO',{dateStyle:'short',timeStyle:'short'});
+    }
+
+    function renderRevision() {
+      document.querySelectorAll('[data-rev-tab]').forEach(function(btn) {
+        btn.classList.toggle('active',btn.dataset.revTab===state.revTab);
       });
-      var pend = {};
-      regs.forEach(function (r) {
-        if (!/^s/i.test(campoReg(r, ['nuevoitem', 'pendienteaprobacion']))) return;
-        var item = campoReg(r, ['item']);
-        if (!item) return;
-        var variante = campoReg(r, ['variante']);
-        var k = normalize(item) + '|' + normalize(variante);
-        if (!pend[k]) {
-          pend[k] = {
-            item: item, variante: variante,
-            categoria: campoReg(r, ['categoria']),
-            por: campoReg(r, ['responsable']),
-            aprobado: aprobados[k]
-          };
+      var cont=document.getElementById('pendItems');
+      var resumen=document.getElementById('revResumen');
+      var filtro=normalize(valueOf('revBuscar'));
+      var data=state.revision;
+      if (!data) { cont.innerHTML='<div class="rev-empty">Cargando revisiones…</div>'; return; }
+      resumen.innerHTML='<span class="badge nuevo">'+Number(data.resumen.pendientes||0)+' pendientes</span> ' +
+        '<span class="badge ok">'+Number(data.resumen.resueltas||0)+' resueltas</span>';
+      if (state.revTab==='conciliacion') { renderConciliacionRevision(cont,filtro); return; }
+      var rows=(state.revTab==='historial' ? data.historial : data.pendientes) || [];
+      if (filtro) rows=rows.filter(function(p){return normalize([p.item,p.variante,p.categoria,p.creadoPor,JSON.stringify(p.resolucion||{})].join(' ')).includes(filtro);});
+      if (!rows.length) {
+        cont.innerHTML='<div class="rev-empty">'+(state.revTab==='pendientes'?'No hay ítems pendientes con este filtro.':'No hay decisiones en el historial con este filtro.')+'</div>';
+        return;
+      }
+      cont.innerHTML=rows.map(function(p,idx) {
+        var nombre=p.item+(p.variante?' · '+p.variante:'');
+        var meta=(p.categoria||'Sin categoría')+' · creado por '+(p.creadoPor||'Sin responsable')+' · '+fechaRevision(p.primeraFecha);
+        if (state.revTab==='historial') {
+          var r=p.resolucion||{};
+          return '<div class="rev-card"><div class="rev-head"><div><b>'+escapeHtml(nombre)+'</b><div class="rev-meta">'+escapeHtml(meta)+'</div></div>'+
+            '<span class="badge ok">'+escapeHtml(r.estado||'RESUELTO')+'</span></div><div class="rev-meta">'+escapeHtml((r.motivo||'')+' · '+fechaRevision(r.fecha)+(r.por?' · por '+r.por:''))+'</div></div>';
         }
+        var saldo=Number(p.saldo||0);
+        return '<div class="rev-card"><div class="rev-head"><div><b>'+escapeHtml(nombre)+'</b><div class="rev-meta">'+escapeHtml(meta)+'</div></div>'+
+          '<span class="badge '+(saldo<0?'out':(saldo>0?'tipo':'ok'))+'">Saldo: '+escapeHtml(String(saldo))+'</span></div>'+
+          '<div class="rev-meta">Referencia: '+escapeHtml(p.referencia||'Sin referencia')+' · '+Number(p.movimientos||1)+' movimiento(s)</div>'+
+          '<div class="rev-actions">'+
+          '<button type="button" class="btn-morado" data-rev-idx="'+idx+'" data-rev-action="APROBAR">Aprobar nombre</button>'+
+          '<button type="button" class="btn-azul" data-rev-idx="'+idx+'" data-rev-action="RENOMBRAR">Corregir nombre</button>'+
+          '<button type="button" class="btn-azul" data-rev-idx="'+idx+'" data-rev-action="RELACIONAR">Relacionar duplicado</button>'+
+          '<button type="button" class="clear" data-rev-idx="'+idx+'" data-rev-action="ARCHIVAR" '+(Math.abs(saldo)>0.000001?'disabled title="Tiene saldo; primero renómbralo o relaciónalo"':'')+'>Archivar</button>'+
+          '</div></div>';
+      }).join('');
+      cont.querySelectorAll('[data-rev-action]').forEach(function(btn) {
+        btn.addEventListener('click',function(){abrirModalRevision(rows[Number(btn.dataset.revIdx)],btn.dataset.revAction);});
       });
-      var keys = Object.keys(pend);
-      if (!keys.length) { cont.innerHTML = ''; return; }
-      cont.innerHTML = '<div class="section-title" style="font-size:15px;margin:4px 0 8px">Ítems nuevos por revisar</div>' +
-        keys.map(function (k) {
-          var p = pend[k];
-          var nombre = p.item + (p.variante ? ' · ' + p.variante : '');
-          if (p.aprobado) {
-            var f = new Date(p.aprobado.fecha);
-            var ftxt = isNaN(f.getTime()) ? String(p.aprobado.fecha) : f.toLocaleString('es-CO', { dateStyle: 'short', timeStyle: 'short' });
-            return '<div class="inv-row"><div><div class="inv-nombre">' + escapeHtml(nombre) + '</div>' +
-              '<div class="inv-cat">' + escapeHtml((p.categoria || '') + ' · creado por ' + (p.por || '?')) + '</div></div>' +
-              '<span class="badge ok">✓ Aprobado ' + escapeHtml(ftxt + (p.aprobado.por ? ' por ' + p.aprobado.por : '')) + '</span></div>';
-          }
-          return '<div class="inv-row"><div><div class="inv-nombre">' + escapeHtml(nombre) + '</div>' +
-            '<div class="inv-cat">' + escapeHtml((p.categoria || '') + ' · creado por ' + (p.por || '?')) + '</div></div>' +
-            '<div style="display:flex;gap:6px;flex-wrap:wrap">' +
-            '<button type="button" class="btn-morado" data-k="' + escapeHtml(k) + '" data-accion="aprobar" style="padding:8px 12px;font-size:12px">Aprobar</button>' +
-            '<button type="button" class="btn-azul" data-k="' + escapeHtml(k) + '" data-accion="editar" style="padding:8px 12px;font-size:12px">Editar nombre</button>' +
-            '<button type="button" class="btn-azul" data-k="' + escapeHtml(k) + '" data-accion="relacionar" style="padding:8px 12px;font-size:12px">Relacionar</button>' +
-            '<button type="button" class="mp-quitar" data-k="' + escapeHtml(k) + '" data-accion="eliminar" style="padding:8px 12px;font-size:12px">Eliminar</button>' +
-            '</div></div>';
-        }).join('');
-      cont.querySelectorAll('button[data-k]').forEach(function (btn) {
-        btn.addEventListener('click', function () {
-          var p = pend[btn.dataset.k];
-          var accion = btn.dataset.accion;
-          var nombreP = p.item + (p.variante ? ' · ' + p.variante : '');
-          var destinoRel = '';
-          var nuevoNombre = '';
-          if (accion === 'relacionar') {
-            destinoRel = window.prompt('“' + nombreP + '” ya existía con otro nombre.\n\nEscribe el nombre EXACTO del ítem correcto (el inventario se trasladará allá):');
-            if (!destinoRel) return;
-          }
-          if (accion === 'editar') {
-            nuevoNombre = window.prompt('Nombre corregido para “' + nombreP + '”:');
-            if (!nuevoNombre) return;
-          }
-          if (accion === 'eliminar' && !window.confirm('¿Eliminar “' + nombreP + '” del inventario? El historial NO se borra, solo desaparece del inventario.')) return;
-          var quien = window.prompt('¿Quién hace este cambio? Escribe tu nombre:');
-          if (!quien) return;
-          btn.disabled = true;
-          btn.textContent = '...';
-          function recAprob(itemA, motivoA, obsA) {
-            return {
-              FechaCliente: new Date().toISOString(),
-              TipoRegistro: 'Aprobación item',
-              Responsable: cap(quien),
-              Categoria: p.categoria,
-              Item: itemA,
-              Variante: p.variante,
-              NuevoItem: 'No',
-              PendienteAprobacion: 'No',
-              Observacion: obsA,
-              Origen: 'GitHub Pages',
-              Motivo: motivoA
-            };
-          }
-          var recs = [];
-          if (accion === 'aprobar') {
-            recs.push(recAprob(p.item, 'Aprobado', 'Ítem aprobado desde la app y agregado al catálogo.'));
-          } else if (accion === 'relacionar') {
-            recs.push(recAprob(p.item, 'Relacionado', 'Relacionado con el ítem existente: ' + cap(destinoRel) + '.'));
-            recs.push({
-              FechaCliente: new Date().toISOString(), TipoRegistro: 'Traslado inventario',
-              Responsable: cap(quien), Categoria: p.categoria, Item: p.item, Variante: p.variante,
-              Producto: cap(destinoRel), Observacion: 'Traslado por relación de ítem duplicado.', Origen: 'GitHub Pages'
-            });
-          } else if (accion === 'editar') {
-            recs.push(recAprob(p.item, 'Renombrado', 'Renombrado a: ' + cap(nuevoNombre) + '.'));
-            recs.push({
-              FechaCliente: new Date().toISOString(), TipoRegistro: 'Traslado inventario',
-              Responsable: cap(quien), Categoria: p.categoria, Item: p.item, Variante: p.variante,
-              Producto: cap(nuevoNombre), Observacion: 'Corrección de nombre.', Origen: 'GitHub Pages'
-            });
-            recs.push(recAprob(cap(nuevoNombre), 'Aprobado', 'Nombre corregido y agregado al catálogo.'));
-          } else if (accion === 'eliminar') {
-            recs.push(recAprob(p.item, 'Eliminado', 'Ítem eliminado del inventario desde la app.'));
-            recs.push({
-              FechaCliente: new Date().toISOString(), TipoRegistro: 'Eliminar item',
-              Responsable: cap(quien), Categoria: p.categoria, Item: p.item, Variante: p.variante,
-              Observacion: 'Eliminación aprobada desde Revisar.', Origen: 'GitHub Pages'
-            });
-          }
-          var envio = Promise.resolve();
-          recs.forEach(function (rc) {
-            envio = envio.then(function () { return enviarRegistro(rc); });
-          });
-          envio.then(function () {
-            recs[0].Fecha = new Date().toISOString();
-            state.registros.push(recs[0]);
-            state.inventario = null;
-            renderPendientes();
-            explosionBurbujas();
-          });
+    }
+
+    function renderConciliacionRevision(cont,filtro) {
+      var data=state.conciliacion;
+      if (!data) { cont.innerHTML='<div class="rev-empty">Calculando la conciliación…</div>'; return; }
+      var res=data.resumen||{};
+      var rows=(data.hallazgos||[]).slice();
+      if (filtro) rows=rows.filter(function(h){return normalize(JSON.stringify(h)).includes(filtro);});
+      var explicacion='<div class="status '+(Number(res.altos||0)?'err':'warn')+'" style="display:block">'+
+        '<b>'+Number(res.altos||0)+' caso(s) prioritario(s).</b> '+Number(res.filasLegacy||0)+' filas antiguas se agrupan como historial incompleto, no como ajustes. El sistema no modificó ninguna existencia.</div>';
+      var cards=rows.map(function(h) {
+        var titulo={
+          'BOM-INCOMPLETA':'Fórmula histórica incompleta',
+          'SALDO-TAMBOR-NEGATIVO':'Salidas mayores a lo preparado',
+          'INVENTARIO-NEGATIVO':'Inventario negativo',
+          'TANQUE-REUTILIZADO':'Tanque físico reutilizado',
+          'AUDITORIA-LEGACY':'Historial anterior a la auditoría',
+          'VOLUMEN-HISTORICO-INCOMPLETO':'Volumen histórico sin explicar',
+          'RENDIMIENTO-IMPOSIBLE':'Volumen inconsistente'
+        }[h.codigo] || h.codigo;
+        return '<div class="rev-card '+(h.prioridad==='Alta'?'alta':'media')+'"><div class="rev-head"><div><b>'+escapeHtml(titulo)+'</b><div class="rev-meta">'+escapeHtml(h.entidad||'')+'</div></div>'+
+          '<span class="badge '+(h.prioridad==='Alta'?'out':'low')+'">'+escapeHtml(h.prioridad||'')+'</span></div>'+
+          '<div class="rev-meta">'+escapeHtml(h.detalle||'')+(h.esperado!==undefined?' · Esperado: '+escapeHtml(String(h.esperado))+' · Registrado: '+escapeHtml(String(h.real)):'')+'</div></div>';
+      }).join('');
+      cont.innerHTML=explicacion+(cards||'<div class="rev-empty">No hay hallazgos con este filtro.</div>');
+    }
+
+    function abrirModalRevision(item,accion) {
+      if (!item) return;
+      state.revSeleccion={item:item,accion:accion};
+      var etiquetas={APROBAR:'Aprobar nombre oficial',RENOMBRAR:'Corregir nombre',RELACIONAR:'Relacionar con un ítem existente',ARCHIVAR:'Archivar solicitud sin saldo'};
+      document.getElementById('revModalTitulo').textContent=etiquetas[accion]||'Resolver revisión';
+      document.getElementById('revModalItem').textContent=item.item+(item.variante?' · '+item.variante:'')+' · saldo '+Number(item.saldo||0)+' · referencia '+item.referencia;
+      document.getElementById('revOrigenWrap').style.display='none';
+      document.getElementById('revCategoriaWrap').style.display='none';
+      document.getElementById('revDestinoWrap').style.display=(accion==='RENOMBRAR'||accion==='RELACIONAR')?'block':'none';
+      document.getElementById('revDestino').value='';
+      document.getElementById('revMotivo').value='';
+      document.getElementById('revResponsable').value='';
+      document.getElementById('revDestinos').innerHTML=getItemOptions().map(function(x){return '<option value="'+escapeHtml(x)+'"></option>';}).join('');
+      document.getElementById('revModalAviso').textContent=accion==='RELACIONAR' ? 'Se trasladará todo el saldo al ítem oficial seleccionado, en la misma operación.' :
+        (accion==='RENOMBRAR' ? 'Se conservará el historial y el saldo pasará al nombre corregido.' :
+        (accion==='ARCHIVAR' ? 'Solo cierra la solicitud; no borra movimientos ni inventario.' : 'El nombre quedará disponible como ítem oficial.'));
+      document.getElementById('modalRevision').classList.add('visible');
+    }
+
+    function abrirCorreccionMaestro() {
+      state.revSeleccion={manual:true,accion:'RENOMBRAR'};
+      document.getElementById('revModalTitulo').textContent='Corregir nombre existente';
+      document.getElementById('revModalItem').textContent='Selecciona el nombre actual y escribe el nombre oficial corregido. El saldo y el historial se conservarán.';
+      document.getElementById('revOrigenWrap').style.display='block';
+      document.getElementById('revCategoriaWrap').style.display='block';
+      document.getElementById('revDestinoWrap').style.display='block';
+      document.getElementById('revOrigen').value=''; document.getElementById('revDestino').value='';
+      document.getElementById('revCategoria').value=''; document.getElementById('revResponsable').value=''; document.getElementById('revMotivo').value='';
+      document.getElementById('revDestinos').innerHTML=getItemOptions().map(function(x){return '<option value="'+escapeHtml(x)+'"></option>';}).join('');
+      document.getElementById('revModalAviso').textContent='Si el nombre correcto ya existe, usa “Relacionar duplicado” desde una solicitud pendiente; esta opción crea un nombre oficial nuevo.';
+      document.getElementById('modalRevision').classList.add('visible');
+    }
+
+    function cerrarModalRevision() {
+      document.getElementById('modalRevision').classList.remove('visible');
+      state.revSeleccion=null;
+    }
+
+    async function guardarRevision() {
+      var sel=state.revSeleccion;
+      if (!sel) return;
+      var destino=valueOf('revDestino');
+      var responsable=valueOf('revResponsable');
+      var motivo=valueOf('revMotivo');
+      var origen=sel.manual ? valueOf('revOrigen') : sel.item.item;
+      var categoria=sel.manual ? valueOf('revCategoria') : sel.item.categoria;
+      var variante=sel.manual ? '' : (sel.item.variante||'');
+      var referencia=sel.manual ? ('CATALOGO-'+Date.now()) : sel.item.referencia;
+      if (sel.manual && !origen) { document.getElementById('revOrigen').focus(); return; }
+      if (sel.manual && !categoria) { document.getElementById('revCategoria').focus(); return; }
+      if (!responsable) { document.getElementById('revResponsable').focus(); return; }
+      if (motivo.length<8) { document.getElementById('revMotivo').focus(); return; }
+      if ((sel.accion==='RENOMBRAR'||sel.accion==='RELACIONAR')&&!destino) { document.getElementById('revDestino').focus(); return; }
+      var btn=document.getElementById('btnRevGuardar');
+      btn.disabled=true; btn.textContent='Guardando…';
+      try {
+        await enviarRegistro({
+          RequestId:nuevoRequestId(),FechaCliente:new Date().toISOString(),TipoRegistro:'Revisión item',
+          Accion:sel.accion,Responsable:responsable,Categoria:categoria,Item:origen,
+          Variante:variante,ItemDestino:destino,Motivo:motivo,OrigenManual:!!sel.manual,
+          ReferenciaOriginal:referencia,Origen:'GitHub Pages · Centro de revisiones'
         });
-      });
+        cerrarModalRevision();
+        state.revision=null; state.inventario=null; state.registrosTodos=null;
+        var estado=document.getElementById('revEstado');
+        estado.className='status ok'; estado.textContent='Decisión guardada y confirmada. El historial se conservó completo.';
+        loadRevision(true);
+      } catch(err) {
+        var estadoError=document.getElementById('revEstado');
+        estadoError.className='status err'; estadoError.textContent=String(err.message||err);
+      } finally {
+        btn.disabled=false; btn.textContent='Confirmar decisión';
+      }
     }
 
     function campoReg(r, nombres) {

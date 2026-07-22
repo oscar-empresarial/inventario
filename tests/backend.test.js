@@ -25,6 +25,8 @@ const context = {
 };
 vm.createContext(context);
 vm.runInContext(source, context);
+const getInventarioReal = context.getInventario;
+context.leerMinimos = () => ({});
 context.getInventario = () => ({
   items: [
     { Item: 'Fragancia', Variante: '', Stock: 50, Unidad: 'L' },
@@ -79,3 +81,65 @@ test('corrección exige motivo y referencia original', () => {
   assert.doesNotThrow(() => context.validarMovimientoPost_({ Motivo: 'Faltante / merma', ReferenciaOriginal: 'OP-1' }, 'Novedad/Corrección'));
 });
 test('hash de auditoría es estable y completo', () => assert.match(context.hashFila_(['a', 1]), /^[a-f0-9]{64}$/));
+
+test('campo prioriza LitrosPreparados sobre una Cantidad vacía', () => {
+  assert.equal(context.campo({ Cantidad: '', LitrosPreparados: 120 }, ['litrospreparados', 'cantidad']), 120);
+});
+
+test('un empaque del tanque 1 nunca descuenta el tanque 12', () => {
+  context.leerRegistros = () => ({ filas: [
+    { TipoRegistro: 'Preparar tambor', TamborID: '1', Producto: 'Otro', LitrosPreparados: 18 },
+    { TipoRegistro: 'Preparar tambor', TamborID: '12', Producto: 'Ecovarsol', LitrosPreparados: 120 },
+    { TipoRegistro: 'Empacar desde tambor', TamborID: '1', Presentacion: 'Pimpina 20 L', CantidadPresentacion: 1 },
+    { TipoRegistro: 'Empacar desde tambor', TamborID: '1', Presentacion: 'Galón 4 L', CantidadPresentacion: 15 }
+  ] });
+  const inv = getInventarioReal();
+  assert.equal(inv.tambores.find(t => t.id === '12').disponible, 120);
+  assert.equal(inv.tambores.find(t => t.id === '1').disponible, 0);
+});
+
+test('un empaque del tanque 2 nunca descuenta el tanque 28', () => {
+  context.leerRegistros = () => ({ filas: [
+    { TipoRegistro: 'Preparar tambor', TamborID: '2', Producto: 'A', LitrosPreparados: 20 },
+    { TipoRegistro: 'Preparar tambor', TamborID: '28', Producto: 'B', LitrosPreparados: 20 },
+    { TipoRegistro: 'Empacar desde tambor', TamborID: '2', Presentacion: 'Galón 4 L', CantidadPresentacion: 5 }
+  ] });
+  const inv = getInventarioReal();
+  assert.equal(inv.tambores.find(t => t.id === '2').disponible, 0);
+  assert.equal(inv.tambores.find(t => t.id === '28').disponible, 20);
+});
+
+test('conciliación agrupa auditoría legacy y conserva los litros preparados', () => {
+  context.leerRegistros = () => ({ filas: [
+    { TipoRegistro: 'Preparar tambor', TamborID: '1', LitrosPreparados: 18, Cantidad: '', Producto: 'A' },
+    { TipoRegistro: 'Empacar desde tambor', TamborID: '1', Presentacion: 'Pimpina 20 L', CantidadPresentacion: 1 }
+  ] });
+  const result = context.getConciliacion();
+  const saldo = result.hallazgos.find(h => h.codigo === 'SALDO-TAMBOR-NEGATIVO');
+  assert.equal(saldo.esperado, 18);
+  assert.equal(saldo.real, 20);
+  assert.equal(result.hallazgos.filter(h => h.codigo === 'AUDITORIA-LEGACY').length, 1);
+  assert.equal(result.resumen.filasLegacy, 2);
+});
+
+test('solo el flujo controlado puede resolver revisiones', () => {
+  assert.throws(() => context.validarTipoPermitido_('Eliminar item'), /no permitido/);
+  assert.throws(() => context.validarTipoPermitido_('Aprobación item'), /no permitido/);
+  assert.doesNotThrow(() => context.validarTipoPermitido_('Revisión item'));
+  const rows = context.construirRevisionItem_({
+    Accion: 'APROBAR', Categoria: 'Envase', Item: 'Tarro 2 L',
+    Motivo: 'Validado contra factura', ReferenciaOriginal: 'OP-ORIGEN'
+  }, 'Carlos');
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].TipoRegistro, 'Aprobación item');
+});
+
+test('permite agrupar líneas relacionadas en una sola operación', () => {
+  assert.doesNotThrow(() => context.validarTipoPermitido_('Movimiento compuesto'));
+  const rows = context.expandirProduccion_(prod([
+    { Item: 'Agua', Cantidad: 119, Unidad: 'L' },
+    { Item: 'Fragancia', Cantidad: 1, Unidad: 'L' }
+  ]), 'Carlos', 'OP-TEST');
+  assert.equal(rows.length, 3);
+  assert.equal(rows[1].TipoRegistro, 'Consumo materia prima');
+});

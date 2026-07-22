@@ -28,3 +28,22 @@ test('la interfaz expone conciliación automática', () => {
   assert.match(source, /action:\s*'conciliacion'/);
   assert.match(html, /id="conciliacionEstado"/);
 });
+
+test('Revisiones carga una cola global independiente del rango de movimientos', () => {
+  assert.match(source, /action:\s*'revision'/);
+  assert.match(source, /if \(tab === 'revisar'\) loadRevision\(false\)/);
+  assert.match(html, /Centro de revisiones/);
+});
+
+test('aprobar, renombrar y relacionar viajan como una sola decisión atómica', () => {
+  assert.match(source, /TipoRegistro:'Revisión item'/);
+  assert.match(source, /Accion:sel\.accion/);
+  assert.match(html, /id="revMotivo"/);
+  assert.match(html, /id="revResponsable"/);
+});
+
+test('formularios con varias líneas se envían como una operación compuesta', () => {
+  assert.match(source, /TipoRegistro:'Movimiento compuesto'/);
+  assert.match(source, /Movimientos:hijos/);
+  assert.doesNotMatch(source, /for \(var i = 0; i < records\.length; i\+\+\)\s*\{\s*await enviarRegistro/);
+});
