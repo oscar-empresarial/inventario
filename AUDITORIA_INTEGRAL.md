@@ -52,9 +52,24 @@ Las decisiones se guardan en una sola operación, con referencia, motivo, respon
 - Resumen por código de hallazgo y lotes prioritarios.
 - Catálogos reconstruidos también desde el libro de movimientos aprobado, para que el registro contable siga siendo la fuente principal.
 
+## Incidente posterior: tambor que no apareció guardado
+
+La inspección del 22 de julio de 2026 comprobó que el intento informado no llegó a `REGISTRO_APP` ni quedó como rechazo en `_API_ERRORES`. La causa operativa principal era una incompatibilidad activa: GitHub Pages servía la interfaz nueva mientras la URL pública de Apps Script continuaba en una versión anterior sin identificador de versión.
+
+Se reforzó el protocolo de persistencia:
+
+- la interfaz comprueba la versión exacta del servidor antes de transmitir;
+- una versión antigua o desconocida bloquea el envío con explicación visible;
+- cada payload queda temporalmente en una bandeja local antes del POST;
+- el mismo `RequestId` se consulta durante la ventana de espera del lock;
+- un resultado ambiguo conserva el payload y el identificador para recuperación;
+- al recargar, la app consulta los pendientes sin reenviarlos automáticamente;
+- un `RequestHash` distingue el reintento idéntico de reutilizar el mismo identificador con datos diferentes;
+- un fallo de transporte nunca se presenta automáticamente como “no guardado”.
+
 ## Pruebas ejecutadas
 
-Se ejecutaron 26 pruebas automáticas, todas aprobadas. Cubren, entre otros escenarios:
+Se ejecutaron 42 pruebas automáticas, todas aprobadas. La batería adversarial se repitió 20 veces sin fallos y cubre, entre otros escenarios:
 
 - incidente de 120 L con solo 1 L de componente;
 - fórmulas completas e incompletas;
@@ -64,6 +79,13 @@ Se ejecutaron 26 pruebas automáticas, todas aprobadas. Cubren, entre otros esce
 - colisiones de tanques `1`/`12` y `2`/`28`;
 - agrupación de auditoría histórica;
 - operaciones compuestas sin escrituras parciales;
+- fallos inyectados antes y después de la escritura atómica;
+- pérdida de respuesta y confirmación tardía por `RequestId`;
+- bloqueo de frontend con backend incompatible;
+- conservación y limpieza de la bandeja de operaciones pendientes;
+- conflicto por reutilizar un `RequestId` con payload distinto;
+- `NaN`, infinito, cero, negativos y cadenas numéricas parciales;
+- 80 lotes generados de manera determinista dentro de los límites permitidos;
 - decisiones controladas de revisión;
 - referencias obligatorias para correcciones;
 - sintaxis y contratos entre interfaz y servidor.
@@ -115,4 +137,3 @@ Referencias:
 3. Verificar que `?action=ping` o la respuesta raíz indique `2.2.0-revisiones`.
 4. Publicar `index.html` en GitHub Pages.
 5. Abrir Revisiones, confirmar que carga la cola global y ejecutar primero revisiones documentales; no ajustar existencias basándose solo en una alerta.
-

@@ -1033,6 +1033,8 @@
     // implementaciones", copia la URL que termina en /exec y pégala aquí.
     // ============================================================
     var APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxAWuJv7dfjjyobgnEc9yIMJN7uqSnOu9vM80G88JCiDV-0oam5DebiEeqG0FLgcN8I/exec';
+    var BACKEND_VERSION_REQUERIDA = '2.2.0-revisiones';
+    var OPERACIONES_PENDIENTES_KEY = 'fullcompany_operaciones_pendientes_v1';
 
     var state = {
       selectedType: '',
@@ -1042,7 +1044,9 @@
       revision: null,
       conciliacion: null,
       revTab: 'pendientes',
-      omitirStock: false
+      omitirStock: false,
+      backendVersion: '',
+      backendCompatible: false
     };
 
     var BOM_PALOS_JS = {
@@ -1197,6 +1201,11 @@
       llenarDatalistMp();
       agregarFilaMp();
       loadInitJsonp();
+      verificarBackendCompatible(true).then(function () {
+        recuperarOperacionesPendientes();
+      }).catch(function (errBackend) {
+        showStatus('Envíos bloqueados: ' + (errBackend.message || String(errBackend)), 'err');
+      });
       jsonp({ action: 'inventario' }, function (data) {
         if (data && !data.error) state.inventario = parseInventario(data);
       }, function () {});
@@ -1264,6 +1273,104 @@
     function cleanupJsonp(callbackName) {
       try { delete window[callbackName]; } catch (err) { window[callbackName] = undefined; }
       document.querySelectorAll('script[src*="' + callbackName + '"]').forEach(function (el) { el.remove(); });
+    }
+
+    function validarVersionBackend(data) {
+      var version = String((data && data.version) || '').trim();
+      state.backendVersion = version;
+      state.backendCompatible = version === BACKEND_VERSION_REQUERIDA;
+      if (!state.backendCompatible) {
+        var encontrada = version || 'sin versión informada';
+        var err = new Error('La app no envió datos porque el backend activo es ' + encontrada + ' y se requiere ' + BACKEND_VERSION_REQUERIDA + '. Publica la versión correcta de Apps Script antes de continuar.');
+        err.backendIncompatible = true;
+        throw err;
+      }
+      return data;
+    }
+
+    function verificarBackendCompatible(forzar) {
+      if (!forzar && state.backendCompatible && state.backendVersion === BACKEND_VERSION_REQUERIDA) {
+        return Promise.resolve(state.backendVersion);
+      }
+      return new Promise(function (resolve, reject) {
+        jsonp({ action: 'ping' }, function (data) {
+          try {
+            validarVersionBackend(data);
+            resolve(state.backendVersion);
+          } catch (err) {
+            reject(err);
+          }
+        }, function () {
+          var err = new Error('No se pudo verificar la versión del Apps Script. No se envió ningún dato. Revisa la conexión y vuelve a intentar.');
+          err.backendIncompatible = true;
+          reject(err);
+        }, 10000);
+      });
+    }
+
+    function leerOperacionesPendientes() {
+      try {
+        var datos = JSON.parse(lsGet(OPERACIONES_PENDIENTES_KEY) || '{}');
+        return datos && typeof datos === 'object' && !Array.isArray(datos) ? datos : {};
+      } catch (err) {
+        return {};
+      }
+    }
+
+    function guardarOperacionPendiente(record) {
+      var pendientes = leerOperacionesPendientes();
+      pendientes[record.RequestId] = {
+        requestId: record.RequestId,
+        fecha: new Date().toISOString(),
+        payload: record
+      };
+      lsSet(OPERACIONES_PENDIENTES_KEY, JSON.stringify(pendientes));
+    }
+
+    function quitarOperacionPendiente(requestId) {
+      var pendientes = leerOperacionesPendientes();
+      if (!pendientes[requestId]) return;
+      delete pendientes[requestId];
+      lsSet(OPERACIONES_PENDIENTES_KEY, JSON.stringify(pendientes));
+    }
+
+    async function recuperarOperacionesPendientes() {
+      var pendientes = leerOperacionesPendientes();
+      var ids = Object.keys(pendientes);
+      if (!ids.length) return;
+      try {
+        await verificarBackendCompatible(false);
+      } catch (errVersion) {
+        showStatus(errVersion.message || String(errVersion), 'err');
+        return;
+      }
+      var confirmadas = 0;
+      var rechazadas = [];
+      var sinResolver = [];
+      for (var i = 0; i < ids.length; i++) {
+        try {
+          var estado = await consultarOperacion(ids[i]);
+          validarVersionBackend(estado);
+          if (!estado || !estado.encontrada) {
+            sinResolver.push(ids[i]);
+          } else {
+            quitarOperacionPendiente(ids[i]);
+            if (estado.ok) confirmadas++;
+            else rechazadas.push(String(estado.error || 'Movimiento rechazado.').replace(/^Error:\s*/i, ''));
+          }
+        } catch (errConsulta) {
+          sinResolver.push(ids[i]);
+        }
+      }
+      if (sinResolver.length) {
+        showStatus('Hay ' + sinResolver.length + ' operación(es) cuyo resultado aún no se pudo confirmar. No las repitas. Identificador: ' + sinResolver.join(', '), 'warn');
+      } else if (rechazadas.length) {
+        showStatus('Una operación anterior fue rechazada y no se guardó: ' + rechazadas[0], 'err');
+      } else if (confirmadas) {
+        showStatus('Se confirmó después de reconectar que ' + confirmadas + ' operación(es) anterior(es) sí quedaron guardadas. No las repitas.', 'ok');
+        state.inventario = null;
+        state.registros = null;
+      }
     }
     var MSG_SCRIPT = 'No se pudo conectar con el Apps Script. Lo más probable: la URL de la implementación cambió. ' +
       'En Apps Script abre "Implementar → Administrar implementaciones", copia la URL que termina en /exec ' +
@@ -2096,8 +2203,10 @@
       return s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
     }
     function esNumero(v, permitirCero) {
-      var n = parseFloat(v);
-      if (isNaN(n)) return false;
+      var texto = String(v == null ? '' : v).trim().replace(',', '.');
+      if (!texto) return false;
+      var n = Number(texto);
+      if (!isFinite(n)) return false;
       return permitirCero ? n >= 0 : n > 0;
     }
     function hasSize(text) {
@@ -2223,21 +2332,44 @@
 
     async function enviarRegistro(record) {
       if (!record.RequestId) record.RequestId = nuevoRequestId();
-      await fetch(APPS_SCRIPT_URL, {
-        method: 'POST',
-        mode: 'no-cors',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify(record)
-      });
-      for (var intento = 0; intento < 6; intento++) {
-        await esperar(500 + intento * 350);
-        var estado = await consultarOperacion(record.RequestId);
+      await globalThis.verificarBackendCompatible(true);
+      guardarOperacionPendiente(record);
+      var errorTransporte = null;
+      try {
+        await fetch(APPS_SCRIPT_URL, {
+          method: 'POST',
+          mode: 'no-cors',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify(record)
+        });
+      } catch (err) {
+        // Un fallo de red al recibir la respuesta no demuestra que el POST no
+        // llegara. Apps Script pudo haber confirmado la escritura, por eso se
+        // consulta siempre el mismo RequestId antes de informar el resultado.
+        errorTransporte = err;
+      }
+      // El backend puede esperar hasta 30 s por LockService. Si el navegador
+      // perdió la respuesta del POST, la confirmación debe cubrir esa ventana.
+      for (var intento = 0; intento < 12; intento++) {
+        await esperar(Math.min(500 + intento * 500, 4000));
+        var estado;
+        try {
+          estado = await consultarOperacion(record.RequestId);
+        } catch (errConsulta) {
+          // La confirmación también puede fallar transitoriamente. Se agotan
+          // los intentos antes de declarar el resultado como desconocido.
+          errorTransporte = errorTransporte || errConsulta;
+          continue;
+        }
         if (estado && estado.encontrada) {
+          quitarOperacionPendiente(record.RequestId);
           if (!estado.ok) throw new Error(String(estado.error || 'El servidor rechazó el movimiento.').replace(/^Error:\s*/i, ''));
           return estado;
         }
       }
-      throw new Error('El servidor recibió el envío, pero no fue posible confirmar que quedara guardado. No repitas el movimiento todavía; revisa la conexión o la trazabilidad.');
+      var errorConfirmacion = new Error('No fue posible confirmar si el servidor guardó el movimiento. No lo repitas: conserva esta pantalla y revisa la trazabilidad con el identificador ' + record.RequestId + '.');
+      errorConfirmacion.resultadoDesconocido = true;
+      throw errorConfirmacion;
     }
 
     async function submitForm(e) {
@@ -2308,7 +2440,8 @@
           if (data && !data.error) state.inventario = parseInventario(data);
         }, function () {});
       } catch (err) {
-        showStatus('No se guardó: ' + (err.message || String(err)), 'err');
+        var prefijo = err.backendIncompatible ? 'Envío bloqueado: ' : (err.resultadoDesconocido ? 'Estado pendiente de confirmar: ' : 'No se guardó: ');
+        showStatus(prefijo + (err.message || String(err)), 'err');
       } finally {
         btn.disabled = false;
         btn.textContent = 'Guardar registro';

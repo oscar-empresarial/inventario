@@ -109,7 +109,7 @@ function doGet(e) {
 // respuesta de un POST hecho desde GitHub Pages.
 function getEstadoOperacion_(requestId) {
   requestId = String(requestId || '').trim();
-  if (requestId.length < 8) return {ok:false,encontrada:false,error:'RequestId inválido.'};
+  if (requestId.length < 8) return {ok:false,encontrada:false,version:API_VERSION,error:'RequestId inválido.'};
   var libro = getHoja();
   var hoja = libro.getSheetByName(HOJA_REGISTRO);
   if (hoja && hoja.getLastRow() > 1) {
@@ -126,7 +126,7 @@ function getEstadoOperacion_(requestId) {
           if (iOp >= 0 && !operacionId) operacionId = String(fila[iOp] || '');
         }
       });
-      if (movimientos) return {ok:true,encontrada:true,requestId:requestId,operacionId:operacionId,movimientos:movimientos};
+      if (movimientos) return {ok:true,encontrada:true,version:API_VERSION,requestId:requestId,operacionId:operacionId,movimientos:movimientos};
     }
   }
   var errores = libro.getSheetByName('_API_ERRORES');
@@ -134,11 +134,11 @@ function getEstadoOperacion_(requestId) {
     var datos = errores.getRange(2,1,errores.getLastRow()-1,errores.getLastColumn()).getDisplayValues();
     for (var i=datos.length-1;i>=0;i--) {
       if (String(datos[i][0] || '').trim() === requestId) {
-        return {ok:false,encontrada:true,requestId:requestId,error:String(datos[i][2] || 'Movimiento rechazado.')};
+        return {ok:false,encontrada:true,version:API_VERSION,requestId:requestId,error:String(datos[i][2] || 'Movimiento rechazado.')};
       }
     }
   }
-  return {ok:false,encontrada:false,requestId:requestId,mensaje:'La operación aún no aparece.'};
+  return {ok:false,encontrada:false,version:API_VERSION,requestId:requestId,mensaje:'La operación aún no aparece.'};
 }
 
 function salida(data, callback) {
@@ -771,19 +771,28 @@ function leerMinimos() {
 // ================== GUARDAR (POST) ==================
 function doPost(e) {
   var lock = LockService.getScriptLock();
+  var payload;
+  var requestId = '';
   try {
+    payload = JSON.parse(e.postData.contents);
+    requestId = String(payload.RequestId || payload.requestId || payload.IdempotencyKey || payload.idempotencyKey || '').trim();
+    if (requestId.length < 8) throw new Error('Falta RequestId. Actualiza la app: cada envío debe llevar una clave de idempotencia.');
     if (!lock.tryLock(30000)) throw new Error('Hay otro movimiento en proceso. Espera unos segundos e intenta nuevamente.');
-    var payload = JSON.parse(e.postData.contents);
     var hoja = getHoja().getSheetByName(HOJA_REGISTRO);
     if (!hoja) throw new Error('No existe la pestaña ' + HOJA_REGISTRO);
     var encabezados = asegurarColumnasAuditoria_(hoja);
-    var requestId = String(payload.RequestId || payload.requestId || payload.IdempotencyKey || payload.idempotencyKey || '').trim();
-    if (requestId.length < 8) throw new Error('Falta RequestId. Actualiza la app: cada envío debe llevar una clave de idempotencia.');
+    var requestHash = hashPayload_(payload);
     var idxRequest = indiceEncabezado_(encabezados, 'IdempotencyKey');
+    var idxRequestHash = indiceEncabezado_(encabezados, 'RequestHash');
     if (idxRequest >= 0 && hoja.getLastRow() > 1) {
-      var anteriores = hoja.getRange(2, idxRequest + 1, hoja.getLastRow() - 1, 1).getDisplayValues();
+      var anteriores = hoja.getRange(2, 1, hoja.getLastRow() - 1, encabezados.length).getDisplayValues();
       for (var a = 0; a < anteriores.length; a++) {
-        if (String(anteriores[a][0]).trim() === requestId) return salida({ok:true,duplicado:true,mensaje:'La operación ya estaba guardada; no se duplicó.'});
+        if (String(anteriores[a][idxRequest] || '').trim() !== requestId) continue;
+        var hashAnterior = idxRequestHash >= 0 ? String(anteriores[a][idxRequestHash] || '').trim() : '';
+        if (hashAnterior && hashAnterior !== requestHash) {
+          throw new Error('Conflicto de idempotencia: el RequestId ya fue usado con un payload distinto. No se guardó el segundo movimiento.');
+        }
+        return salida({ok:true,duplicado:true,mensaje:'La operación ya estaba guardada; no se duplicó.'});
       }
     }
 
@@ -822,6 +831,7 @@ function doPost(e) {
     var filas = filasPayload.map(function (p, i) {
       return filaDesdePayload_(encabezados, p, {
         fecha:ahora, usuario:usuario, operacionId:operacionId, requestId:requestId,
+        requestHash:requestHash,
         movimientoId:operacionId + '-' + ('0' + (i + 1)).slice(-2),
         estadoMovimiento:'ACTIVO', versionBOM:normalizar(p.TipoRegistro||'').indexOf('preparar tambor') === 0 ? 'MANUAL-v1' : ''
       });
@@ -864,7 +874,7 @@ function registrarErrorPost_(payload, requestId, err) {
 
 function asegurarColumnasAuditoria_(hoja) {
   var encabezados = hoja.getRange(1,1,1,Math.max(hoja.getLastColumn(),1)).getValues()[0].map(String);
-  ['OperacionID','IdempotencyKey','EstadoMovimiento','FechaServidor','Usuario','VersionBOM','HashIntegridad','DestinoTambor'].forEach(function (nombre) {
+  ['OperacionID','IdempotencyKey','RequestHash','EstadoMovimiento','FechaServidor','Usuario','VersionBOM','HashIntegridad','DestinoTambor'].forEach(function (nombre) {
     if (indiceEncabezado_(encabezados,nombre) < 0) {
       encabezados.push(nombre);
       hoja.getRange(1,encabezados.length).setValue(nombre);
@@ -885,6 +895,7 @@ function filaDesdePayload_(encabezados, payload, meta) {
   campos.operacionid = meta.operacionId;
   if (!campos.id) campos.id = meta.movimientoId;
   campos.idempotencykey = meta.requestId;
+  campos.requesthash = meta.requestHash;
   campos.estadomovimiento = meta.estadoMovimiento;
   campos.fechaservidor = meta.fecha;
   campos.usuario = meta.usuario;
@@ -1157,6 +1168,26 @@ function redondear_(n,d) { var p=Math.pow(10,d||2); return Math.round((Number(n)
 function hashFila_(fila) {
   var bytes=Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256,JSON.stringify(fila),Utilities.Charset.UTF_8);
   return bytes.map(function(b){return ('0'+((b+256)%256).toString(16)).slice(-2);}).join('');
+}
+
+// La huella permite distinguir un reintento idéntico de la reutilización
+// accidental (o maliciosa) del mismo RequestId con otro movimiento.
+function hashPayload_(payload) {
+  return hashFila_([serializarEstable_(payload)]);
+}
+
+function serializarEstable_(valor) {
+  if (valor === null) return 'null';
+  if (Array.isArray(valor)) return '[' + valor.map(serializarEstable_).join(',') + ']';
+  if (typeof valor === 'object') {
+    var partes=[];
+    Object.keys(valor).sort().forEach(function(k) {
+      if (valor[k] === undefined) return;
+      partes.push(JSON.stringify(k)+':'+serializarEstable_(valor[k]));
+    });
+    return '{'+partes.join(',')+'}';
+  }
+  return JSON.stringify(valor);
 }
 
 // Agrega un ítem aprobado a la columna correspondiente de la hoja CATALOGOS
