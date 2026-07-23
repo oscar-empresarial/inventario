@@ -1,0 +1,31 @@
+{
+  "apiUrl": "https://script.google.com/macros/s/AKfycbxAWuJv7dfjjyobgnEc9yIMJN7uqSnOu9vM80G88JCiDV-0oam5DebiEeqG0FLgcN8I/exec",
+  "requiredBackendVersion": "2.2.0-revisiones",
+  "allowedOperators": [
+    "Carlos",
+    "Neyder"
+  ],
+  "sharedWorkstation": true,
+  "bomAuditStartDate": "2026-07-22T00:00:00-05:00",
+  "bomTolerancePercent": 15,
+  "bomHighDeviationPercent": 50,
+  "recentActivityHours": 72,
+  "recordsFrom": "2020-01-01",
+  "policy": {
+    "readOnly": true,
+    "neverBlock": true,
+    "neverAutoAdjust": true,
+    "neverAutoApprove": true
+  },
+  "productAliases": {
+    "alcohol al 70%": "Alcohol 70%",
+    "ecovarsol 120 lt": "Ecovarsol",
+    "deterfull preparado": "Deterfull"
+  },
+  "componentAliases": {
+    "acido sulfonico": "Ácido Sulfónico",
+    "sulfonico": "Ácido Sulfónico",
+    "genalpol": "Genapol",
+    "tea (duplicado)": "TEA"
+  }
+}

@@ -1,0 +1,1358 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-07-23T17:01:06.920Z",
+  "policy": {
+    "authoritativeForBlocking": false,
+    "notes": "Extracción inicial para alertas. Validar cada receta y definir mermas antes de usar como control obligatorio."
+  },
+  "source": {
+    "path": "G:\\Mi unidad\\Drive Full Company\\Precios\\Costos Marca Sorprendente.xlsx",
+    "sha256": "23329fbef9c9cfb0f231ee2103e32e4ba63d60de358e1c48c9adc5d6712a24fe"
+  },
+  "boms": [
+    {
+      "product": "Nuevo multiusos",
+      "title": "Nuevo Multiusos 110 Litros",
+      "target": {
+        "quantity": 110,
+        "unit": "L"
+      },
+      "components": [
+        {
+          "item": "Soda Caustica",
+          "quantity": 2728,
+          "unit": "g"
+        },
+        {
+          "item": "Texapon puro",
+          "quantity": 2.75,
+          "unit": "kg"
+        },
+        {
+          "item": "Sulfonico",
+          "quantity": 20.9,
+          "unit": "L"
+        },
+        {
+          "item": "Sal",
+          "quantity": 1.43,
+          "unit": "kg"
+        },
+        {
+          "item": "Urea",
+          "quantity": 1.518,
+          "unit": "kg"
+        },
+        {
+          "item": "Formol",
+          "quantity": 1000,
+          "unit": "mL"
+        },
+        {
+          "item": "Fragancia",
+          "quantity": 440,
+          "unit": "mL"
+        },
+        {
+          "item": "Agua",
+          "quantity": 85.8,
+          "unit": "L"
+        }
+      ],
+      "status": "PROVISIONAL_PENDIENTE_VALIDACION",
+      "source": {
+        "workbook": "Costos Marca Sorprendente.xlsx",
+        "sheet": "Nuevo multiusos",
+        "range": "A1:E25"
+      }
+    },
+    {
+      "product": "Detergente Polvo",
+      "title": "Detergente en polvo",
+      "target": null,
+      "components": [
+        {
+          "item": "Carbonato de Sodio",
+          "quantity": 297.5,
+          "unit": "g"
+        },
+        {
+          "item": "Sulfato de Sodio",
+          "quantity": 35,
+          "unit": "g"
+        },
+        {
+          "item": "FosfatoTrisodico",
+          "quantity": 45,
+          "unit": "g"
+        },
+        {
+          "item": "Sulfonico",
+          "quantity": 80,
+          "unit": "mL"
+        },
+        {
+          "item": "Metasilicato de sodio",
+          "quantity": 5,
+          "unit": "g"
+        },
+        {
+          "item": "CMC",
+          "quantity": 75,
+          "unit": "g"
+        },
+        {
+          "item": "Agua",
+          "quantity": 35,
+          "unit": "mL"
+        }
+      ],
+      "status": "PROVISIONAL_PENDIENTE_VALIDACION",
+      "source": {
+        "workbook": "Costos Marca Sorprendente.xlsx",
+        "sheet": "Detergente Polvo",
+        "range": "A1:E25"
+      }
+    },
+    {
+      "product": "After-Shave",
+      "title": "After Shave Litro",
+      "target": null,
+      "components": [
+        {
+          "item": "Fragancia Bambú",
+          "quantity": 10,
+          "unit": "mL"
+        },
+        {
+          "item": "Glicerina",
+          "quantity": 60,
+          "unit": "mL"
+        },
+        {
+          "item": "Alcohol 96%",
+          "quantity": 500,
+          "unit": "mL"
+        },
+        {
+          "item": "Menta",
+          "quantity": 25,
+          "unit": "mL"
+        },
+        {
+          "item": "Genapol",
+          "quantity": 250,
+          "unit": "mL"
+        },
+        {
+          "item": "Agua",
+          "quantity": 105,
+          "unit": "mL"
+        }
+      ],
+      "status": "PROVISIONAL_PENDIENTE_VALIDACION",
+      "source": {
+        "workbook": "Costos Marca Sorprendente.xlsx",
+        "sheet": "After-Shave",
+        "range": "A1:E25"
+      }
+    },
+    {
+      "product": "Aceite para masaje",
+      "title": "Aceite de masajes 19 lt",
+      "target": {
+        "quantity": 19,
+        "unit": "L"
+      },
+      "components": [
+        {
+          "item": "Aceite mineral USP",
+          "quantity": 19,
+          "unit": "L"
+        },
+        {
+          "item": "Fragancia",
+          "quantity": 30,
+          "unit": "mL"
+        },
+        {
+          "item": "Color",
+          "quantity": 20,
+          "unit": "mL"
+        }
+      ],
+      "status": "PROVISIONAL_PENDIENTE_VALIDACION",
+      "source": {
+        "workbook": "Costos Marca Sorprendente.xlsx",
+        "sheet": "Aceite para masaje",
+        "range": "A1:E25"
+      }
+    },
+    {
+      "product": "Alcohol 70%",
+      "title": "Alcohol al 70% 110 Litros",
+      "target": {
+        "quantity": 110,
+        "unit": "L"
+      },
+      "components": [
+        {
+          "item": "Alcohol 96%",
+          "quantity": 54,
+          "unit": "L"
+        },
+        {
+          "item": "Agua",
+          "quantity": 56,
+          "unit": "L"
+        }
+      ],
+      "status": "PROVISIONAL_PENDIENTE_VALIDACION",
+      "source": {
+        "workbook": "Costos Marca Sorprendente.xlsx",
+        "sheet": "Alcohol 70%",
+        "range": "A1:E25"
+      }
+    },
+    {
+      "product": "Alcohol 96%",
+      "title": "Alcohol al 96% 4 Litros",
+      "target": {
+        "quantity": 4,
+        "unit": "L"
+      },
+      "components": [
+        {
+          "item": "Alcohol 96%",
+          "quantity": 3.2,
+          "unit": "L"
+        },
+        {
+          "item": "Agua",
+          "quantity": 600,
+          "unit": "mL"
+        }
+      ],
+      "status": "PROVISIONAL_PENDIENTE_VALIDACION",
+      "source": {
+        "workbook": "Costos Marca Sorprendente.xlsx",
+        "sheet": "Alcohol 96%",
+        "range": "A1:E25"
+      }
+    },
+    {
+      "product": "Agua de Rosas",
+      "title": "Agua de rosas",
+      "target": null,
+      "components": [
+        {
+          "item": "Fragancia Flores",
+          "quantity": 10,
+          "unit": "mL"
+        },
+        {
+          "item": "Glicerina",
+          "quantity": 60,
+          "unit": "mL"
+        },
+        {
+          "item": "Alcohol 96%",
+          "quantity": 500,
+          "unit": "mL"
+        },
+        {
+          "item": "Menta",
+          "quantity": 25,
+          "unit": "mL"
+        },
+        {
+          "item": "Genapol",
+          "quantity": 250,
+          "unit": "mL"
+        },
+        {
+          "item": "Agua",
+          "quantity": 105,
+          "unit": "mL"
+        }
+      ],
+      "status": "PROVISIONAL_PENDIENTE_VALIDACION",
+      "source": {
+        "workbook": "Costos Marca Sorprendente.xlsx",
+        "sheet": "Agua de Rosas",
+        "range": "A1:E25"
+      }
+    },
+    {
+      "product": "Ambientador",
+      "title": "Ambientador 120lt",
+      "target": {
+        "quantity": 120,
+        "unit": "L"
+      },
+      "components": [
+        {
+          "item": "CMC CHINO",
+          "quantity": 250,
+          "unit": "g"
+        },
+        {
+          "item": "Formol",
+          "quantity": 40,
+          "unit": "mL"
+        },
+        {
+          "item": "Fragancia",
+          "quantity": 1500,
+          "unit": "mL"
+        },
+        {
+          "item": "Genapol",
+          "quantity": 450,
+          "unit": "mL"
+        }
+      ],
+      "status": "PROVISIONAL_PENDIENTE_VALIDACION",
+      "source": {
+        "workbook": "Costos Marca Sorprendente.xlsx",
+        "sheet": "Ambientador",
+        "range": "A1:E25"
+      }
+    },
+    {
+      "product": "Ambientador Spray",
+      "title": "Spray Ambientador 1,000ml",
+      "target": null,
+      "components": [
+        {
+          "item": "Agua",
+          "quantity": 100,
+          "unit": "mL"
+        },
+        {
+          "item": "Alcohol 70%",
+          "quantity": 870,
+          "unit": "mL"
+        },
+        {
+          "item": "Fragancia",
+          "quantity": 30,
+          "unit": "mL"
+        }
+      ],
+      "status": "PROVISIONAL_PENDIENTE_VALIDACION",
+      "source": {
+        "workbook": "Costos Marca Sorprendente.xlsx",
+        "sheet": "Ambientador Spray",
+        "range": "A1:E25"
+      }
+    },
+    {
+      "product": "Blanqueador",
+      "title": "Blanqueador 120 lt",
+      "target": {
+        "quantity": 120,
+        "unit": "L"
+      },
+      "components": [
+        {
+          "item": "Hipoclorito 13%",
+          "quantity": 20,
+          "unit": "L"
+        },
+        {
+          "item": "Soda Líquida",
+          "quantity": 1,
+          "unit": "L"
+        },
+        {
+          "item": "Fosfato Trisodico",
+          "quantity": 1000,
+          "unit": "kl"
+        },
+        {
+          "item": "Agua",
+          "quantity": 99,
+          "unit": "L"
+        }
+      ],
+      "status": "PROVISIONAL_PENDIENTE_VALIDACION",
+      "source": {
+        "workbook": "Costos Marca Sorprendente.xlsx",
+        "sheet": "Blanqueador",
+        "range": "A1:E25"
+      }
+    },
+    {
+      "product": "ClorDeter",
+      "title": "ClorDeter 120lt",
+      "target": {
+        "quantity": 120,
+        "unit": "L"
+      },
+      "components": [
+        {
+          "item": "Hipoclorito 13% Puro",
+          "quantity": 30,
+          "unit": "L"
+        },
+        {
+          "item": "Base Genapol ClorDeter",
+          "quantity": 30,
+          "unit": "L"
+        },
+        {
+          "item": "Soda Líquida",
+          "quantity": 1.2,
+          "unit": "L"
+        },
+        {
+          "item": "Agua",
+          "quantity": 60,
+          "unit": "L"
+        }
+      ],
+      "status": "PROVISIONAL_PENDIENTE_VALIDACION",
+      "source": {
+        "workbook": "Costos Marca Sorprendente.xlsx",
+        "sheet": "ClorDeter",
+        "range": "A1:E25"
+      }
+    },
+    {
+      "product": "Cloruro de Benzalconio",
+      "title": "Cloruro de Benzalconio 20Lt",
+      "target": {
+        "quantity": 20,
+        "unit": "L"
+      },
+      "components": [
+        {
+          "item": "Cloruro de Benzalconio 50%",
+          "quantity": 6.8,
+          "unit": "mL"
+        },
+        {
+          "item": "Formol",
+          "quantity": 30,
+          "unit": "mL"
+        },
+        {
+          "item": "Agua",
+          "quantity": 16,
+          "unit": "L"
+        }
+      ],
+      "status": "PROVISIONAL_PENDIENTE_VALIDACION",
+      "source": {
+        "workbook": "Costos Marca Sorprendente.xlsx",
+        "sheet": "Cloruro de Benzalconio",
+        "range": "A1:E25"
+      }
+    },
+    {
+      "product": "Creolina",
+      "title": "Creolina 20Lt",
+      "target": {
+        "quantity": 20,
+        "unit": "L"
+      },
+      "components": [
+        {
+          "item": "Creolina 3*1",
+          "quantity": 4,
+          "unit": "L"
+        },
+        {
+          "item": "Agua",
+          "quantity": 16,
+          "unit": "L"
+        }
+      ],
+      "status": "PROVISIONAL_PENDIENTE_VALIDACION",
+      "source": {
+        "workbook": "Costos Marca Sorprendente.xlsx",
+        "sheet": "Creolina",
+        "range": "A1:E25"
+      }
+    },
+    {
+      "product": "Desmanchador brecha",
+      "title": "DESMANCHADOR BRECHA — Receta 120 litros",
+      "target": {
+        "quantity": 120,
+        "unit": "L"
+      },
+      "components": [
+        {
+          "item": "Peroxido 50%",
+          "quantity": 8,
+          "unit": "L"
+        },
+        {
+          "item": "Acido Nítrico 55%",
+          "quantity": 27,
+          "unit": "L"
+        },
+        {
+          "item": "Genapol",
+          "quantity": 1,
+          "unit": "L"
+        },
+        {
+          "item": "Agua",
+          "quantity": 84,
+          "unit": "L"
+        }
+      ],
+      "status": "PROVISIONAL_PENDIENTE_VALIDACION",
+      "source": {
+        "workbook": "Costos Marca Sorprendente.xlsx",
+        "sheet": "Desmanchador brecha",
+        "range": "A1:E25"
+      }
+    },
+    {
+      "product": "Deterfull",
+      "title": "DETERFULL — Receta 110 litros",
+      "target": {
+        "quantity": 110,
+        "unit": "L"
+      },
+      "components": [
+        {
+          "item": "Acido Sulfonico",
+          "quantity": 18,
+          "unit": "L"
+        },
+        {
+          "item": "Soda Líquida",
+          "quantity": 1,
+          "unit": "L"
+        },
+        {
+          "item": "Agua",
+          "quantity": 91,
+          "unit": "L"
+        }
+      ],
+      "status": "PROVISIONAL_PENDIENTE_VALIDACION",
+      "source": {
+        "workbook": "Costos Marca Sorprendente.xlsx",
+        "sheet": "Deterfull",
+        "range": "A1:E25"
+      }
+    },
+    {
+      "product": "Extermin",
+      "title": "Extermin 8lt",
+      "target": {
+        "quantity": 8,
+        "unit": "L"
+      },
+      "components": [
+        {
+          "item": "Deltaforce",
+          "quantity": 120,
+          "unit": "mL"
+        },
+        {
+          "item": "Agua",
+          "quantity": 8,
+          "unit": "L"
+        }
+      ],
+      "status": "PROVISIONAL_PENDIENTE_VALIDACION",
+      "source": {
+        "workbook": "Costos Marca Sorprendente.xlsx",
+        "sheet": "Extermin",
+        "range": "A1:E25"
+      }
+    },
+    {
+      "product": "Ecovarsol",
+      "title": "Ecovarsol 120 lt",
+      "target": {
+        "quantity": 120,
+        "unit": "L"
+      },
+      "components": [
+        {
+          "item": "Formol",
+          "quantity": 40,
+          "unit": "mL"
+        },
+        {
+          "item": "Carbopol",
+          "quantity": 300,
+          "unit": "g"
+        },
+        {
+          "item": "Fragancia",
+          "quantity": 1,
+          "unit": "L"
+        },
+        {
+          "item": "TEA (duplicado)",
+          "quantity": 200,
+          "unit": "mL"
+        },
+        {
+          "item": "Exxol",
+          "quantity": 5000,
+          "unit": "mL"
+        },
+        {
+          "item": "Agua",
+          "quantity": 110,
+          "unit": "L"
+        }
+      ],
+      "status": "PROVISIONAL_PENDIENTE_VALIDACION",
+      "source": {
+        "workbook": "Costos Marca Sorprendente.xlsx",
+        "sheet": "Ecovarsol",
+        "range": "A1:E25"
+      }
+    },
+    {
+      "product": "Full Desincrustante",
+      "title": "Desincrustante 20 lt",
+      "target": {
+        "quantity": 20,
+        "unit": "L"
+      },
+      "components": [
+        {
+          "item": "Soda Caustica Escamas",
+          "quantity": 1400,
+          "unit": "g"
+        }
+      ],
+      "status": "PROVISIONAL_PENDIENTE_VALIDACION",
+      "source": {
+        "workbook": "Costos Marca Sorprendente.xlsx",
+        "sheet": "Full Desincrustante",
+        "range": "A1:E25"
+      }
+    },
+    {
+      "product": "Gel Antibacterial",
+      "title": "Gel Antibacterial 160 litros",
+      "target": {
+        "quantity": 160,
+        "unit": "L"
+      },
+      "components": [
+        {
+          "item": "Glicerina",
+          "quantity": 800,
+          "unit": "mL"
+        },
+        {
+          "item": "Agua",
+          "quantity": 98,
+          "unit": "mL"
+        },
+        {
+          "item": "Carbopol",
+          "quantity": 480,
+          "unit": "g"
+        },
+        {
+          "item": "Tea",
+          "quantity": 320,
+          "unit": "mL"
+        },
+        {
+          "item": "Formol",
+          "quantity": 800,
+          "unit": "mL"
+        },
+        {
+          "item": "Alcohol 96% Puro",
+          "quantity": 60,
+          "unit": "L"
+        }
+      ],
+      "status": "PROVISIONAL_PENDIENTE_VALIDACION",
+      "source": {
+        "workbook": "Costos Marca Sorprendente.xlsx",
+        "sheet": "Gel Antibacterial",
+        "range": "A1:E25"
+      }
+    },
+    {
+      "product": "Glicerina",
+      "title": "GLICERINA USP — Receta 20 litros",
+      "target": {
+        "quantity": 20,
+        "unit": "L"
+      },
+      "components": [
+        {
+          "item": "Glicerina",
+          "quantity": 10000,
+          "unit": "mL"
+        },
+        {
+          "item": "CMC Adriana",
+          "quantity": 7000,
+          "unit": "mL"
+        },
+        {
+          "item": "Agua",
+          "quantity": 3,
+          "unit": "L"
+        },
+        {
+          "item": "Litro",
+          "quantity": 1,
+          "unit": "und"
+        }
+      ],
+      "status": "PROVISIONAL_PENDIENTE_VALIDACION",
+      "source": {
+        "workbook": "Costos Marca Sorprendente.xlsx",
+        "sheet": "Glicerina",
+        "range": "A1:E25"
+      }
+    },
+    {
+      "product": "Gotero Eliminador",
+      "title": "Gotero eliminador 1,000ml",
+      "target": null,
+      "components": [
+        {
+          "item": "Vinagre",
+          "quantity": 750,
+          "unit": "mL"
+        },
+        {
+          "item": "Alcohol 96%",
+          "quantity": 200,
+          "unit": "mL"
+        },
+        {
+          "item": "Fragancia",
+          "quantity": 50,
+          "unit": "mL"
+        }
+      ],
+      "status": "PROVISIONAL_PENDIENTE_VALIDACION",
+      "source": {
+        "workbook": "Costos Marca Sorprendente.xlsx",
+        "sheet": "Gotero Eliminador",
+        "range": "A1:E25"
+      }
+    },
+    {
+      "product": "Hipoclorito 13%",
+      "title": "HIPOCLORITO 13% — Receta 20 litros",
+      "target": {
+        "quantity": 20,
+        "unit": "L"
+      },
+      "components": [
+        {
+          "item": "Hipoclorito 13%",
+          "quantity": 8,
+          "unit": "L"
+        },
+        {
+          "item": "Soda Líquida",
+          "quantity": 0.5,
+          "unit": "L"
+        },
+        {
+          "item": "Blanqueador",
+          "quantity": 2,
+          "unit": "L"
+        },
+        {
+          "item": "Agua",
+          "quantity": 9.5,
+          "unit": "L"
+        }
+      ],
+      "status": "PROVISIONAL_PENDIENTE_VALIDACION",
+      "source": {
+        "workbook": "Costos Marca Sorprendente.xlsx",
+        "sheet": "Hipoclorito 13%",
+        "range": "A1:E25"
+      }
+    },
+    {
+      "product": "Jabón líquido",
+      "title": "Jabón 120lts",
+      "target": {
+        "quantity": 120,
+        "unit": "L"
+      },
+      "components": [
+        {
+          "item": "CMC CHINO",
+          "quantity": 1000,
+          "unit": "g"
+        },
+        {
+          "item": "Formol",
+          "quantity": 40,
+          "unit": "mL"
+        },
+        {
+          "item": "TEA (duplicado)",
+          "quantity": 200,
+          "unit": "mL"
+        },
+        {
+          "item": "Fragancia",
+          "quantity": 900,
+          "unit": "mL"
+        }
+      ],
+      "status": "PROVISIONAL_PENDIENTE_VALIDACION",
+      "source": {
+        "workbook": "Costos Marca Sorprendente.xlsx",
+        "sheet": "Jabón líquido",
+        "range": "A1:E25"
+      }
+    },
+    {
+      "product": "Jabón Clorhexidina",
+      "title": "Jabón 120lts",
+      "target": {
+        "quantity": 120,
+        "unit": "L"
+      },
+      "components": [
+        {
+          "item": "CMC CHINO",
+          "quantity": 1200,
+          "unit": "g"
+        },
+        {
+          "item": "Formol",
+          "quantity": 40,
+          "unit": "mL"
+        },
+        {
+          "item": "TEA (duplicado)",
+          "quantity": 200,
+          "unit": "mL"
+        },
+        {
+          "item": "Clorhexidina pura",
+          "quantity": 30,
+          "unit": "mL"
+        }
+      ],
+      "status": "PROVISIONAL_PENDIENTE_VALIDACION",
+      "source": {
+        "workbook": "Costos Marca Sorprendente.xlsx",
+        "sheet": "Jabón Clorhexidina",
+        "range": "A1:E25"
+      }
+    },
+    {
+      "product": "Jabón Multiproposito",
+      "title": "Jabón Multiproposito 133LT",
+      "target": {
+        "quantity": 133,
+        "unit": "L"
+      },
+      "components": [
+        {
+          "item": "Deterfull",
+          "quantity": 126,
+          "unit": "L"
+        },
+        {
+          "item": "Cloruro Benzalconio",
+          "quantity": 10,
+          "unit": "mL"
+        },
+        {
+          "item": "Agua",
+          "quantity": 7,
+          "unit": "L"
+        }
+      ],
+      "status": "PROVISIONAL_PENDIENTE_VALIDACION",
+      "source": {
+        "workbook": "Costos Marca Sorprendente.xlsx",
+        "sheet": "Jabón Multiproposito",
+        "range": "A1:E25"
+      }
+    },
+    {
+      "product": "Limpiavidrios",
+      "title": "Limpia Vidrios  110 lt",
+      "target": {
+        "quantity": 110,
+        "unit": "L"
+      },
+      "components": [
+        {
+          "item": "Alcohol 96%",
+          "quantity": 5,
+          "unit": "L"
+        },
+        {
+          "item": "Butylglycol",
+          "quantity": 2.5,
+          "unit": "L"
+        },
+        {
+          "item": "Formol",
+          "quantity": 30,
+          "unit": "Miliitros"
+        },
+        {
+          "item": "Deterfull",
+          "quantity": 700,
+          "unit": "mL"
+        },
+        {
+          "item": "Fragancia",
+          "quantity": 100,
+          "unit": "mL"
+        },
+        {
+          "item": "Agua",
+          "quantity": 100,
+          "unit": "L"
+        }
+      ],
+      "status": "PROVISIONAL_PENDIENTE_VALIDACION",
+      "source": {
+        "workbook": "Costos Marca Sorprendente.xlsx",
+        "sheet": "Limpiavidrios",
+        "range": "A1:E25"
+      }
+    },
+    {
+      "product": "Lavaloza Concentrado",
+      "title": "Lavaloza Concentrado 20lt",
+      "target": {
+        "quantity": 20,
+        "unit": "L"
+      },
+      "components": [
+        {
+          "item": "Deterfull",
+          "quantity": 18,
+          "unit": "L"
+        },
+        {
+          "item": "Fragancia Naranja",
+          "quantity": 250,
+          "unit": "mL"
+        },
+        {
+          "item": "Agua",
+          "quantity": 1,
+          "unit": "L"
+        }
+      ],
+      "status": "PROVISIONAL_PENDIENTE_VALIDACION",
+      "source": {
+        "workbook": "Costos Marca Sorprendente.xlsx",
+        "sheet": "Lavaloza Concentrado",
+        "range": "A1:E25"
+      }
+    },
+    {
+      "product": "Detergente Conven Coco y Multiu",
+      "title": "Detergente convencional COCO & MULTIUSOS — Receta 20 litros",
+      "target": {
+        "quantity": 20,
+        "unit": "L"
+      },
+      "components": [
+        {
+          "item": "Base Multiple",
+          "quantity": 19,
+          "unit": "L"
+        },
+        {
+          "item": "Fragancia",
+          "quantity": 150,
+          "unit": "mL"
+        },
+        {
+          "item": "Color",
+          "quantity": 10,
+          "unit": "mL"
+        }
+      ],
+      "status": "PROVISIONAL_PENDIENTE_VALIDACION",
+      "source": {
+        "workbook": "Costos Marca Sorprendente.xlsx",
+        "sheet": "Detergente Conven Coco y Multiu",
+        "range": "A1:E25"
+      }
+    },
+    {
+      "product": "Limpgrax",
+      "title": "LimpGrax 60 lt",
+      "target": {
+        "quantity": 60,
+        "unit": "L"
+      },
+      "components": [
+        {
+          "item": "Alcohol 96%",
+          "quantity": 4,
+          "unit": "L"
+        },
+        {
+          "item": "Butylglycol",
+          "quantity": 2.5,
+          "unit": "L"
+        },
+        {
+          "item": "Formol",
+          "quantity": 300,
+          "unit": "Militros"
+        },
+        {
+          "item": "Deterfull",
+          "quantity": 400,
+          "unit": "mL"
+        },
+        {
+          "item": "Fragancia",
+          "quantity": 150,
+          "unit": "mL"
+        },
+        {
+          "item": "Agua",
+          "quantity": 52.8,
+          "unit": "L"
+        }
+      ],
+      "status": "PROVISIONAL_PENDIENTE_VALIDACION",
+      "source": {
+        "workbook": "Costos Marca Sorprendente.xlsx",
+        "sheet": "Limpgrax",
+        "range": "A1:E25"
+      }
+    },
+    {
+      "product": "Multiusos",
+      "title": "Detergente multiusos 20LT",
+      "target": {
+        "quantity": 20,
+        "unit": "L"
+      },
+      "components": [
+        {
+          "item": "Deterfull",
+          "quantity": 18,
+          "unit": "L"
+        },
+        {
+          "item": "Fragancia Naranja",
+          "quantity": 250,
+          "unit": "mL"
+        },
+        {
+          "item": "Agua",
+          "quantity": 1,
+          "unit": "L"
+        }
+      ],
+      "status": "PROVISIONAL_PENDIENTE_VALIDACION",
+      "source": {
+        "workbook": "Costos Marca Sorprendente.xlsx",
+        "sheet": "Multiusos",
+        "range": "A1:E25"
+      }
+    },
+    {
+      "product": "Muriatico",
+      "title": "Muriatico 22,8 Litros",
+      "target": {
+        "quantity": 22.8,
+        "unit": "L"
+      },
+      "components": [
+        {
+          "item": "Acido Nítrico 55%",
+          "quantity": 9,
+          "unit": "L"
+        },
+        {
+          "item": "Agua",
+          "quantity": 13.8,
+          "unit": "L"
+        }
+      ],
+      "status": "PROVISIONAL_PENDIENTE_VALIDACION",
+      "source": {
+        "workbook": "Costos Marca Sorprendente.xlsx",
+        "sheet": "Muriatico",
+        "range": "A1:E25"
+      }
+    },
+    {
+      "product": "Nitrico",
+      "title": "NITRICO — Receta 19 litros",
+      "target": {
+        "quantity": 19,
+        "unit": "L"
+      },
+      "components": [
+        {
+          "item": "Acido Nítrico 55%",
+          "quantity": 13,
+          "unit": "L"
+        },
+        {
+          "item": "Agua",
+          "quantity": 6,
+          "unit": "L"
+        }
+      ],
+      "status": "PROVISIONAL_PENDIENTE_VALIDACION",
+      "source": {
+        "workbook": "Costos Marca Sorprendente.xlsx",
+        "sheet": "Nitrico",
+        "range": "A1:E25"
+      }
+    },
+    {
+      "product": "Pac liquido",
+      "title": "Pac Liquido",
+      "target": null,
+      "components": [
+        {
+          "item": "Pac liquido",
+          "quantity": 3.8,
+          "unit": "L"
+        }
+      ],
+      "status": "PROVISIONAL_PENDIENTE_VALIDACION",
+      "source": {
+        "workbook": "Costos Marca Sorprendente.xlsx",
+        "sheet": "Pac liquido",
+        "range": "A1:E25"
+      }
+    },
+    {
+      "product": "Ropa Color",
+      "title": "ROPA COLOR 56 lt",
+      "target": {
+        "quantity": 56,
+        "unit": "L"
+      },
+      "components": [
+        {
+          "item": "Peroxido 50%",
+          "quantity": 8,
+          "unit": "L"
+        },
+        {
+          "item": "Genapol",
+          "quantity": 1,
+          "unit": "L"
+        },
+        {
+          "item": "Formol",
+          "quantity": 30,
+          "unit": "mL"
+        },
+        {
+          "item": "Agua",
+          "quantity": 47,
+          "unit": "L"
+        }
+      ],
+      "status": "PROVISIONAL_PENDIENTE_VALIDACION",
+      "source": {
+        "workbook": "Costos Marca Sorprendente.xlsx",
+        "sheet": "Ropa Color",
+        "range": "A1:E25"
+      }
+    },
+    {
+      "product": "Shampoo con Cera",
+      "title": "Shampoo con Cera — Receta 19 litros",
+      "target": {
+        "quantity": 19,
+        "unit": "L"
+      },
+      "components": [
+        {
+          "item": "Genalpol",
+          "quantity": 7,
+          "unit": "L"
+        },
+        {
+          "item": "Cocoamida",
+          "quantity": 200,
+          "unit": "L"
+        },
+        {
+          "item": "Silicona Pura 60%",
+          "quantity": 300,
+          "unit": "mL"
+        },
+        {
+          "item": "Fragancia",
+          "quantity": 20,
+          "unit": "mL"
+        },
+        {
+          "item": "Agua",
+          "quantity": 11.5,
+          "unit": "L"
+        }
+      ],
+      "status": "PROVISIONAL_PENDIENTE_VALIDACION",
+      "source": {
+        "workbook": "Costos Marca Sorprendente.xlsx",
+        "sheet": "Shampoo con Cera",
+        "range": "A1:E25"
+      }
+    },
+    {
+      "product": "Shampoo Jacuzzi",
+      "title": "Shampoo Jacuzzi— Receta 4 litros",
+      "target": {
+        "quantity": 4,
+        "unit": "L"
+      },
+      "components": [
+        {
+          "item": "Genalpol",
+          "quantity": 4,
+          "unit": "L"
+        },
+        {
+          "item": "Fragancia",
+          "quantity": 20,
+          "unit": "mL"
+        },
+        {
+          "item": "Color",
+          "quantity": 20,
+          "unit": "mL"
+        }
+      ],
+      "status": "PROVISIONAL_PENDIENTE_VALIDACION",
+      "source": {
+        "workbook": "Costos Marca Sorprendente.xlsx",
+        "sheet": "Shampoo Jacuzzi",
+        "range": "A1:E25"
+      }
+    },
+    {
+      "product": "Silicona",
+      "title": "Silicona 4lt",
+      "target": {
+        "quantity": 4,
+        "unit": "L"
+      },
+      "components": [
+        {
+          "item": "Silicona pura",
+          "quantity": 2.5,
+          "unit": "L"
+        },
+        {
+          "item": "CMC Adriana",
+          "quantity": 1.5,
+          "unit": "L"
+        }
+      ],
+      "status": "PROVISIONAL_PENDIENTE_VALIDACION",
+      "source": {
+        "workbook": "Costos Marca Sorprendente.xlsx",
+        "sheet": "Silicona",
+        "range": "A1:E25"
+      }
+    },
+    {
+      "product": "Spray Eliminador",
+      "title": "Spray Ambientador 1,000ml",
+      "target": null,
+      "components": [
+        {
+          "item": "Vinagre",
+          "quantity": 750,
+          "unit": "mL"
+        },
+        {
+          "item": "Alcohol 96%",
+          "quantity": 200,
+          "unit": "mL"
+        },
+        {
+          "item": "Fragancia",
+          "quantity": 50,
+          "unit": "mL"
+        }
+      ],
+      "status": "PROVISIONAL_PENDIENTE_VALIDACION",
+      "source": {
+        "workbook": "Costos Marca Sorprendente.xlsx",
+        "sheet": "Spray Eliminador",
+        "range": "A1:E25"
+      }
+    },
+    {
+      "product": "Suavizante",
+      "title": "Suavizante 20 litros",
+      "target": {
+        "quantity": 20,
+        "unit": "L"
+      },
+      "components": [
+        {
+          "item": "Suavizante",
+          "quantity": 20,
+          "unit": "L"
+        }
+      ],
+      "status": "PROVISIONAL_PENDIENTE_VALIDACION",
+      "source": {
+        "workbook": "Costos Marca Sorprendente.xlsx",
+        "sheet": "Suavizante",
+        "range": "A1:E25"
+      }
+    },
+    {
+      "product": "Vinagre",
+      "title": "Vinagre 110 lt",
+      "target": {
+        "quantity": 110,
+        "unit": "L"
+      },
+      "components": [
+        {
+          "item": "Acetico",
+          "quantity": 3000,
+          "unit": "mL"
+        },
+        {
+          "item": "Sal",
+          "quantity": 100,
+          "unit": "g"
+        },
+        {
+          "item": "Agua",
+          "quantity": 107,
+          "unit": "L"
+        }
+      ],
+      "status": "PROVISIONAL_PENDIENTE_VALIDACION",
+      "source": {
+        "workbook": "Costos Marca Sorprendente.xlsx",
+        "sheet": "Vinagre",
+        "range": "A1:E25"
+      }
+    }
+  ]
+}

@@ -1,0 +1,3 @@
+# Los informes contienen datos operativos y deben quedarse en el computador.
+automation/reports/*
+!automation/reports/.gitkeep

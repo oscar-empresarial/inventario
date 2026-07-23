@@ -1,0 +1,4 @@
+interface:
+  display_name: "Auditar Inventario Full Company"
+  short_description: "Detecta fallos y riesgos del inventario"
+  default_prompt: "Usa $auditar-inventario-full-company para revisar el inventario, detectar errores y explicar qué debe corregirse."
