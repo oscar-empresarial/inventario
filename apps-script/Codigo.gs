@@ -49,6 +49,8 @@ var ID_HOJA = '12ESQ1wlLeLpfbpfCzjFrxip-M4AC58y4iIXbjOO1Rqk';
 var HOJA_REGISTRO = 'REGISTRO_APP';
 var HOJA_CATALOGOS = 'CATALOGOS';
 var HOJA_MINIMOS = 'MINIMOS'; // opcional: columnas Item | Minimo (para alertas de "poco stock")
+// Se conserva la versión compatible para que el despliegue del script y la
+// página web pueda hacerse en cualquier orden sin bloquear los registros.
 var API_VERSION = '2.2.0-revisiones';
 
 // Materiales que se descuentan por cada palo fabricado. Ajusta si tu receta es otra.
@@ -246,7 +248,10 @@ function leerRegistros() {
       obj[encabezados[c]] = (v instanceof Date) ? v.toISOString() : v;
       if (v !== '' && v != null) vacia = false;
     }
-    if (!vacia) filas.push(obj);
+    if (!vacia) {
+      obj._FilaOrigen = f + 1;
+      filas.push(obj);
+    }
   }
   return { encabezados: encabezados, filas: filas };
 }
@@ -381,9 +386,10 @@ function getConciliacion() {
     if (!lotes[id]) lotes[id]={producciones:[],componentes:[],preparado:0,empacado:0,consumidoBase:0};
     return lotes[id];
   }
-  function add(codigo,prioridad,entidad,detalle,esperado,real) {
+  function add(codigo,prioridad,entidad,detalle,esperado,real,meta) {
     var h={codigo:codigo,prioridad:prioridad,entidad:entidad,detalle:detalle,esperado:esperado,real:real};
     if (isFinite(Number(esperado)) && isFinite(Number(real))) h.diferencia=redondear_(Number(real)-Number(esperado),3);
+    if (meta) for (var mk in meta) h[mk]=meta[mk];
     hallazgos.push(h);
   }
   filas.forEach(function(r,indice) {
@@ -418,22 +424,30 @@ function getConciliacion() {
     l.producciones.forEach(function(prod,pos) {
       var p=prod.fila;
       var op=String(campo(p,['operacionid'])||'').trim();
+      var idMovimiento=String(campo(p,['id'])||'').trim();
+      var referenciaProduccion=op||idMovimiento||('FILA-'+(prod.indice+2));
       var siguiente=pos+1<l.producciones.length ? l.producciones[pos+1].indice : Number.MAX_SAFE_INTEGER;
       var comps=l.componentes.filter(function(comp){
         var c=comp.fila;
         var oc=String(campo(c,['operacionid'])||'').trim();
-        if (op) return oc===op;
+        var refCorreccion=String(campo(c,['referenciaoriginal'])||'').trim();
+        if (op) return oc===op || refCorreccion===op || (idMovimiento && refCorreccion===idMovimiento);
         // Para legado sin OperacionID, solo usa componentes contiguos de esa
-        // preparación; nunca reutiliza componentes viejos para otro lote.
-        return !oc && comp.indice>prod.indice && comp.indice<siguiente;
+        // preparación, salvo una corrección que la enlace explícitamente.
+        return (!oc && comp.indice>prod.indice && comp.indice<siguiente) ||
+          refCorreccion===referenciaProduccion;
       }).map(function(comp){return comp.fila;});
       var volumen=0;
       comps.forEach(function(c){var conv=aBase(num(campo(c,['cantidad'])),String(campo(c,['unidad'])||''));if(conv.u==='L')volumen+=conv.v;});
       var litros=num(campo(p,['litrospreparados','cantidad']));
       var etiqueta=[idTambor,String(campo(p,['producto'])||''),String(campo(p,['fecha','fechaservidor','fechacliente'])||'').slice(0,10)].filter(Boolean).join(' · ');
-      if(comps.length<2) add('BOM-INCOMPLETA','Alta',etiqueta,'Preparación histórica con menos de dos componentes trazados. Debe revisarse la fórmula; no se ajusta stock automáticamente.',2,comps.length);
+      var metaProduccion={
+        referencia:referenciaProduccion,tamborId:idTambor,
+        producto:String(campo(p,['producto'])||''),operacionId:op
+      };
+      if(comps.length<2) add('BOM-INCOMPLETA','Alta',etiqueta,'Preparación histórica con menos de dos componentes trazados. Debe revisarse la fórmula; no se ajusta stock automáticamente.',2,comps.length,metaProduccion);
       if(litros>0 && comps.length>=2 && volumen/litros<0.80) {
-        add(op?'RENDIMIENTO-IMPOSIBLE':'VOLUMEN-HISTORICO-INCOMPLETO',op?'Alta':'Media',etiqueta,'Los componentes líquidos registrados no explican el volumen preparado.',litros,volumen);
+        add(op?'RENDIMIENTO-IMPOSIBLE':'VOLUMEN-HISTORICO-INCOMPLETO',op?'Alta':'Media',etiqueta,'Los componentes líquidos registrados no explican el volumen preparado.',litros,volumen,metaProduccion);
       }
     });
   }
@@ -527,6 +541,19 @@ function getInventario() {
       for (var et = 0; et < tambores.length; et++) {
         if (normalizar(tambores[et].id) === normalizar(idEstado)) {
           tambores[et].estado = nuevoEstado || tambores[et].estado;
+          break;
+        }
+      }
+
+    } else if (tipo.indexOf('correccion tanque') === 0) {
+      // Corrige el nombre del contenido sin reescribir la preparación original
+      // ni sumar/restar litros. Las existencias empacadas se trasladan mediante
+      // movimientos separados creados por construirCorreccionTanque_.
+      var idCorreccion = String(campo(r, ['tamborid', 'tambor']) || '').trim();
+      var productoCorregido = String(campo(r, ['producto']) || '').trim();
+      for (var ct = 0; ct < tambores.length; ct++) {
+        if (normalizar(tambores[ct].id) === normalizar(idCorreccion)) {
+          if (productoCorregido) tambores[ct].producto = productoCorregido;
           break;
         }
       }
@@ -817,10 +844,16 @@ function doPost(e) {
         var nHijo=normalizar(tipoHijo);
         if (nHijo==='movimiento compuesto'||nHijo==='revision item') throw new Error('No se permiten operaciones compuestas anidadas.');
         if (nHijo.indexOf('preparar tambor')===0) filasPayload=filasPayload.concat(expandirProduccion_(m,m.Responsable,operacionId));
+        else if (nHijo==='correccion produccion') filasPayload=filasPayload.concat(construirCorreccionProduccion_(m,m.Responsable));
+        else if (nHijo==='correccion tanque') filasPayload=filasPayload.concat(construirCorreccionTanque_(m,m.Responsable));
         else { validarMovimientoPost_(m,tipoHijo); filasPayload.push(m); }
       });
     } else if (normalizar(tipo) === 'revision item') {
       filasPayload = construirRevisionItem_(payload,responsable);
+    } else if (normalizar(tipo) === 'correccion produccion') {
+      filasPayload = construirCorreccionProduccion_(payload,responsable);
+    } else if (normalizar(tipo) === 'correccion tanque') {
+      filasPayload = construirCorreccionTanque_(payload,responsable);
     } else if (normalizar(tipo).indexOf('preparar tambor') === 0) {
       filasPayload = expandirProduccion_(payload,responsable,operacionId);
     } else {
@@ -874,7 +907,7 @@ function registrarErrorPost_(payload, requestId, err) {
 
 function asegurarColumnasAuditoria_(hoja) {
   var encabezados = hoja.getRange(1,1,1,Math.max(hoja.getLastColumn(),1)).getValues()[0].map(String);
-  ['OperacionID','IdempotencyKey','RequestHash','EstadoMovimiento','FechaServidor','Usuario','VersionBOM','HashIntegridad','DestinoTambor'].forEach(function (nombre) {
+  ['OperacionID','IdempotencyKey','RequestHash','EstadoMovimiento','FechaServidor','Usuario','VersionBOM','HashIntegridad','DestinoTambor','ReferenciaOriginal'].forEach(function (nombre) {
     if (indiceEncabezado_(encabezados,nombre) < 0) {
       encabezados.push(nombre);
       hoja.getRange(1,encabezados.length).setValue(nombre);
@@ -972,6 +1005,143 @@ function expandirProduccion_(payload,responsable,operacionId) {
   return filas;
 }
 
+function buscarPreparacionOriginal_(referencia,tamborId,exigirActual) {
+  referencia=String(referencia||'').trim();
+  tamborId=String(tamborId||'').trim();
+  if (!referencia) throw new Error('La corrección requiere ReferenciaOriginal.');
+  var filas=leerRegistros().filas;
+  var encontrada=null;
+  var ultimaDelTanque=null;
+  filas.forEach(function(r,indice) {
+    var tipo=normalizar(campo(r,['tiporegistro','tipo']));
+    if (tipo.indexOf('preparar tambor')!==0) return;
+    var tambor=String(campo(r,['tamborid','tambor'])||'').trim();
+    var op=String(campo(r,['operacionid'])||'').trim();
+    var id=String(campo(r,['id'])||'').trim();
+    var refFila='FILA-'+(indice+2);
+    var candidato={fila:r,indice:indice,tamborId:tambor,referencia:op||id||refFila};
+    if (tamborId && normalizar(tambor)===normalizar(tamborId)) ultimaDelTanque=candidato;
+    if (normalizar(referencia)===normalizar(op) ||
+        normalizar(referencia)===normalizar(id) ||
+        normalizar(referencia)===normalizar(refFila)) encontrada=candidato;
+  });
+  if (!encontrada && tamborId && /^TANQUE:/i.test(referencia)) encontrada=ultimaDelTanque;
+  if (!encontrada) throw new Error('No se encontró la preparación original indicada. Abre el historial del tanque y selecciónala de nuevo.');
+  if (tamborId && normalizar(encontrada.tamborId)!==normalizar(tamborId)) {
+    throw new Error('La referencia original pertenece a otro tanque.');
+  }
+  if (exigirActual && ultimaDelTanque && ultimaDelTanque.indice>encontrada.indice) {
+    throw new Error('Ese movimiento no corresponde al lote actual: el tanque tiene una preparación posterior.');
+  }
+  return encontrada;
+}
+
+function validarComponentesCorreccion_(componentes) {
+  if (!Array.isArray(componentes) || !componentes.length) {
+    throw new Error('Agrega al menos una materia prima faltante.');
+  }
+  if (componentes.length>25) throw new Error('Una corrección admite máximo 25 materias primas.');
+  var vistos={};
+  return componentes.map(function(c) {
+    c=c||{};
+    var item=String(c.Item||c.item||'').trim();
+    var variante=String(c.Variante||c.variante||'').trim();
+    var cantidad=positivo_(c.Cantidad||c.cantidad,'Cada materia prima debe tener cantidad mayor que cero.');
+    var unidad=String(c.Unidad||c.unidad||'').trim();
+    if (!item || !unidad) throw new Error('Cada materia prima requiere Item y Unidad.');
+    var clave=normalizar(item)+'|'+normalizar(variante);
+    if (vistos[clave]) throw new Error('Materia prima duplicada en la corrección: '+item+'.');
+    vistos[clave]=true;
+    aBase(cantidad,unidad);
+    return {item:item,variante:variante,cantidad:cantidad,unidad:unidad};
+  });
+}
+
+function construirCorreccionProduccion_(payload,responsable) {
+  var motivo=String(payload.Motivo||payload.motivo||'').trim();
+  var referencia=String(payload.ReferenciaOriginal||payload.referenciaOriginal||'').trim();
+  var tamborSolicitado=String(payload.TamborID||payload.tamborId||'').trim();
+  if (motivo.length<8) throw new Error('Explica por qué se completa la producción (mínimo 8 caracteres).');
+  var original=buscarPreparacionOriginal_(referencia,tamborSolicitado,false);
+  var filaOriginal=original.fila;
+  var producto=String(campo(filaOriginal,['producto'])||payload.Producto||'').trim();
+  var tambor=original.tamborId;
+  var componentes=validarComponentesCorreccion_(payload.Componentes||payload.componentes);
+  var refReal=original.referencia;
+  var filas=[{
+    TipoRegistro:'Novedad/Corrección',Responsable:responsable,Categoria:'Producción',
+    Producto:producto,TamborID:tambor,Motivo:'Completar materias primas',
+    ReferenciaOriginal:refReal,Observacion:motivo,Origen:'Centro de correcciones'
+  }];
+  componentes.forEach(function(c,i) {
+    filas.push({
+      TipoRegistro:'Consumo materia prima',Responsable:responsable,Categoria:'Materia prima',
+      Item:c.item,Variante:c.variante||'',Cantidad:c.cantidad,Unidad:c.unidad,
+      Movimiento:'Consumo',Motivo:'Corrección de producción',Producto:producto,TamborID:tambor,
+      ReferenciaOriginal:refReal,
+      Observacion:'Componente faltante '+(i+1)+' · '+motivo,Origen:'Centro de correcciones'
+    });
+  });
+  return filas;
+}
+
+function empiezaConProducto_(item,producto) {
+  var ni=normalizar(item);
+  var np=normalizar(producto);
+  return ni===np || ni.indexOf(np+' ')===0;
+}
+
+function construirCorreccionTanque_(payload,responsable) {
+  var motivo=String(payload.Motivo||payload.motivo||'').trim();
+  var referencia=String(payload.ReferenciaOriginal||payload.referenciaOriginal||'').trim();
+  var tamborId=String(payload.TamborID||payload.tamborId||'').trim();
+  var productoNuevo=String(payload.Producto||payload.producto||'').trim();
+  if (!tamborId) throw new Error('Selecciona el tanque que vas a corregir.');
+  if (!productoNuevo) throw new Error('Escribe el nombre correcto del producto.');
+  if (motivo.length<8) throw new Error('Explica el motivo de la corrección (mínimo 8 caracteres).');
+  var original=buscarPreparacionOriginal_(referencia,tamborId,true);
+  var inventario=getInventario();
+  var tanqueActual=null;
+  (inventario.tambores||[]).forEach(function(t) {
+    if (normalizar(t.id)===normalizar(tamborId)) tanqueActual=t;
+  });
+  var productoAnterior=String((tanqueActual&&tanqueActual.producto)||campo(original.fila,['producto'])||'').trim();
+  if (!productoAnterior) throw new Error('El tanque no tiene un producto anterior identificable.');
+  if (normalizar(productoAnterior)===normalizar(productoNuevo)) {
+    throw new Error('El nombre correcto es igual al nombre actual; no hay nada que cambiar.');
+  }
+  var refReal=original.referencia;
+  var filas=[{
+    TipoRegistro:'Corrección tanque',Responsable:responsable,Categoria:'Producción',
+    Item:productoAnterior,Producto:productoNuevo,TamborID:tamborId,
+    Motivo:'Corrección de nombre de tanque',ReferenciaOriginal:refReal,
+    Observacion:motivo,Origen:'Centro de correcciones'
+  }];
+  var trasladar=payload.TrasladarEmpacados===true ||
+    /^(si|sí|true|1)$/i.test(String(payload.TrasladarEmpacados||''));
+  if (trasladar) {
+    (inventario.items||[]).forEach(function(i) {
+      var categoria=normalizar(i.Categoria||i.categoria||'');
+      var variante=String(i.Variante||i.variante||'').trim();
+      var item=String(i.Item||i.item||'').trim();
+      var stock=Number(i.Stock!=null?i.Stock:i.stock);
+      var unidad=String(i.Unidad||i.unidad||'und').trim();
+      if (categoria!=='producto terminado' || normalizar(variante)!==normalizar(tamborId)) return;
+      if (!(stock>0) || !empiezaConProducto_(item,productoAnterior)) return;
+      var sufijo=item.slice(productoAnterior.length);
+      var traslado={
+        TipoRegistro:'Traslado inventario',Responsable:responsable,Categoria:'Producto terminado',
+        Item:item,Variante:variante,Producto:(productoNuevo+sufijo).trim(),
+        Cantidad:stock,Unidad:unidad,Motivo:'Corrección de producto del tanque',
+        ReferenciaOriginal:refReal,Observacion:motivo,Origen:'Centro de correcciones'
+      };
+      validarTrasladoPost_(traslado);
+      filas.push(traslado);
+    });
+  }
+  return filas;
+}
+
 function validarMovimientoPost_(payload, tipo) {
   var nTipo = normalizar(tipo);
   if (nTipo.indexOf('empacar desde tambor') === 0 || nTipo.indexOf('empacar producto') === 0) validarEmpaquePost_(payload);
@@ -1005,6 +1175,7 @@ function validarMovimientoPost_(payload, tipo) {
 function validarTipoPermitido_(tipo) {
   var permitidos = [
     'entrada mercancia','preparar tambor','consumo materia prima','consumo base','estado tambor',
+    'correccion tanque','correccion produccion',
     'empacar desde tambor','empacar producto','empacar materia prima','empacar solido/polvo',
     'salida directa/baja','fabricar palos','novedad/correccion','traslado inventario',
     'conteo inventario','revision item','movimiento compuesto'

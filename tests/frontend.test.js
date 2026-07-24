@@ -47,3 +47,17 @@ test('formularios con varias líneas se envían como una operación compuesta', 
   assert.match(source, /Movimientos:hijos/);
   assert.doesNotMatch(source, /for \(var i = 0; i < records\.length; i\+\+\)\s*\{\s*await enviarRegistro/);
 });
+
+test('la interfaz ofrece correcciones rápidas de tanque, componentes y traslado', () => {
+  assert.match(html, /data-tab="correcciones"/);
+  assert.match(html, /id="btnCorregirTanque"/);
+  assert.match(html, /id="btnCompletarProduccion"/);
+  assert.match(html, /id="btnTrasladarSaldo"/);
+  assert.match(source, /TipoRegistro:'Corrección tanque'/);
+  assert.match(source, /TipoRegistro:'Corrección producción'/);
+});
+
+test('los hallazgos de producción tienen una acción para completar materias primas', () => {
+  assert.match(source, /data-conc-action="COMPLETAR_MP"/);
+  assert.match(source, /abrirCompletarProduccion/);
+});

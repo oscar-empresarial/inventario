@@ -61,6 +61,11 @@
       color: var(--blue-dark);
       border-color: white;
     }
+    .tab-btn.correcciones {
+      background: rgba(234, 88, 12, 0.85);
+      border-color: rgba(255, 255, 255, 0.72);
+    }
+    .tab-btn.correcciones.active { background: #fff7ed; color: #9a3412; }
     main {
       max-width: 920px;
       margin: 18px auto;
@@ -363,6 +368,32 @@
     .rev-actions button { padding:8px 11px; font-size:12px; }
     .rev-meta { color:var(--gray); font-size:12px; line-height:1.5; margin-top:3px; }
     .rev-empty { padding:24px; text-align:center; color:var(--gray); background:#f8fafc; border-radius:14px; }
+    .corr-grid {
+      display:grid;
+      grid-template-columns:repeat(3,minmax(0,1fr));
+      gap:12px;
+      margin:14px 0;
+    }
+    .corr-card {
+      border:1px solid #fed7aa;
+      border-left:5px solid var(--orange);
+      border-radius:15px;
+      padding:15px;
+      background:#fff7ed;
+    }
+    .corr-card h3 { margin:0 0 7px; font-size:15px; color:#9a3412; }
+    .corr-card p { margin:0 0 12px; color:#7c2d12; font-size:12px; line-height:1.45; }
+    .btn-naranja {
+      border:none;
+      color:white;
+      background:var(--orange);
+      border-radius:12px;
+      padding:10px 13px;
+      font-size:13px;
+      font-weight:bold;
+      cursor:pointer;
+    }
+    .badge.correccion { background:#ffedd5; color:#9a3412; }
 
     /* ===== Popup bienvenida y tour ===== */
     .overlay {
@@ -455,6 +486,7 @@
 
     @media (max-width: 700px) {
       .type-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .corr-grid { grid-template-columns: 1fr; }
       .row, .filtros { grid-template-columns: 1fr; }
       .mp-fila { grid-template-columns: 1.5fr 1fr 0.9fr auto; }
       .mp-fila .mp-var { display: none; }
@@ -481,6 +513,10 @@
       <button type="button" class="tab-btn" data-tab="movimientos">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
         Movimientos
+      </button>
+      <button type="button" class="tab-btn correcciones" data-tab="correcciones">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a4 4 0 0 0-5-5L7.5 3.5l3 3 2.2-2.2"/><path d="m5 8-3 3 11 11 3-3"/><path d="m14 14 6-6"/><path d="m17 5 2 2"/></svg>
+        Correcciones
       </button>
       <button type="button" class="tab-btn" data-tab="revisar">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
@@ -848,6 +884,39 @@
       </div>
     </section>
 
+    <!-- ================= VISTA CORRECCIONES ================= -->
+    <section id="view-correcciones" class="view hidden">
+      <div class="card">
+        <div class="section-title">Correcciones rápidas</div>
+        <div class="status warn" style="display:block;margin-top:0">
+          Aquí no se borra ni se edita el movimiento original. La app agrega una corrección enlazada y conserva quién la hizo, cuándo y por qué.
+        </div>
+        <div class="corr-grid">
+          <div class="corr-card">
+            <h3>El tanque tiene otro producto</h3>
+            <p>Ejemplo: se registró Etherpool y realmente era Blanqueador. Cambia el contenido actual sin alterar los litros.</p>
+            <button type="button" class="btn-naranja" id="btnCorregirTanque">Corregir tanque</button>
+          </div>
+          <div class="corr-card">
+            <h3>Faltaron materias primas</h3>
+            <p>Agrega los componentes olvidados al lote original. Solo descuenta esas materias primas; no vuelve a sumar la producción.</p>
+            <button type="button" class="btn-naranja" id="btnCompletarProduccion">Completar producción</button>
+          </div>
+          <div class="corr-card">
+            <h3>El saldo está en otro nombre</h3>
+            <p>Traslada toda la existencia del nombre equivocado al producto o ítem correcto, sin borrar su historia.</p>
+            <button type="button" class="btn-naranja" id="btnTrasladarSaldo">Trasladar saldo</button>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button type="button" class="btn-azul" id="btnCorreccionesAlertas">Ver casos detectados</button>
+          <button type="button" class="clear" id="btnCorreccionesActualizar" style="padding:10px 14px">Actualizar datos</button>
+        </div>
+        <div id="corrEstado" class="status"></div>
+        <div class="small-note">Si ya se empacó producto con el nombre incorrecto, “Corregir tanque” puede trasladar también las existencias terminadas del mismo lote.</div>
+      </div>
+    </section>
+
     <!-- ================= VISTA REVISAR ================= -->
     <section id="view-revisar" class="view hidden">
       <div class="card">
@@ -1011,6 +1080,72 @@
     </div>
   </div>
 
+  <!-- Corrección segura del producto de un tanque -->
+  <div id="modalCorregirTanque" class="overlay">
+    <div class="tour-caja">
+      <h3>Corregir producto del tanque</h3>
+      <div style="margin-bottom:10px">
+        <label for="corrTanque">Tanque / balde</label>
+        <select id="corrTanque"><option value="">Seleccionar…</option></select>
+      </div>
+      <div id="corrTanqueActual" class="status warn" style="display:none;margin:0 0 10px"></div>
+      <div style="margin-bottom:10px">
+        <label for="corrProducto">Nombre correcto del producto</label>
+        <input id="corrProducto" list="corrProductos" placeholder="Ej: Blanqueador con cloro al 6%" />
+        <datalist id="corrProductos"></datalist>
+      </div>
+      <div style="margin-bottom:10px">
+        <label for="corrTanqueResponsable">Responsable de la corrección</label>
+        <select id="corrTanqueResponsable">
+          <option value="">Seleccionar…</option><option>Carlos</option><option>Neyder</option><option>Leandro</option>
+        </select>
+      </div>
+      <div style="margin-bottom:10px">
+        <label for="corrTanqueMotivo">Qué ocurrió</label>
+        <textarea id="corrTanqueMotivo" placeholder="Ej: Al revisar el tanque se confirmó que era blanqueador y se había elegido Etherpool por error."></textarea>
+      </div>
+      <label class="check-row" style="margin-bottom:12px">
+        <input type="checkbox" id="corrTrasladarEmpacados" checked />
+        <span>Trasladar también el producto terminado que ya se empacó desde este mismo lote.</span>
+      </label>
+      <div class="hint" style="margin-bottom:12px">No cambia la cantidad del tanque. Si existen presentaciones empacadas del lote, pasan al nombre correcto con movimientos de traslado separados.</div>
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button type="button" class="clear" id="btnCorrTanqueCancelar" style="padding:10px 14px">Cancelar</button>
+        <button type="button" class="btn-naranja" id="btnCorrTanqueGuardar">Guardar corrección</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Completar materias primas de una producción ya registrada -->
+  <div id="modalCompletarProduccion" class="overlay">
+    <div class="tour-caja" style="max-width:650px">
+      <h3>Completar materias primas del lote</h3>
+      <div style="margin-bottom:10px">
+        <label for="corrProduccion">Producción que vas a completar</label>
+        <select id="corrProduccion"><option value="">Seleccionar…</option></select>
+      </div>
+      <div id="corrProduccionActual" class="status warn" style="display:none;margin:0 0 10px"></div>
+      <label>Materias primas que faltaron en el registro</label>
+      <div id="corrMpLista"></div>
+      <button type="button" class="mp-agregar" id="btnCorrMpAgregar">+ Agregar otra materia prima</button>
+      <div class="hint" style="margin-bottom:10px">Escribe lo que realmente se usó. Esta corrección descuenta materias primas, pero no vuelve a fabricar litros.</div>
+      <div style="margin-bottom:10px">
+        <label for="corrProduccionResponsable">Responsable de la corrección</label>
+        <select id="corrProduccionResponsable">
+          <option value="">Seleccionar…</option><option>Carlos</option><option>Neyder</option><option>Leandro</option>
+        </select>
+      </div>
+      <div style="margin-bottom:10px">
+        <label for="corrProduccionMotivo">Qué ocurrió</label>
+        <textarea id="corrProduccionMotivo" placeholder="Ej: Se revisó la preparación con el encargado y estas materias primas se usaron, pero no quedaron registradas."></textarea>
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button type="button" class="clear" id="btnCorrProduccionCancelar" style="padding:10px 14px">Cancelar</button>
+        <button type="button" class="btn-naranja" id="btnCorrProduccionGuardar">Guardar componentes</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Tour explicativo -->
   <div id="tour" class="overlay">
     <div class="tour-caja">
@@ -1043,6 +1178,7 @@
       registros: null,
       revision: null,
       conciliacion: null,
+      correccionProducciones: [],
       revTab: 'pendientes',
       omitirStock: false,
       backendVersion: '',
@@ -1152,6 +1288,20 @@
       document.getElementById('revBuscar').addEventListener('input', renderRevision);
       document.getElementById('btnRevRecargar').addEventListener('click', function () { loadRevision(true); });
       document.getElementById('btnRevCorregir').addEventListener('click', abrirCorreccionMaestro);
+      document.getElementById('btnCorregirTanque').addEventListener('click', function () { abrirCorregirTanque(); });
+      document.getElementById('btnCompletarProduccion').addEventListener('click', function () { abrirCompletarProduccion(); });
+      document.getElementById('btnTrasladarSaldo').addEventListener('click', function () { abrirCorreccionMaestro('RELACIONAR'); });
+      document.getElementById('btnCorreccionesAlertas').addEventListener('click', function () {
+        state.revTab='conciliacion'; switchTab('revisar');
+      });
+      document.getElementById('btnCorreccionesActualizar').addEventListener('click', function () { loadCorrecciones(true); });
+      document.getElementById('corrTanque').addEventListener('change', actualizarTanqueCorreccion);
+      document.getElementById('btnCorrTanqueCancelar').addEventListener('click', cerrarCorregirTanque);
+      document.getElementById('btnCorrTanqueGuardar').addEventListener('click', guardarCorreccionTanque);
+      document.getElementById('corrProduccion').addEventListener('change', actualizarProduccionCorreccion);
+      document.getElementById('btnCorrMpAgregar').addEventListener('click', function () { agregarFilaCorreccionMp(); });
+      document.getElementById('btnCorrProduccionCancelar').addEventListener('click', cerrarCompletarProduccion);
+      document.getElementById('btnCorrProduccionGuardar').addEventListener('click', guardarCorreccionProduccion);
       document.querySelectorAll('[data-rev-tab]').forEach(function (btn) {
         btn.addEventListener('click', function () {
           state.revTab = btn.dataset.revTab;
@@ -2508,11 +2658,12 @@
       document.querySelectorAll('.tab-btn').forEach(function (btn) {
         btn.classList.toggle('active', btn.dataset.tab === tab);
       });
-      ['registro', 'inventario', 'movimientos', 'revisar', 'exportar'].forEach(function (t) {
+      ['registro', 'inventario', 'movimientos', 'correcciones', 'revisar', 'exportar'].forEach(function (t) {
         document.getElementById('view-' + t).classList.toggle('hidden', t !== tab);
       });
       if (tab === 'inventario') loadInventario(); // siempre se actualiza al abrir
       if (tab === 'movimientos' && !state.registros) loadMovimientos();
+      if (tab === 'correcciones') loadCorrecciones(false);
       if (tab === 'revisar') loadRevision(false);
     }
 
@@ -2955,7 +3106,7 @@
       if (filtro) rows=rows.filter(function(h){return normalize(JSON.stringify(h)).includes(filtro);});
       var explicacion='<div class="status '+(Number(res.altos||0)?'err':'warn')+'" style="display:block">'+
         '<b>'+Number(res.altos||0)+' caso(s) prioritario(s).</b> '+Number(res.filasLegacy||0)+' filas antiguas se agrupan como historial incompleto, no como ajustes. El sistema no modificó ninguna existencia.</div>';
-      var cards=rows.map(function(h) {
+      var cards=rows.map(function(h,idx) {
         var titulo={
           'BOM-INCOMPLETA':'Fórmula histórica incompleta',
           'SALDO-TAMBOR-NEGATIVO':'Salidas mayores a lo preparado',
@@ -2965,11 +3116,240 @@
           'VOLUMEN-HISTORICO-INCOMPLETO':'Volumen histórico sin explicar',
           'RENDIMIENTO-IMPOSIBLE':'Volumen inconsistente'
         }[h.codigo] || h.codigo;
+        var puedeCompletar=['BOM-INCOMPLETA','RENDIMIENTO-IMPOSIBLE','VOLUMEN-HISTORICO-INCOMPLETO'].indexOf(h.codigo)>=0 && h.referencia;
         return '<div class="rev-card '+(h.prioridad==='Alta'?'alta':'media')+'"><div class="rev-head"><div><b>'+escapeHtml(titulo)+'</b><div class="rev-meta">'+escapeHtml(h.entidad||'')+'</div></div>'+
           '<span class="badge '+(h.prioridad==='Alta'?'out':'low')+'">'+escapeHtml(h.prioridad||'')+'</span></div>'+
-          '<div class="rev-meta">'+escapeHtml(h.detalle||'')+(h.esperado!==undefined?' · Esperado: '+escapeHtml(String(h.esperado))+' · Registrado: '+escapeHtml(String(h.real)):'')+'</div></div>';
+          '<div class="rev-meta">'+escapeHtml(h.detalle||'')+(h.esperado!==undefined?' · Esperado: '+escapeHtml(String(h.esperado))+' · Registrado: '+escapeHtml(String(h.real)):'')+'</div>'+
+          (puedeCompletar?'<div class="rev-actions"><button type="button" class="btn-naranja" data-conc-action="COMPLETAR_MP" data-conc-idx="'+idx+'">Completar materias primas</button></div>':'')+
+          '</div>';
       }).join('');
       cont.innerHTML=explicacion+(cards||'<div class="rev-empty">No hay hallazgos con este filtro.</div>');
+      cont.querySelectorAll('[data-conc-action="COMPLETAR_MP"]').forEach(function(btn) {
+        btn.addEventListener('click',function(){abrirCompletarProduccion(rows[Number(btn.dataset.concIdx)]);});
+      });
+    }
+
+    function referenciaDeRegistro(r) {
+      var op=campoReg(r,['operacionid']);
+      var id=campoReg(r,['id']);
+      var fila=campoReg(r,['_filaorigen']);
+      return op||id||(fila?'FILA-'+fila:'');
+    }
+
+    function cargarRegistrosTodos(callback,forzar) {
+      if (state.registrosTodos && !forzar) { callback(state.registrosTodos); return; }
+      jsonp({action:'registros'},function(data) {
+        state.registrosTodos=(data&&data.registros)||[];
+        callback(state.registrosTodos);
+      },function(){callback(state.registros||[]);},20000);
+    }
+
+    function prepararListaCorrecciones() {
+      state.correccionProducciones=(state.registrosTodos||[]).filter(function(r) {
+        return normalize(campoReg(r,['tiporegistro','tipo'])).indexOf('preparar tambor')===0;
+      }).map(function(r) {
+        return {
+          registro:r,referencia:referenciaDeRegistro(r),
+          tamborId:campoReg(r,['tamborid','tambor']),
+          producto:campoReg(r,['producto']),
+          litros:campoReg(r,['litrospreparados','cantidad']),
+          fecha:campoReg(r,['fechaservidor','fecha','timestamp','fechacliente'])
+        };
+      }).filter(function(p){return p.referencia&&p.tamborId;}).reverse();
+      document.getElementById('corrProductos').innerHTML=getCatalog('productos').map(function(x) {
+        return '<option value="'+escapeHtml(x)+'"></option>';
+      }).join('');
+    }
+
+    function loadCorrecciones(forzar,alTerminar) {
+      var estado=document.getElementById('corrEstado');
+      estado.className='status warn';
+      estado.textContent='Actualizando tanques, producciones y hallazgos…';
+      if (forzar) { state.registrosTodos=null; state.conciliacion=null; }
+      jsonp({action:'inventario'},function(data) {
+        if (data&&!data.error) state.inventario=parseInventario(data);
+        cargarRegistrosTodos(function() {
+          prepararListaCorrecciones();
+          var altos=Number(state.conciliacion&&state.conciliacion.resumen&&state.conciliacion.resumen.altos||0);
+          estado.className='status '+(altos?'warn':'ok');
+          estado.textContent='Listo: '+(state.catalogos.tambores||[]).length+' tanque(s) y '+state.correccionProducciones.length+' producción(es) disponibles.'+
+            (altos?' Hay '+altos+' caso(s) prioritario(s) para revisar.':'');
+          if (alTerminar) alTerminar();
+        },forzar);
+        if (!state.conciliacion) loadConciliacion();
+      },function() {
+        estado.className='status err';
+        estado.textContent='No se pudieron actualizar los datos. Revisa la conexión e inténtalo otra vez.';
+      },20000);
+    }
+
+    function abrirCorregirTanque(prefill) {
+      if (prefill&&prefill.type) prefill=null;
+      loadCorrecciones(false,function() {
+        var sel=document.getElementById('corrTanque');
+        sel.innerHTML='<option value="">Seleccionar…</option>'+
+          (state.catalogos.tambores||[]).map(function(t) {
+            return '<option value="'+escapeHtml(t.id||'')+'">'+escapeHtml((t.id||'Tanque')+' · '+(t.producto||'Sin producto')+' · '+Number(t.disponible||0)+' L')+'</option>';
+          }).join('');
+        sel.value=(prefill&&prefill.tamborId)||'';
+        document.getElementById('corrProducto').value='';
+        document.getElementById('corrTanqueResponsable').value='';
+        document.getElementById('corrTanqueMotivo').value='';
+        document.getElementById('corrTrasladarEmpacados').checked=true;
+        actualizarTanqueCorreccion();
+        document.getElementById('modalCorregirTanque').classList.add('visible');
+      });
+    }
+
+    function actualizarTanqueCorreccion() {
+      var id=valueOf('corrTanque');
+      var aviso=document.getElementById('corrTanqueActual');
+      var tanque=(state.catalogos.tambores||[]).find(function(t){return normalize(t.id)===normalize(id);});
+      var produccion=(state.correccionProducciones||[]).find(function(p){return normalize(p.tamborId)===normalize(id);});
+      aviso.dataset.referencia=produccion?produccion.referencia:'';
+      if (!id) { aviso.style.display='none'; aviso.textContent=''; return; }
+      aviso.style.display='block';
+      aviso.textContent=tanque ?
+        'Actual: '+(tanque.producto||'Sin nombre')+' · '+Number(tanque.disponible||0)+' L · referencia '+(produccion?produccion.referencia:'no encontrada') :
+        'No se encontró el tanque seleccionado.';
+    }
+
+    function cerrarCorregirTanque() {
+      document.getElementById('modalCorregirTanque').classList.remove('visible');
+    }
+
+    async function guardarCorreccionTanque() {
+      var tambor=valueOf('corrTanque');
+      var producto=valueOf('corrProducto');
+      var responsable=valueOf('corrTanqueResponsable');
+      var motivo=valueOf('corrTanqueMotivo');
+      var referencia=document.getElementById('corrTanqueActual').dataset.referencia||('TANQUE:'+tambor+':ULTIMA');
+      if (!tambor) { document.getElementById('corrTanque').focus(); return; }
+      if (!producto) { document.getElementById('corrProducto').focus(); return; }
+      if (!responsable) { document.getElementById('corrTanqueResponsable').focus(); return; }
+      if (motivo.length<8) { document.getElementById('corrTanqueMotivo').focus(); return; }
+      var btn=document.getElementById('btnCorrTanqueGuardar');
+      btn.disabled=true; btn.textContent='Guardando…';
+      try {
+        await enviarRegistro({
+          RequestId:nuevoRequestId(),FechaCliente:new Date().toISOString(),
+          TipoRegistro:'Corrección tanque',Responsable:responsable,TamborID:tambor,
+          Producto:producto,Motivo:motivo,ReferenciaOriginal:referencia,
+          TrasladarEmpacados:document.getElementById('corrTrasladarEmpacados').checked,
+          Origen:'GitHub Pages · Centro de correcciones'
+        });
+        cerrarCorregirTanque();
+        state.inventario=null; state.registrosTodos=null; state.conciliacion=null;
+        var estado=document.getElementById('corrEstado');
+        estado.className='status ok';
+        estado.textContent='Corrección guardada y confirmada. Los litros no cambiaron y el historial original se conservó.';
+        loadCorrecciones(true);
+      } catch(err) {
+        var estadoError=document.getElementById('corrEstado');
+        estadoError.className='status err'; estadoError.textContent=String(err.message||err);
+      } finally {
+        btn.disabled=false; btn.textContent='Guardar corrección';
+      }
+    }
+
+    function agregarFilaCorreccionMp(datos) {
+      datos=datos||{};
+      var fila=document.createElement('div');
+      fila.className='mp-fila corr-mp-fila';
+      fila.innerHTML='<input class="corr-mp-item" list="dlMp" placeholder="Materia prima" value="'+escapeHtml(datos.item||'')+'" />'+
+        '<input class="corr-mp-var mp-var" placeholder="Variante" value="'+escapeHtml(datos.variante||'')+'" />'+
+        '<input class="corr-mp-cant" type="number" min="0" step="0.001" placeholder="Cantidad" value="'+escapeHtml(datos.cantidad||'')+'" />'+
+        '<select class="corr-mp-uni"><option value="">Unidad</option><option>L</option><option>ml</option><option>kg</option><option>g</option><option>und</option></select>'+
+        '<button type="button" class="mp-quitar">×</button>';
+      fila.querySelector('.corr-mp-uni').value=datos.unidad||'';
+      fila.querySelector('.mp-quitar').addEventListener('click',function(){fila.remove();});
+      document.getElementById('corrMpLista').appendChild(fila);
+    }
+
+    function llenarProduccionesCorreccion(referenciaPreferida) {
+      var sel=document.getElementById('corrProduccion');
+      sel.innerHTML='<option value="">Seleccionar…</option>'+
+        (state.correccionProducciones||[]).slice(0,250).map(function(p,idx) {
+          var fecha=p.fecha?String(p.fecha).slice(0,10):'Sin fecha';
+          return '<option value="'+idx+'">'+escapeHtml(p.tamborId+' · '+p.producto+' · '+p.litros+' L · '+fecha+' · '+p.referencia)+'</option>';
+        }).join('');
+      if (referenciaPreferida) {
+        var idx=(state.correccionProducciones||[]).findIndex(function(p){return p.referencia===referenciaPreferida;});
+        if (idx>=0) sel.value=String(idx);
+      }
+      actualizarProduccionCorreccion();
+    }
+
+    function abrirCompletarProduccion(hallazgo) {
+      if (hallazgo&&hallazgo.type) hallazgo=null;
+      loadCorrecciones(false,function() {
+        llenarProduccionesCorreccion(hallazgo&&hallazgo.referencia);
+        document.getElementById('corrMpLista').innerHTML='';
+        agregarFilaCorreccionMp();
+        document.getElementById('corrProduccionResponsable').value='';
+        document.getElementById('corrProduccionMotivo').value='';
+        document.getElementById('modalCompletarProduccion').classList.add('visible');
+      });
+    }
+
+    function actualizarProduccionCorreccion() {
+      var idx=valueOf('corrProduccion');
+      var aviso=document.getElementById('corrProduccionActual');
+      var p=idx===''?null:state.correccionProducciones[Number(idx)];
+      if (!p) { aviso.style.display='none'; aviso.textContent=''; return; }
+      aviso.style.display='block';
+      aviso.textContent='Vas a completar '+p.producto+' · tanque '+p.tamborId+' · '+p.litros+' L · referencia '+p.referencia+'.';
+    }
+
+    function cerrarCompletarProduccion() {
+      document.getElementById('modalCompletarProduccion').classList.remove('visible');
+    }
+
+    async function guardarCorreccionProduccion() {
+      var idx=valueOf('corrProduccion');
+      var p=idx===''?null:state.correccionProducciones[Number(idx)];
+      var responsable=valueOf('corrProduccionResponsable');
+      var motivo=valueOf('corrProduccionMotivo');
+      if (!p) { document.getElementById('corrProduccion').focus(); return; }
+      if (!responsable) { document.getElementById('corrProduccionResponsable').focus(); return; }
+      if (motivo.length<8) { document.getElementById('corrProduccionMotivo').focus(); return; }
+      var componentes=[];
+      var invalida=false;
+      document.querySelectorAll('#corrMpLista .corr-mp-fila').forEach(function(fila) {
+        var item=fila.querySelector('.corr-mp-item').value.trim();
+        var variante=fila.querySelector('.corr-mp-var').value.trim();
+        var cantidad=fila.querySelector('.corr-mp-cant').value;
+        var unidad=fila.querySelector('.corr-mp-uni').value;
+        if (!item&&!cantidad&&!unidad) return;
+        if (!item||!esNumero(cantidad,false)||!unidad) invalida=true;
+        else componentes.push({Item:item,Variante:variante,Cantidad:Number(String(cantidad).replace(',','.')),Unidad:unidad});
+      });
+      if (invalida||!componentes.length) {
+        document.getElementById('corrProduccionActual').style.display='block';
+        document.getElementById('corrProduccionActual').textContent='Completa nombre, cantidad y unidad de cada materia prima.';
+        return;
+      }
+      var btn=document.getElementById('btnCorrProduccionGuardar');
+      btn.disabled=true; btn.textContent='Guardando…';
+      try {
+        await enviarRegistro({
+          RequestId:nuevoRequestId(),FechaCliente:new Date().toISOString(),
+          TipoRegistro:'Corrección producción',Responsable:responsable,TamborID:p.tamborId,
+          Producto:p.producto,Componentes:componentes,Motivo:motivo,
+          ReferenciaOriginal:p.referencia,Origen:'GitHub Pages · Centro de correcciones'
+        });
+        cerrarCompletarProduccion();
+        state.inventario=null; state.registrosTodos=null; state.conciliacion=null;
+        var estado=document.getElementById('corrEstado');
+        estado.className='status ok';
+        estado.textContent='Componentes guardados y enlazados. No se duplicaron los litros producidos.';
+        loadCorrecciones(true);
+      } catch(err) {
+        var estadoError=document.getElementById('corrEstado');
+        estadoError.className='status err'; estadoError.textContent=String(err.message||err);
+      } finally {
+        btn.disabled=false; btn.textContent='Guardar componentes';
+      }
     }
 
     function abrirModalRevision(item,accion) {
@@ -2991,17 +3371,22 @@
       document.getElementById('modalRevision').classList.add('visible');
     }
 
-    function abrirCorreccionMaestro() {
-      state.revSeleccion={manual:true,accion:'RENOMBRAR'};
-      document.getElementById('revModalTitulo').textContent='Corregir nombre existente';
-      document.getElementById('revModalItem').textContent='Selecciona el nombre actual y escribe el nombre oficial corregido. El saldo y el historial se conservarán.';
+    function abrirCorreccionMaestro(accion) {
+      if (typeof accion!=='string') accion='RENOMBRAR';
+      state.revSeleccion={manual:true,accion:accion};
+      document.getElementById('revModalTitulo').textContent=accion==='RELACIONAR'?'Trasladar saldo a un nombre existente':'Corregir nombre existente';
+      document.getElementById('revModalItem').textContent=accion==='RELACIONAR' ?
+        'Selecciona el nombre equivocado y el producto o ítem correcto que ya existe. Todo el saldo pasará al destino.' :
+        'Selecciona el nombre actual y escribe un nombre oficial nuevo. El saldo y el historial se conservarán.';
       document.getElementById('revOrigenWrap').style.display='block';
       document.getElementById('revCategoriaWrap').style.display='block';
       document.getElementById('revDestinoWrap').style.display='block';
       document.getElementById('revOrigen').value=''; document.getElementById('revDestino').value='';
       document.getElementById('revCategoria').value=''; document.getElementById('revResponsable').value=''; document.getElementById('revMotivo').value='';
       document.getElementById('revDestinos').innerHTML=getItemOptions().map(function(x){return '<option value="'+escapeHtml(x)+'"></option>';}).join('');
-      document.getElementById('revModalAviso').textContent='Si el nombre correcto ya existe, usa “Relacionar duplicado” desde una solicitud pendiente; esta opción crea un nombre oficial nuevo.';
+      document.getElementById('revModalAviso').textContent=accion==='RELACIONAR' ?
+        'Se trasladará todo el saldo al nombre existente. El movimiento original seguirá visible.' :
+        'Esta opción crea un nombre oficial nuevo. Si el correcto ya existe, usa “Trasladar saldo”.';
       document.getElementById('modalRevision').classList.add('visible');
     }
 
@@ -3071,9 +3456,11 @@
         });
       }
       var diaAnterior = '';
-      lista.innerHTML = rows.slice(0, 300).map(function (r) {
+      var visibles=rows.slice(0,300);
+      lista.innerHTML = visibles.map(function (r,idx) {
         var tipo = campoReg(r, ['tiporegistro', 'tipo']);
         var esConteo = /conteo|ajuste/i.test(tipo);
+        var esCorreccion = /correcci|traslado|novedad/i.test(tipo);
         var esNuevo = /^s/i.test(campoReg(r, ['nuevoitem', 'pendienteaprobacion']));
         var fecha = campoReg(r, ['fecha', 'timestamp', 'fechaservidor', 'fechacliente']);
         var fechaTxt = fecha ? new Date(fecha).toLocaleString('es-CO', { dateStyle: 'short', timeStyle: 'short' }) : '';
@@ -3108,14 +3495,73 @@
           var diaTxt = isNaN(fd.getTime()) ? dia : fd.toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' });
           encabezadoDia = '<div class="section-title" style="font-size:14px;margin:12px 0 2px;color:var(--blue)">📅 ' + escapeHtml(diaTxt) + '</div>';
         }
-        return encabezadoDia + '<div class="mov-row">' +
+        return encabezadoDia + '<div class="mov-row" data-mov-idx="'+idx+'">' +
           '<div class="mov-titulo">' + escapeHtml(item + (variante ? ' · ' + variante : '')) + '</div>' +
           '<div class="mov-detalle">' + escapeHtml(fechaTxt) + (detalles.length ? ' — ' + escapeHtml(detalles.join(' · ')) : '') + '</div>' +
           '<div class="mov-badges">' +
-          '<span class="badge ' + (esConteo ? 'conteo' : 'tipo') + '">' + escapeHtml(tipo || 'Registro') + '</span>' +
+          '<span class="badge ' + (esCorreccion?'correccion':(esConteo ? 'conteo' : 'tipo')) + '">' + escapeHtml(tipo || 'Registro') + '</span>' +
           (esNuevo ? '<span class="badge nuevo">ÍTEM NUEVO · pendiente revisar</span>' : '') +
+          '<button type="button" class="clear" data-mov-history="'+idx+'" style="padding:5px 9px;font-size:11px">Ver historial relacionado</button>'+
           '</div></div>';
       }).join('') || '<div class="hint" style="padding:14px">Nada que coincida con el filtro.</div>';
+      lista.querySelectorAll('[data-mov-history]').forEach(function(btn) {
+        btn.addEventListener('click',function() {
+          var idx=Number(btn.dataset.movHistory);
+          verHistorialRelacionado(visibles[idx],btn.closest('.mov-row'));
+        });
+      });
+    }
+
+    function verHistorialRelacionado(registro,fila) {
+      if (!registro||!fila) return;
+      var siguiente=fila.nextElementSibling;
+      if (siguiente&&siguiente.classList.contains('historial-relacionado')) { siguiente.remove(); return; }
+      document.querySelectorAll('.historial-relacionado').forEach(function(x){x.remove();});
+      cargarRegistrosTodos(function(regs) {
+        var op=campoReg(registro,['operacionid']);
+        var ref=campoReg(registro,['referenciaoriginal']);
+        var id=campoReg(registro,['id']);
+        var tambor=campoReg(registro,['tamborid','tambor']);
+        var item=campoReg(registro,['item']);
+        var variante=campoReg(registro,['variante']);
+        var producto=campoReg(registro,['producto']);
+        var relacionados=regs.filter(function(r) {
+          var rop=campoReg(r,['operacionid']);
+          var rref=campoReg(r,['referenciaoriginal']);
+          var rid=campoReg(r,['id']);
+          if (op&&(rop===op||rref===op)) return true;
+          if (id&&(rid===id||rref===id)) return true;
+          if (ref&&(rop===ref||rid===ref||rref===ref)) return true;
+          if (tambor&&normalize(campoReg(r,['tamborid','tambor']))===normalize(tambor)) return true;
+          if (item&&normalize(campoReg(r,['item']))===normalize(item) &&
+              normalize(campoReg(r,['variante']))===normalize(variante)) return true;
+          return producto&&normalize(campoReg(r,['producto']))===normalize(producto);
+        });
+        relacionados.sort(function(a,b) {
+          return campoReg(a,['fechaservidor','fecha','timestamp','fechacliente']).localeCompare(
+            campoReg(b,['fechaservidor','fecha','timestamp','fechacliente']));
+        });
+        var esProduccion=normalize(campoReg(registro,['tiporegistro','tipo'])).indexOf('preparar tambor')===0;
+        var html=relacionados.slice(-200).map(function(r) {
+          var fecha=campoReg(r,['fechaservidor','fecha','timestamp','fechacliente']);
+          var tipo=campoReg(r,['tiporegistro','tipo']);
+          var nombre=campoReg(r,['item'])||campoReg(r,['producto'])||campoReg(r,['tamborid']);
+          var cant=campoReg(r,['cantidad']);
+          var unidad=campoReg(r,['unidad']);
+          var detalle=[nombre,cant?(cant+' '+unidad):'',campoReg(r,['motivo']),campoReg(r,['responsable'])].filter(Boolean).join(' · ');
+          return '<div class="mov-detalle" style="padding:5px 0;border-bottom:1px solid #e2e8f0"><b>'+escapeHtml(tipo||'Registro')+'</b> · '+escapeHtml(String(fecha).slice(0,19))+(detalle?' — '+escapeHtml(detalle):'')+'</div>';
+        }).join('')||'<div class="hint">No se encontró historia relacionada.</div>';
+        var det=document.createElement('div');
+        det.className='historial-relacionado';
+        det.style.cssText='background:#f8fafc;border:1px solid var(--line);border-radius:12px;padding:12px;margin:4px 0 12px';
+        det.innerHTML='<div style="font-weight:bold;margin-bottom:7px">Historia relacionada · '+relacionados.length+' movimiento(s)</div>'+
+          (esProduccion?'<div class="rev-actions"><button type="button" class="btn-naranja" data-hist-corr-tanque>Corregir producto del tanque</button><button type="button" class="btn-naranja" data-hist-completar>Completar materias primas</button></div>':'')+html;
+        fila.insertAdjacentElement('afterend',det);
+        var btnTanque=det.querySelector('[data-hist-corr-tanque]');
+        var btnCompletar=det.querySelector('[data-hist-completar]');
+        if (btnTanque) btnTanque.addEventListener('click',function(){abrirCorregirTanque({tamborId:tambor});});
+        if (btnCompletar) btnCompletar.addEventListener('click',function(){abrirCompletarProduccion({referencia:op||id});});
+      });
     }
 
     // ================== EXPORTAR ==================

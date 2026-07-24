@@ -143,3 +143,101 @@ test('permite agrupar líneas relacionadas en una sola operación', () => {
   assert.equal(rows.length, 3);
   assert.equal(rows[1].TipoRegistro, 'Consumo materia prima');
 });
+
+test('corregir un tanque cambia el producto sin alterar sus litros', () => {
+  context.leerRegistros = () => ({ filas: [
+    {
+      ID: 'OP-ORIGINAL-01-01', OperacionID: 'OP-ORIGINAL-01',
+      TipoRegistro: 'Preparar tambor', TamborID: '7',
+      Producto: 'Etherpool', LitrosPreparados: 100
+    },
+    {
+      TipoRegistro: 'Corrección tanque', TamborID: '7',
+      Item: 'Etherpool', Producto: 'Blanqueador',
+      ReferenciaOriginal: 'OP-ORIGINAL-01', Motivo: 'Nombre equivocado'
+    }
+  ] });
+  const inv = getInventarioReal();
+  const tanque = inv.tambores.find(t => t.id === '7');
+  assert.equal(tanque.producto, 'Blanqueador');
+  assert.equal(tanque.disponible, 100);
+  assert.equal(inv.items.find(i => i.Item === 'Blanqueador').Stock, 100);
+  assert.equal(inv.items.some(i => i.Item === 'Etherpool'), false);
+});
+
+test('completar una producción agrega consumos enlazados pero nunca vuelve a fabricar litros', () => {
+  context.leerRegistros = () => ({ filas: [
+    {
+      ID: 'OP-ORIGINAL-02-01', OperacionID: 'OP-ORIGINAL-02',
+      TipoRegistro: 'Preparar tambor', TamborID: '8',
+      Producto: 'Blanqueador', LitrosPreparados: 120
+    }
+  ] });
+  const rows = context.construirCorreccionProduccion_({
+    ReferenciaOriginal: 'OP-ORIGINAL-02',
+    TamborID: '8',
+    Motivo: 'Faltaron materias primas en el registro',
+    Componentes: [
+      { Item: 'Agua', Cantidad: 110, Unidad: 'L' },
+      { Item: 'Hipoclorito 13%', Cantidad: 10, Unidad: 'L' }
+    ]
+  }, 'Carlos');
+  assert.equal(rows[0].TipoRegistro, 'Novedad/Corrección');
+  assert.equal(rows.filter(r => r.TipoRegistro === 'Consumo materia prima').length, 2);
+  assert.equal(rows.some(r => r.TipoRegistro === 'Preparar tambor'), false);
+  rows.slice(1).forEach(r => assert.equal(r.ReferenciaOriginal, 'OP-ORIGINAL-02'));
+});
+
+test('la conciliación reconoce componentes añadidos por una corrección enlazada', () => {
+  context.leerRegistros = () => ({ filas: [
+    {
+      ID: 'OP-ORIGINAL-03-01', OperacionID: 'OP-ORIGINAL-03',
+      TipoRegistro: 'Preparar tambor', TamborID: '9',
+      Producto: 'Blanqueador', LitrosPreparados: 100,
+      FechaServidor: '2026-07-24T10:00:00.000Z', Usuario: 'qa'
+    },
+    {
+      ID: 'OP-CORR-03-01', OperacionID: 'OP-CORR-03',
+      TipoRegistro: 'Novedad/Corrección', TamborID: '9',
+      Producto: 'Blanqueador', ReferenciaOriginal: 'OP-ORIGINAL-03',
+      FechaServidor: '2026-07-24T11:00:00.000Z', Usuario: 'qa'
+    },
+    {
+      ID: 'OP-CORR-03-02', OperacionID: 'OP-CORR-03',
+      TipoRegistro: 'Consumo materia prima', TamborID: '9',
+      Producto: 'Blanqueador', Item: 'Agua', Cantidad: 90, Unidad: 'L',
+      ReferenciaOriginal: 'OP-ORIGINAL-03',
+      FechaServidor: '2026-07-24T11:00:00.000Z', Usuario: 'qa'
+    },
+    {
+      ID: 'OP-CORR-03-03', OperacionID: 'OP-CORR-03',
+      TipoRegistro: 'Consumo materia prima', TamborID: '9',
+      Producto: 'Blanqueador', Item: 'Hipoclorito 13%', Cantidad: 10, Unidad: 'L',
+      ReferenciaOriginal: 'OP-ORIGINAL-03',
+      FechaServidor: '2026-07-24T11:00:00.000Z', Usuario: 'qa'
+    }
+  ] });
+  const result = context.getConciliacion();
+  assert.equal(result.hallazgos.some(h => h.codigo === 'BOM-INCOMPLETA'), false);
+  assert.equal(result.hallazgos.some(h => h.codigo === 'RENDIMIENTO-IMPOSIBLE'), false);
+});
+
+test('trasladar saldo manualmente relaciona dos nombres existentes sin borrar historial', () => {
+  const original = context.itemExisteOficial_;
+  context.itemExisteOficial_ = item => ['Fragancia', 'Varsol'].includes(item);
+  try {
+    const rows = context.construirRevisionItem_({
+      Accion: 'RELACIONAR', Categoria: 'Materia prima',
+      Item: 'Fragancia', ItemDestino: 'Varsol', OrigenManual: true,
+      Motivo: 'Se registró con el nombre equivocado',
+      ReferenciaOriginal: 'CATALOGO-PRUEBA'
+    }, 'Neyder');
+    assert.equal(rows.length, 2);
+    assert.equal(rows[0].TipoRegistro, 'Aprobación item');
+    assert.equal(rows[1].TipoRegistro, 'Traslado inventario');
+    assert.equal(rows[1].Item, 'Fragancia');
+    assert.equal(rows[1].Producto, 'Varsol');
+  } finally {
+    context.itemExisteOficial_ = original;
+  }
+});

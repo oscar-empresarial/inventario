@@ -378,3 +378,103 @@ test('contrato frontend-backend de Preparar tambor permanece compatible', () => 
     assert.equal(row.Producto, 'Ecovarsol');
   });
 });
+
+test('corrección de tanque puede trasladar producto terminado del mismo lote sin duplicarlo', () => {
+  const { context } = makeBackend();
+  context.leerRegistros = () => ({ filas: [
+    {
+      ID: 'OP-TANK-01-01', OperacionID: 'OP-TANK-01',
+      TipoRegistro: 'Preparar tambor', TamborID: '12',
+      Producto: 'Etherpool', LitrosPreparados: 120
+    }
+  ] });
+  context.getInventario = () => ({
+    items: [
+      { Item: 'Etherpool Galón 4 L', Variante: '12', Categoria: 'Producto terminado', Stock: 5, Unidad: 'und' },
+      { Item: 'Etherpool Pimpina 20 L', Variante: '99', Categoria: 'Producto terminado', Stock: 2, Unidad: 'und' }
+    ],
+    tambores: [{ id: '12', producto: 'Etherpool', disponible: 100 }]
+  });
+  const rows = context.construirCorreccionTanque_({
+    ReferenciaOriginal: 'OP-TANK-01',
+    TamborID: '12',
+    Producto: 'Blanqueador',
+    Motivo: 'Producto seleccionado por error',
+    TrasladarEmpacados: true
+  }, 'Carlos');
+  assert.equal(rows[0].TipoRegistro, 'Corrección tanque');
+  assert.equal(rows[0].Item, 'Etherpool');
+  const transfers = rows.filter(r => r.TipoRegistro === 'Traslado inventario');
+  assert.equal(transfers.length, 1, 'solo traslada existencias del lote corregido');
+  assert.equal(transfers[0].Item, 'Etherpool Galón 4 L');
+  assert.equal(transfers[0].Producto, 'Blanqueador Galón 4 L');
+  assert.equal(transfers[0].Cantidad, 5);
+});
+
+test('correcciones rechazan referencias inexistentes o de un lote anterior reutilizado', () => {
+  const { context } = makeBackend();
+  context.leerRegistros = () => ({ filas: [
+    {
+      ID: 'OP-OLD-01', OperacionID: 'OP-OLD',
+      TipoRegistro: 'Preparar tambor', TamborID: '12',
+      Producto: 'Viejo', LitrosPreparados: 50
+    },
+    {
+      ID: 'OP-NEW-01', OperacionID: 'OP-NEW',
+      TipoRegistro: 'Preparar tambor', TamborID: '12',
+      Producto: 'Actual', LitrosPreparados: 80
+    }
+  ] });
+  assert.throws(() => context.construirCorreccionTanque_({
+    ReferenciaOriginal: 'NO-EXISTE', TamborID: '12',
+    Producto: 'Correcto', Motivo: 'Corrección solicitada'
+  }, 'Carlos'), /no existe|encontr/i);
+  assert.throws(() => context.construirCorreccionTanque_({
+    ReferenciaOriginal: 'OP-OLD', TamborID: '12',
+    Producto: 'Correcto', Motivo: 'Corrección solicitada'
+  }, 'Carlos'), /lote actual|preparación posterior/i);
+});
+
+test('POST de completar producción persiste una corrección atómica e idempotente', () => {
+  const { context, registro } = makeBackend();
+  const original = post(context, validProduction({ RequestId: 'REQ-PROD-ORIGINAL' }));
+  assert.equal(original.ok, true);
+  const payload = {
+    RequestId: 'REQ-CORR-PROD-01', TipoRegistro: 'Corrección producción',
+    Responsable: 'Carlos', ReferenciaOriginal: original.operacionId, TamborID: '12',
+    Motivo: 'Se confirmaron componentes omitidos',
+    Componentes: [
+      { Item: 'Agua', Cantidad: 10, Unidad: 'L' },
+      { Item: 'Varsol', Cantidad: 5, Unidad: 'L' }
+    ]
+  };
+  const result = post(context, payload);
+  assert.equal(result.ok, true);
+  assert.equal(result.movimientos, 3);
+  assert.equal(registro.data.slice(1).filter(r => r[3] === 'Preparar tambor').length, 1);
+  const rows = registro.data.slice(-3);
+  assert.deepEqual(rows.map(r => r[3]), ['Novedad/Corrección', 'Consumo materia prima', 'Consumo materia prima']);
+  const refIndex = registro.data[0].indexOf('ReferenciaOriginal');
+  assert.equal(new Set(rows.map(r => r[refIndex])).size, 1);
+  assert.equal(rows[0][refIndex], original.operacionId);
+  const retry = post(context, payload);
+  assert.equal(retry.duplicado, true);
+  assert.equal(registro.getLastRow(), 7);
+});
+
+test('POST de corregir tanque escribe una corrección, no una segunda preparación', () => {
+  const { context, registro } = makeBackend();
+  const original = post(context, validProduction({ RequestId: 'REQ-TANK-ORIGINAL' }));
+  const result = post(context, {
+    RequestId: 'REQ-CORR-TANK-01', TipoRegistro: 'Corrección tanque',
+    Responsable: 'Neyder', ReferenciaOriginal: original.operacionId,
+    TamborID: '12', Producto: 'Blanqueador',
+    Motivo: 'Se seleccionó el producto equivocado',
+    TrasladarEmpacados: false
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.movimientos, 1);
+  assert.equal(registro.data.slice(1).filter(r => r[3] === 'Preparar tambor').length, 1);
+  assert.equal(registro.data.at(-1)[3], 'Corrección tanque');
+  assert.equal(registro.data.at(-1)[11], 'Blanqueador');
+});
