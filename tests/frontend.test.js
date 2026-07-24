@@ -67,6 +67,10 @@ test('los hallazgos de producción tienen una acción para completar materias pr
   assert.match(source, /abrirCompletarProduccion/);
 });
 
+test('Correcciones diagnostica Apps Script en vez de ocultar fallos de conexión', () => {
+  assert.match(source, /function loadCorrecciones[\s\S]*diagnosticarConexion\(estado\)/);
+});
+
 test('inventario y selectores de tanque usan orden natural', () => {
   assert.match(source, /function compararNatural/);
   assert.match(source, /sort\(function\(a,b\)[\s\S]*compararNatural/);

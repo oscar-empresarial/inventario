@@ -3248,8 +3248,7 @@
         },forzar);
         if (!state.conciliacion) loadConciliacion();
       },function() {
-        estado.className='status err';
-        estado.textContent='No se pudieron actualizar los datos. Revisa la conexión e inténtalo otra vez.';
+        diagnosticarConexion(estado);
       },20000);
     }
 
