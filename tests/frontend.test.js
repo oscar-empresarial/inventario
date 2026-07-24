@@ -58,6 +58,8 @@ test('la interfaz ofrece correcciones rápidas de tanque, componentes y traslado
   assert.match(html, /id="corrTanqueAprobado"/);
   assert.match(html, /id="corrProduccionAprobado"/);
   assert.match(html, /1\. Elige el caso/);
+  assert.match(html, /Preguntas rápidas antes de corregir/);
+  assert.match(html, /¿Ya se empacó o salió alguna cantidad/);
 });
 
 test('los hallazgos de producción tienen una acción para completar materias primas', () => {
