@@ -907,7 +907,7 @@ function registrarErrorPost_(payload, requestId, err) {
 
 function asegurarColumnasAuditoria_(hoja) {
   var encabezados = hoja.getRange(1,1,1,Math.max(hoja.getLastColumn(),1)).getValues()[0].map(String);
-  ['OperacionID','IdempotencyKey','RequestHash','EstadoMovimiento','FechaServidor','Usuario','VersionBOM','HashIntegridad','DestinoTambor','ReferenciaOriginal'].forEach(function (nombre) {
+  ['OperacionID','IdempotencyKey','RequestHash','EstadoMovimiento','FechaServidor','Usuario','VersionBOM','HashIntegridad','DestinoTambor','ReferenciaOriginal','AprobadoPor'].forEach(function (nombre) {
     if (indiceEncabezado_(encabezados,nombre) < 0) {
       encabezados.push(nombre);
       hoja.getRange(1,encabezados.length).setValue(nombre);
@@ -1059,6 +1059,7 @@ function validarComponentesCorreccion_(componentes) {
 
 function construirCorreccionProduccion_(payload,responsable) {
   var motivo=String(payload.Motivo||payload.motivo||'').trim();
+  var aprobadoPor=String(payload.AprobadoPor||payload.aprobadoPor||'').trim();
   var referencia=String(payload.ReferenciaOriginal||payload.referenciaOriginal||'').trim();
   var tamborSolicitado=String(payload.TamborID||payload.tamborId||'').trim();
   if (motivo.length<8) throw new Error('Explica por qué se completa la producción (mínimo 8 caracteres).');
@@ -1071,15 +1072,19 @@ function construirCorreccionProduccion_(payload,responsable) {
   var filas=[{
     TipoRegistro:'Novedad/Corrección',Responsable:responsable,Categoria:'Producción',
     Producto:producto,TamborID:tambor,Motivo:'Completar materias primas',
-    ReferenciaOriginal:refReal,Observacion:motivo,Origen:'Centro de correcciones'
+    ReferenciaOriginal:refReal,AprobadoPor:aprobadoPor,
+    Observacion:motivo+(aprobadoPor?' · Aprobado por '+aprobadoPor:''),
+    Origen:'Centro de correcciones'
   }];
   componentes.forEach(function(c,i) {
     filas.push({
       TipoRegistro:'Consumo materia prima',Responsable:responsable,Categoria:'Materia prima',
       Item:c.item,Variante:c.variante||'',Cantidad:c.cantidad,Unidad:c.unidad,
       Movimiento:'Consumo',Motivo:'Corrección de producción',Producto:producto,TamborID:tambor,
-      ReferenciaOriginal:refReal,
-      Observacion:'Componente faltante '+(i+1)+' · '+motivo,Origen:'Centro de correcciones'
+      ReferenciaOriginal:refReal,AprobadoPor:aprobadoPor,
+      Observacion:'Componente faltante '+(i+1)+' · '+motivo+
+        (aprobadoPor?' · Aprobado por '+aprobadoPor:''),
+      Origen:'Centro de correcciones'
     });
   });
   return filas;
@@ -1093,6 +1098,7 @@ function empiezaConProducto_(item,producto) {
 
 function construirCorreccionTanque_(payload,responsable) {
   var motivo=String(payload.Motivo||payload.motivo||'').trim();
+  var aprobadoPor=String(payload.AprobadoPor||payload.aprobadoPor||'').trim();
   var referencia=String(payload.ReferenciaOriginal||payload.referenciaOriginal||'').trim();
   var tamborId=String(payload.TamborID||payload.tamborId||'').trim();
   var productoNuevo=String(payload.Producto||payload.producto||'').trim();
@@ -1115,7 +1121,9 @@ function construirCorreccionTanque_(payload,responsable) {
     TipoRegistro:'Corrección tanque',Responsable:responsable,Categoria:'Producción',
     Item:productoAnterior,Producto:productoNuevo,TamborID:tamborId,
     Motivo:'Corrección de nombre de tanque',ReferenciaOriginal:refReal,
-    Observacion:motivo,Origen:'Centro de correcciones'
+    AprobadoPor:aprobadoPor,
+    Observacion:motivo+(aprobadoPor?' · Aprobado por '+aprobadoPor:''),
+    Origen:'Centro de correcciones'
   }];
   var trasladar=payload.TrasladarEmpacados===true ||
     /^(si|sí|true|1)$/i.test(String(payload.TrasladarEmpacados||''));
@@ -1133,7 +1141,9 @@ function construirCorreccionTanque_(payload,responsable) {
         TipoRegistro:'Traslado inventario',Responsable:responsable,Categoria:'Producto terminado',
         Item:item,Variante:variante,Producto:(productoNuevo+sufijo).trim(),
         Cantidad:stock,Unidad:unidad,Motivo:'Corrección de producto del tanque',
-        ReferenciaOriginal:refReal,Observacion:motivo,Origen:'Centro de correcciones'
+        ReferenciaOriginal:refReal,AprobadoPor:aprobadoPor,
+        Observacion:motivo+(aprobadoPor?' · Aprobado por '+aprobadoPor:''),
+        Origen:'Centro de correcciones'
       };
       validarTrasladoPost_(traslado);
       filas.push(traslado);

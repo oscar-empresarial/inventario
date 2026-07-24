@@ -55,9 +55,17 @@ test('la interfaz ofrece correcciones rápidas de tanque, componentes y traslado
   assert.match(html, /id="btnTrasladarSaldo"/);
   assert.match(source, /TipoRegistro:'Corrección tanque'/);
   assert.match(source, /TipoRegistro:'Corrección producción'/);
+  assert.match(html, /id="corrTanqueAprobado"/);
+  assert.match(html, /id="corrProduccionAprobado"/);
+  assert.match(html, /1\. Elige el caso/);
 });
 
 test('los hallazgos de producción tienen una acción para completar materias primas', () => {
   assert.match(source, /data-conc-action="COMPLETAR_MP"/);
   assert.match(source, /abrirCompletarProduccion/);
+});
+
+test('inventario y selectores de tanque usan orden natural', () => {
+  assert.match(source, /function compararNatural/);
+  assert.match(source, /sort\(function\(a,b\)[\s\S]*compararNatural/);
 });

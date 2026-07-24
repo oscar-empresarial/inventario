@@ -9,10 +9,13 @@ La pestaña naranja **Correcciones** permite:
 3. **Trasladar saldo**: mueve toda la existencia de un nombre equivocado a un ítem oficial existente.
 4. **Ver historial relacionado**: desde Movimientos muestra la operación, sus correcciones, el tanque, el producto y los consumos enlazados.
 
+Los tanques se muestran en orden natural (`1, 2, 3… 10, 11, 12…`) en Inventario, selectores y exportaciones.
+
 ## Reglas de seguridad
 
 - `REGISTRO_APP` sigue siendo un libro mayor: no se edita ni se borra el movimiento original.
 - Toda corrección exige responsable, motivo y referencia original.
+- La interfaz registra por separado quién aprobó la corrección; Oscar aparece como administrador.
 - El mismo `RequestId` no puede duplicar una corrección.
 - Una corrección de tanque solo puede actuar sobre el lote actual; se rechaza si el tanque fue preparado de nuevo después.
 - Corregir un tanque no altera litros.
@@ -37,4 +40,3 @@ La versión compatible del backend se conservó para que la aplicación normal n
 3. ¿Ya se empacaron unidades desde ese tanque?
 4. ¿Qué materias primas se usaron realmente, con cantidad y unidad?
 5. ¿Quién confirma la corrección y qué evidencia revisó?
-

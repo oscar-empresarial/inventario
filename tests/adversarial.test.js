@@ -364,6 +364,13 @@ test('frontend y backend comparten el contrato de cantidades finitas', () => {
   });
 });
 
+test('los tanques se ordenan naturalmente por n첬mero y luego por nombre', () => {
+  const { context: frontend } = makeFrontend([]);
+  const ids = ['1', '14', '25', '21', '27', '28', 'Creolina', '9', '12', '2', '11', '30'];
+  ids.sort(frontend.compararNatural);
+  assert.deepEqual(ids, ['1', '2', '9', '11', '12', '14', '21', '25', '27', '28', '30', 'Creolina']);
+});
+
 test('contrato frontend-backend de Preparar tambor permanece compatible', () => {
   const { context } = makeBackend();
   assert.match(frontendSource, /produccion\.FormulaCompleta\s*=\s*true/);
@@ -400,9 +407,11 @@ test('correcci처n de tanque puede trasladar producto terminado del mismo lote si
     TamborID: '12',
     Producto: 'Blanqueador',
     Motivo: 'Producto seleccionado por error',
+    AprobadoPor: 'Oscar',
     TrasladarEmpacados: true
   }, 'Carlos');
   assert.equal(rows[0].TipoRegistro, 'Correcci처n tanque');
+  assert.equal(rows[0].AprobadoPor, 'Oscar');
   assert.equal(rows[0].Item, 'Etherpool');
   const transfers = rows.filter(r => r.TipoRegistro === 'Traslado inventario');
   assert.equal(transfers.length, 1, 'solo traslada existencias del lote corregido');
@@ -443,6 +452,7 @@ test('POST de completar producci처n persiste una correcci처n at처mica e idempote
     RequestId: 'REQ-CORR-PROD-01', TipoRegistro: 'Correcci처n producci처n',
     Responsable: 'Carlos', ReferenciaOriginal: original.operacionId, TamborID: '12',
     Motivo: 'Se confirmaron componentes omitidos',
+    AprobadoPor: 'Oscar',
     Componentes: [
       { Item: 'Agua', Cantidad: 10, Unidad: 'L' },
       { Item: 'Varsol', Cantidad: 5, Unidad: 'L' }
@@ -457,6 +467,8 @@ test('POST de completar producci처n persiste una correcci처n at처mica e idempote
   const refIndex = registro.data[0].indexOf('ReferenciaOriginal');
   assert.equal(new Set(rows.map(r => r[refIndex])).size, 1);
   assert.equal(rows[0][refIndex], original.operacionId);
+  const approvalIndex = registro.data[0].indexOf('AprobadoPor');
+  assert.equal(rows[0][approvalIndex], 'Oscar');
   const retry = post(context, payload);
   assert.equal(retry.duplicado, true);
   assert.equal(registro.getLastRow(), 7);
@@ -470,6 +482,7 @@ test('POST de corregir tanque escribe una correcci처n, no una segunda preparaci�
     Responsable: 'Neyder', ReferenciaOriginal: original.operacionId,
     TamborID: '12', Producto: 'Blanqueador',
     Motivo: 'Se seleccion처 el producto equivocado',
+    AprobadoPor: 'Oscar',
     TrasladarEmpacados: false
   });
   assert.equal(result.ok, true);
@@ -477,4 +490,5 @@ test('POST de corregir tanque escribe una correcci처n, no una segunda preparaci�
   assert.equal(registro.data.slice(1).filter(r => r[3] === 'Preparar tambor').length, 1);
   assert.equal(registro.data.at(-1)[3], 'Correcci처n tanque');
   assert.equal(registro.data.at(-1)[11], 'Blanqueador');
+  assert.equal(registro.data.at(-1)[registro.data[0].indexOf('AprobadoPor')], 'Oscar');
 });

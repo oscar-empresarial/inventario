@@ -383,6 +383,22 @@
     }
     .corr-card h3 { margin:0 0 7px; font-size:15px; color:#9a3412; }
     .corr-card p { margin:0 0 12px; color:#7c2d12; font-size:12px; line-height:1.45; }
+    .corr-pasos {
+      display:grid;
+      grid-template-columns:repeat(3,minmax(0,1fr));
+      gap:8px;
+      margin:12px 0;
+    }
+    .corr-paso {
+      background:#fff;
+      border:1px solid #fed7aa;
+      border-radius:12px;
+      padding:10px;
+      color:#7c2d12;
+      font-size:12px;
+      line-height:1.4;
+    }
+    .corr-paso b { display:block; color:#9a3412; margin-bottom:3px; }
     .btn-naranja {
       border:none;
       color:white;
@@ -487,6 +503,7 @@
     @media (max-width: 700px) {
       .type-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .corr-grid { grid-template-columns: 1fr; }
+      .corr-pasos { grid-template-columns: 1fr; }
       .row, .filtros { grid-template-columns: 1fr; }
       .mp-fila { grid-template-columns: 1.5fr 1fr 0.9fr auto; }
       .mp-fila .mp-var { display: none; }
@@ -577,6 +594,7 @@
                 <option>Carlos</option>
                 <option>Neyder</option>
                 <option>Leandro</option>
+                <option value="Oscar">Oscar (Administrador)</option>
               </select>
             </div>
             <div class="field hidden" data-field="categoria">
@@ -891,6 +909,11 @@
         <div class="status warn" style="display:block;margin-top:0">
           Aquí no se borra ni se edita el movimiento original. La app agrega una corrección enlazada y conserva quién la hizo, cuándo y por qué.
         </div>
+        <div class="corr-pasos">
+          <div class="corr-paso"><b>1. Elige el caso</b>Tanque mal nombrado, materias primas faltantes o saldo en otro nombre.</div>
+          <div class="corr-paso"><b>2. Confirma la realidad</b>Revisa el tanque físico, cantidades y unidades antes de guardar.</div>
+          <div class="corr-paso"><b>3. Deja la evidencia</b>Selecciona responsable, aprobación y explica qué ocurrió.</div>
+        </div>
         <div class="corr-grid">
           <div class="corr-card">
             <h3>El tanque tiene otro producto</h3>
@@ -956,6 +979,7 @@
               <option>Carlos</option>
               <option>Neyder</option>
               <option>Leandro</option>
+              <option value="Oscar">Oscar (Administrador)</option>
             </select>
           </div>
         </div>
@@ -1065,7 +1089,7 @@
         <label for="revResponsable">Responsable de la decisión</label>
         <select id="revResponsable">
           <option value="">Seleccionar…</option>
-          <option>Carlos</option><option>Neyder</option><option>Leandro</option>
+          <option>Carlos</option><option>Neyder</option><option>Leandro</option><option value="Oscar">Oscar (Administrador)</option>
         </select>
       </div>
       <div style="margin-bottom:10px">
@@ -1097,8 +1121,12 @@
       <div style="margin-bottom:10px">
         <label for="corrTanqueResponsable">Responsable de la corrección</label>
         <select id="corrTanqueResponsable">
-          <option value="">Seleccionar…</option><option>Carlos</option><option>Neyder</option><option>Leandro</option>
+          <option value="">Seleccionar…</option><option>Carlos</option><option>Neyder</option><option>Leandro</option><option value="Oscar">Oscar (Administrador)</option>
         </select>
+      </div>
+      <div style="margin-bottom:10px">
+        <label for="corrTanqueAprobado">Aprobado por</label>
+        <select id="corrTanqueAprobado"><option value="Oscar">Oscar (Administrador)</option></select>
       </div>
       <div style="margin-bottom:10px">
         <label for="corrTanqueMotivo">Qué ocurrió</label>
@@ -1132,8 +1160,12 @@
       <div style="margin-bottom:10px">
         <label for="corrProduccionResponsable">Responsable de la corrección</label>
         <select id="corrProduccionResponsable">
-          <option value="">Seleccionar…</option><option>Carlos</option><option>Neyder</option><option>Leandro</option>
+          <option value="">Seleccionar…</option><option>Carlos</option><option>Neyder</option><option>Leandro</option><option value="Oscar">Oscar (Administrador)</option>
         </select>
+      </div>
+      <div style="margin-bottom:10px">
+        <label for="corrProduccionAprobado">Aprobado por</label>
+        <select id="corrProduccionAprobado"><option value="Oscar">Oscar (Administrador)</option></select>
       </div>
       <div style="margin-bottom:10px">
         <label for="corrProduccionMotivo">Qué ocurrió</label>
@@ -1380,6 +1412,9 @@
         .normalize('NFD')
         .replace(/[\u0300-\u036f]/g, '')
         .replace(/\s+/g, ' ');
+    }
+    function compararNatural(a,b) {
+      return String(a||'').localeCompare(String(b||''),'es',{numeric:true,sensitivity:'base'});
     }
     function escapeHtml(str) {
       return String(str || '').replace(/[&<>"']/g, function (s) {
@@ -1894,7 +1929,11 @@
     }
 
     function getTamborOptions() {
-      return (state.catalogos.tambores || []).map(function (t) {
+      return (state.catalogos.tambores || []).slice().sort(function(a,b) {
+        var idA=typeof a==='string'?a:(a.id||a.producto||'');
+        var idB=typeof b==='string'?b:(b.id||b.producto||'');
+        return compararNatural(idA,idB);
+      }).map(function (t) {
         if (typeof t === 'string') return { value: t, label: t };
         var id = t.id || t.producto || '';
         var est = normalize(t.estado || '');
@@ -2803,7 +2842,9 @@
 
     function renderTanques(lista, resumen) {
       resumen.style.display = 'none';
-      var tanques = state.catalogos.tambores || [];
+      var tanques = (state.catalogos.tambores || []).slice().sort(function(a,b) {
+        return compararNatural(a.id||a.producto||'',b.id||b.producto||'');
+      });
       if (!tanques.length) {
         lista.innerHTML = '<div class="hint" style="padding:14px">No hay tanques ni baldes registrados todavía. Se crean desde “Preparé / usé materia prima”.</div>';
         return;
@@ -3188,12 +3229,15 @@
       loadCorrecciones(false,function() {
         var sel=document.getElementById('corrTanque');
         sel.innerHTML='<option value="">Seleccionar…</option>'+
-          (state.catalogos.tambores||[]).map(function(t) {
+          (state.catalogos.tambores||[]).slice().sort(function(a,b) {
+            return compararNatural(a.id||a.producto||'',b.id||b.producto||'');
+          }).map(function(t) {
             return '<option value="'+escapeHtml(t.id||'')+'">'+escapeHtml((t.id||'Tanque')+' · '+(t.producto||'Sin producto')+' · '+Number(t.disponible||0)+' L')+'</option>';
           }).join('');
         sel.value=(prefill&&prefill.tamborId)||'';
         document.getElementById('corrProducto').value='';
         document.getElementById('corrTanqueResponsable').value='';
+        document.getElementById('corrTanqueAprobado').value='Oscar';
         document.getElementById('corrTanqueMotivo').value='';
         document.getElementById('corrTrasladarEmpacados').checked=true;
         actualizarTanqueCorreccion();
@@ -3222,11 +3266,13 @@
       var tambor=valueOf('corrTanque');
       var producto=valueOf('corrProducto');
       var responsable=valueOf('corrTanqueResponsable');
+      var aprobadoPor=valueOf('corrTanqueAprobado');
       var motivo=valueOf('corrTanqueMotivo');
       var referencia=document.getElementById('corrTanqueActual').dataset.referencia||('TANQUE:'+tambor+':ULTIMA');
       if (!tambor) { document.getElementById('corrTanque').focus(); return; }
       if (!producto) { document.getElementById('corrProducto').focus(); return; }
       if (!responsable) { document.getElementById('corrTanqueResponsable').focus(); return; }
+      if (!aprobadoPor) { document.getElementById('corrTanqueAprobado').focus(); return; }
       if (motivo.length<8) { document.getElementById('corrTanqueMotivo').focus(); return; }
       var btn=document.getElementById('btnCorrTanqueGuardar');
       btn.disabled=true; btn.textContent='Guardando…';
@@ -3235,6 +3281,7 @@
           RequestId:nuevoRequestId(),FechaCliente:new Date().toISOString(),
           TipoRegistro:'Corrección tanque',Responsable:responsable,TamborID:tambor,
           Producto:producto,Motivo:motivo,ReferenciaOriginal:referencia,
+          AprobadoPor:aprobadoPor,
           TrasladarEmpacados:document.getElementById('corrTrasladarEmpacados').checked,
           Origen:'GitHub Pages · Centro de correcciones'
         });
@@ -3287,6 +3334,7 @@
         document.getElementById('corrMpLista').innerHTML='';
         agregarFilaCorreccionMp();
         document.getElementById('corrProduccionResponsable').value='';
+        document.getElementById('corrProduccionAprobado').value='Oscar';
         document.getElementById('corrProduccionMotivo').value='';
         document.getElementById('modalCompletarProduccion').classList.add('visible');
       });
@@ -3309,9 +3357,11 @@
       var idx=valueOf('corrProduccion');
       var p=idx===''?null:state.correccionProducciones[Number(idx)];
       var responsable=valueOf('corrProduccionResponsable');
+      var aprobadoPor=valueOf('corrProduccionAprobado');
       var motivo=valueOf('corrProduccionMotivo');
       if (!p) { document.getElementById('corrProduccion').focus(); return; }
       if (!responsable) { document.getElementById('corrProduccionResponsable').focus(); return; }
+      if (!aprobadoPor) { document.getElementById('corrProduccionAprobado').focus(); return; }
       if (motivo.length<8) { document.getElementById('corrProduccionMotivo').focus(); return; }
       var componentes=[];
       var invalida=false;
@@ -3336,7 +3386,8 @@
           RequestId:nuevoRequestId(),FechaCliente:new Date().toISOString(),
           TipoRegistro:'Corrección producción',Responsable:responsable,TamborID:p.tamborId,
           Producto:p.producto,Componentes:componentes,Motivo:motivo,
-          ReferenciaOriginal:p.referencia,Origen:'GitHub Pages · Centro de correcciones'
+          ReferenciaOriginal:p.referencia,AprobadoPor:aprobadoPor,
+          Origen:'GitHub Pages · Centro de correcciones'
         });
         cerrarCompletarProduccion();
         state.inventario=null; state.registrosTodos=null; state.conciliacion=null;
@@ -3570,7 +3621,9 @@
       var vista = document.getElementById('expVista');
       vista.innerHTML = '';
       if (tipo === 'tanques') {
-        var tanques = state.catalogos.tambores || [];
+        var tanques = (state.catalogos.tambores || []).slice().sort(function(a,b) {
+          return compararNatural(a.id||a.producto||'',b.id||b.producto||'');
+        });
         if (!tanques.length) {
           estado.className = 'status warn';
           estado.textContent = 'No hay tanques para exportar (o abre primero la pestaña Inventario para cargar los datos).';
