@@ -315,3 +315,47 @@ enganchar después a cualquier aviso que ya exista.
 2. Trigger propio en Apps Script — hay que autorizar permisos una vez.
 
 Que solo avise cuando haya algo **nuevo**, no todos los días (gestión por excepción).
+
+---
+
+## ACTUALIZACIÓN 2026-07-31 (noche) — residuo fantasma y estado final del tanque 1
+
+### El tercer bug: el tanque arrastraba litros que no existían
+
+Al preparar sobre un tanque que el sistema cree con sobras, esos litros **se sumaban al lote
+nuevo sin avisar**. Al tanque 1 le pasó: cargaba 10 L del lote del 24-jul que **físicamente
+ya no estaban** (Oscar confirmó: *"el tanque no tenía residuo"*). El fantasma se arrastra
+solo y nunca se corrige.
+
+**Corregido y desplegado (@24).** Ahora, si el tanque trae saldo, la app no lo suma callada:
+
+> RESIDUO EN EL TANQUE: el sistema dice que en el tanque 1 todavía quedan 10 L del lote
+> anterior. ¿Los aprovechaste en esta mezcla o vaciaste el tanque?
+
+- **Aceptar** → los aprovechó: se suman, como siempre.
+- **Cancelar** → estaba vacío: se descarta el fantasma con un movimiento propio
+  (`Merma - tanque vaciado antes de preparar`), para que quede a la vista por qué se fue.
+
+Probado en vivo con un tanque de prueba: sin responder **pregunta**; respondiendo *vaciado*
+el tanque queda en **0,03 L y no en 0,05**. Prueba limpiada (tanque vacío, formol devuelto).
+
+Código: `resolverResiduoTanque_` y el bloque nuevo de `expandirProduccion_`; en el frontend,
+el mismo `catch` que ya manejaba el duplicado.
+
+### Estado final del tanque 1 — decidido por Oscar
+
+| | |
+|---|---|
+| **Tanque 1** | **170 L, "Listo"** |
+| Preparación vigente | la del 29-jul (160 L) |
+| Preparación del 31-jul (170 L) | **sigue revertida** |
+| Materias primas | **no se tocaron** en este ajuste |
+
+El camino fue: 300 L (con el duplicado) → 130 (revertido el duplicado) → 120 (quitado el
+residuo de 10 L) → **170 (ajuste final indicado por Oscar)**.
+
+**Ojo, queda abierto:** si la preparación buena era la del 31-jul (170 L) y no la del
+29-jul, hay que devolver también sus materias primas — CMC 400 g, TEA 300 ml, Genapol
+600 ml, Formol 45 ml. Hoy el tanque dice 170 L pero las materias primas descontadas son las
+del lote del 29-jul. **No se tocó porque no está confirmado cuál de los dos lotes fue el
+real.**

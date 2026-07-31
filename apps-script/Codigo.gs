@@ -1173,7 +1173,30 @@ function validarProduccionPost_(payload) {
   if (cobertura > 1.05) throw new Error('La fórmula declara más volumen que la producción. Revisa cantidades y unidades.');
   validarStockComponentes_(componentes);
   avisarSiPareceDuplicada_(payload,producto,tamborId,componentes);
-  return {producto:producto,litros:litros,tamborId:tamborId,componentes:componentes,baseTanque:baseTanque,baseLitros:baseLitros};
+  var residuo = resolverResiduoTanque_(payload,tamborId);
+  return {producto:producto,litros:litros,tamborId:tamborId,componentes:componentes,
+          baseTanque:baseTanque,baseLitros:baseLitros,residuoADescartar:residuo};
+}
+
+// Cuando se prepara sobre un tanque que "según el sistema" tiene sobras, el saldo viejo se
+// suma al lote nuevo. Si en la práctica el tanque se lavó o se vació, esos litros son un
+// fantasma que se arrastra para siempre (le pasó al tanque 1: cargaba 10 L del lote anterior).
+// Por eso ahora hay que decir qué se hizo con el residuo: aprovecharlo o descartarlo.
+function resolverResiduoTanque_(payload,tamborId) {
+  var tambores = getInventario().tambores || [];
+  var disponible = 0, existe = false;
+  for (var i=0;i<tambores.length;i++) {
+    if (normalizar(tambores[i].id) === normalizar(tamborId)) { disponible = Number(tambores[i].disponible)||0; existe = true; break; }
+  }
+  if (!existe || disponible <= 0.01) return 0;   // tanque nuevo o vacío: nada que preguntar
+  var decision = normalizar(payload.ResiduoTanque || payload.residuoTanque || '');
+  if (decision === 'aprovechado') return 0;                 // se suma, comportamiento de siempre
+  if (decision === 'vaciado' || decision === 'descartado') return disponible;
+  throw new Error(
+    'RESIDUO EN EL TANQUE: el sistema dice que en el tanque ' + tamborId + ' todavía quedan ' +
+    redondear_(disponible,2) + ' L del lote anterior. ¿Los aprovechaste en esta mezcla o vaciaste el tanque? ' +
+    'Hay que responder para que esos litros no queden arrastrándose.'
+  );
 }
 
 // Firma de una preparación: producto + tanque + componentes (sin agua, que varía al ojo).
@@ -1237,7 +1260,22 @@ function avisarSiPareceDuplicada_(payload,producto,tamborId,componentes) {
 
 function expandirProduccion_(payload,responsable,operacionId) {
   var produccion=validarProduccionPost_(payload);
-  var filas=[payload];
+  var filas=[];
+  // Si el operario dice que vació el tanque, el saldo viejo se descarta ANTES de la
+  // preparación. Va como movimiento propio para que quede a la vista por qué se fue,
+  // en vez de desaparecer sin rastro.
+  if (produccion.residuoADescartar > 0) {
+    filas.push({
+      TipoRegistro:'Novedad/Corrección',Responsable:responsable,
+      TamborID:produccion.tamborId,Producto:produccion.producto,
+      Cantidad:redondear_(produccion.residuoADescartar,3),Unidad:'L',
+      Motivo:'Merma - tanque vaciado antes de preparar',
+      ReferenciaOriginal:operacionId,
+      Observacion:'El sistema traía '+redondear_(produccion.residuoADescartar,2)+' L en el tanque '+
+                  produccion.tamborId+' y el operario confirmó que estaba vacío al preparar.'
+    });
+  }
+  filas.push(payload);
   produccion.componentes.forEach(function(c,i) {
     filas.push({
       TipoRegistro:'Consumo materia prima',Categoria:'Materia prima',Item:c.item,Variante:c.variante||'',
