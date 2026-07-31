@@ -183,6 +183,57 @@ el recorte no aportaba nada). Desplegado vía clasp como versión **@19** del de
 `AKfycbxAWuJv…` (2026-07-31). Verificado contra la app en vivo: el tanque 1 aparece con
 300 L "Listo". `apps-script/Codigo.gs` del repo quedó igual al remoto.
 
+### Preparación duplicada del tanque 1 — REVERTIDA 2026-07-31
+
+**Qué pasó:** como el tanque 1 no aparecía en la app (bug del `.slice(-30)`), Carlos volvió
+a registrar la misma preparación. Quedó dos veces:
+
+| | 29-jul 21:21 (buena) | 31-jul 19:46 (duplicada) |
+|---|---|---|
+| Operación | `OP-3C3EECD0…` | **`OP-A70483CF-1B4`** |
+| Litros | 160 L | 170 L |
+| CMC Chino | 400 g | 400 g |
+| TEA | 300 ml | 300 ml |
+| Genapol | 600 ml | 600 ml |
+| Formol | 45 ml | 45 ml |
+| Agua | 159 L | 169 L |
+
+Componentes idénticos = misma receta tecleada dos veces. El tanque quedó marcando **300 L**
+cuando lo real son **130 L** (160 preparados + 10 que quedaban − 40 empacados).
+
+**Cómo se revirtió — sin borrar nada.** `REGISTRO_APP` es libro mayor, así que se usó el
+mecanismo propio del sistema: un `Movimiento compuesto` con 5 `Novedad/Corrección`
+(operación **`OP-698E1EED-D0C`**, RequestId `rev-dup-tanque1-A70483CF-1B4`):
+
+- tanque 1 → −170 L (motivo *Registro de más*)
+- CMC Chino +400 g · TEA +300 ml · Genapol +600 ml · Formol +45 ml (motivo *Sobrante*)
+
+El agua no se revirtió porque la app no la controla como inventario (se ignora a propósito).
+
+**Verificado contra la app en vivo después de aplicar:** tanque 1 = **130 L "Listo"**;
+CMC Chino 0,4 kg · TEA 0,3 L · Genapol 0,6 L · Formol 0,05 L devueltos.
+
+Si algún día se comprueba que la del 31-jul era buena, se revierte igual: otra novedad al
+revés. Nada se perdió.
+
+### Cómo evitar que se repita — recomendación
+
+Descartada la idea de "un campo donde Carlos escriba y Oscar apruebe": depende de que
+alguien se acuerde de escribir, y la regla de la casa es que eso no funciona
+(*"no lo harán, los conozco"*). Además le mete a Oscar una cola de aprobaciones.
+
+Lo que sí ataca la causa:
+
+1. **Guardarraíl al guardar (lo importante).** Si se registra el mismo producto, en el
+   mismo tanque, con los mismos componentes, dentro de las últimas 24 h → la app avisa
+   *"esto se parece a la preparación de hace N horas, ¿seguro?"* y exige confirmar.
+   **Avisar y confirmar, no bloquear** — a veces sí se prepara dos veces el mismo día.
+   No depende de que nadie avise a nadie.
+2. **Aviso a Oscar solo por excepción**: duplicado confirmado, negativo nuevo, o tanque
+   con número imposible (como los 2.026 L del tanque 13).
+3. **Botón "algo salió mal"** como red de seguridad, no como mecanismo principal — para lo
+   que el sistema no puede detectar solo.
+
 ### Bug adicional encontrado al revisar (pendiente, no urgente)
 
 El tanque **13 (Gel antibacterial) marca 2.026 L disponibles**: la celda
