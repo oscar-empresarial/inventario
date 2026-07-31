@@ -743,9 +743,11 @@ function getInventario() {
   }
   items.sort(function (a, b) { return a.Item.localeCompare(b.Item); });
 
-  // Los tanques vacíos NO desaparecen: quedan marcados "Vacío" para volverlos a usar
+  // Los tanques vacíos NO desaparecen: quedan marcados "Vacío" para volverlos a usar.
+  // OJO: aquí había un .slice(-30) que ocultaba los tanques más viejos; cuando el
+  // conteo de IDs pasó de 30, el tanque 1 desapareció de la app y del validador de
+  // empaque ("Tambor no encontrado") aunque su preparación SÍ estaba guardada.
   var tamboresDisponibles = tambores
-    .slice(-30)
     .map(function (t) {
       var vacio = t.disponible <= 0.01;
       return {
