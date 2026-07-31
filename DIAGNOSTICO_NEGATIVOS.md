@@ -234,11 +234,84 @@ Lo que sí ataca la causa:
 3. **Botón "algo salió mal"** como red de seguridad, no como mecanismo principal — para lo
    que el sistema no puede detectar solo.
 
-### Bug adicional encontrado al revisar (pendiente, no urgente)
+---
 
-El tanque **13 (Gel antibacterial) marca 2.026 L disponibles**: la celda
-`LitrosPreparados` de su preparación del 30-jul contiene una **fecha**
-(`2026-05-02T05:00…`) en vez de un número — la hoja formateó la celda como fecha y
-`num()` lee "2026". Corregir la celda en la hoja REGISTRO_APP (fila del 30-jul, tambor
-13) poniendo los litros reales, y considerar validar en `doPost` que LitrosPreparados
-sea numérico.
+## ACTUALIZACIÓN 2026-07-31 (tarde) — guardarraíl y auditoría diaria
+
+### 1. Guardarraíl anti-duplicado — DESPLEGADO Y PROBADO
+
+Antes de aceptar una preparación, el backend compara su **firma** (producto + tanque +
+componentes, **sin el agua**, que se echa al ojo) contra las preparaciones de ese mismo
+tanque en las últimas 24 h. Si coincide, no la guarda y responde:
+
+> POSIBLE DUPLICADO: hace 0.9 h ya se registró "Ambientadores de piso" en el tanque 1 con
+> las mismas materias primas (OP-A70483CF-1B4)…
+
+**Avisa, no bloquea.** La app muestra el mensaje y pregunta *"¿Registrarlo de todas
+formas?"*; si Carlos acepta, reenvía con `ConfirmoNoDuplicado` y guarda. Así un lote
+legítimo repetido sigue siendo posible y nadie queda trabado.
+
+Probado contra la app en vivo, ciclo completo: primera vez guarda · repetida avisa ·
+confirmada guarda. El tanque de prueba se dejó vacío y el formol usado se devolvió.
+
+Código: `firmaProduccion_` y `avisarSiPareceDuplicada_` en `Codigo.gs`; el reintento en
+`index.html` (`submitForm`). Backend desplegado **@23**; frontend publicado en `main`.
+
+### 2. CAUSA RAÍZ ENCONTRADA: 19 celdas numéricas con formato de fecha
+
+No era solo el tanque 13. La columna `Cantidad` (y `LitrosPreparados`) quedó con **formato
+de fecha** en varias filas, así que el número escrito se guardó como fecha y al leerlo
+`num()` devuelve el año:
+
+| Se guardó | Se lee como |
+|---|---|
+| `2026-08-12T05:00…` | **2026** |
+| `1900-01-09T04:56…` | **1900** |
+
+Por eso hubo conteos que fijaron **2.013 L de Alcohol 96%**, **2.024 L de Soda Líquida**,
+**2.017 L de Ácido Nítrico**… y el tanque 13 con 2.026 L. Son **19 celdas**, casi todas de
+`Conteo inventario`, más la producción completa del Gel antibacterial del 30-jul.
+
+**Arreglado hacia adelante:** `doPost` ahora fuerza formato numérico (`setNumberFormat`) en
+Cantidad, LitrosPreparados y CantidadPresentacion **antes** de escribir. Los movimientos
+nuevos ya no se pueden dañar así.
+
+**Pendiente (necesita a Carlos):** poner el valor real en esas 19 celdas. La auditoría las
+lista con el número de fila exacto. **No se inventaron los valores** — solo Carlos sabe
+cuánto contó.
+
+### 3. Auditoría diaria — `?action=auditoria`
+
+Se buscó qué hace la industria (conteo cíclico, análisis ABC, análisis de causa de cada
+variación, resolver de inmediato para que no se acumule) y se implementaron los controles
+que atacan **lo que de verdad falló aquí**, no una lista genérica:
+
+| Control | Qué caza |
+|---|---|
+| `PREPARACION_DUPLICADA` | misma receta y tanque en menos de 24 h |
+| `CELDA_CON_FECHA` | las 19 celdas dañadas, con su fila exacta |
+| `DATO_CORRUPTO` | saldos que llegaron a miles antes de un conteo |
+| `CONTEO_DESVIO_ALTO` | conteos que corrigieron el saldo más del 50% |
+| `STOCK_NEGATIVO_MP` | materia prima negativa = consumo mal registrado |
+| `STOCK_NEGATIVO_ENVASE` | envases negativos = compra sin registrar |
+| `TANQUE_VOLUMEN_IMPOSIBLE` | tanques con litros imposibles |
+| `UNIDAD_MEZCLADA` | solo L contra kg (L y "und" es normal, no se reporta) |
+| `CONSUMO_SIN_ENTRADA` | ítems que solo salen y nunca entran |
+
+Se afinó a propósito para que **no dé ruido**: si el informe trae falsos positivos, nadie
+lo lee. Ejemplo: un saldo previo absurdo se reporta como `DATO_CORRUPTO`, no como desvío de
+conteo, porque son problemas distintos con soluciones distintas.
+
+**Primera corrida real: 17 hallazgos, 16 altas.** Encontró 2 duplicados en el tanque 28
+(Deterfull) que nadie había visto, y las 19 celdas dañadas.
+
+**Por qué es un endpoint y no un correo automático:** los 5 crons del plan gratis de
+Cloudflare ya están ocupados, y crear un trigger nuevo de Apps Script exige que Oscar
+autorice permisos a mano. Como endpoint funciona ya, sin autorizar nada, y se puede
+enganchar después a cualquier aviso que ya exista.
+
+**Falta decidir (es de Oscar):** de dónde se cuelga el aviso diario. Opciones:
+1. Colgarlo del cron diario que ya corre en `full-registro-chats` (0:00 UTC = 7 p.m.).
+2. Trigger propio en Apps Script — hay que autorizar permisos una vez.
+
+Que solo avise cuando haya algo **nuevo**, no todos los días (gestión por excepción).

@@ -97,6 +97,8 @@ function doGet(e) {
       data = getRevision();
     } else if (p.action === 'operacion') {
       data = getEstadoOperacion_(p.requestId || p.idempotencyKey);
+    } else if (p.action === 'auditoria') {
+      data = getAuditoriaDiaria();
     } else {
       data = { ok: true, version: API_VERSION, mensaje: 'API Full Company activa' };
     }
@@ -776,6 +778,182 @@ function descontarEmpaque(mover, pres, nPres, etiq, acc) {
   }
 }
 
+// ================== AUDITORÍA DIARIA ==================
+// Controles elegidos por lo que REALMENTE falló en esta operación (jul-2026), no por teoría:
+// duplicados, negativos, conteos que pisan el saldo, números imposibles y unidades mezcladas.
+// Práctica estándar de la industria que se respeta aquí: conteo cíclico + análisis de la causa
+// de cada variación, no solo corregir el número.
+function getAuditoriaDiaria() {
+  var inv = getInventario();
+  var datos = leerRegistros();
+  var hallazgos = [];
+  function add(codigo,prioridad,entidad,detalle,accion) {
+    hallazgos.push({codigo:codigo,prioridad:prioridad,entidad:entidad,detalle:detalle,accion:accion});
+  }
+
+  // 1. Saldos negativos. Se separan porque significan cosas distintas:
+  //    materia prima negativa = consumo mal registrado; envase negativo = compra sin registrar.
+  var negMp = [], negOtro = [];
+  (inv.items||[]).forEach(function(i) {
+    if (Number(i.Stock) >= -0.0001) return;
+    var linea = i.Item + (i.Variante ? ' / '+i.Variante : '') + ': ' + i.Stock + ' ' + i.Unidad;
+    if (normalizar(i.Categoria) === 'materia prima') negMp.push(linea); else negOtro.push(linea);
+  });
+  if (negMp.length) add('STOCK_NEGATIVO_MP','ALTA','Materia prima',
+    negMp.length+' en negativo: '+negMp.slice(0,8).join(' · '),
+    'Consumo registrado sin existencia. Revisar la producción que lo causó.');
+  if (negOtro.length) add('STOCK_NEGATIVO_ENVASE','MEDIA','Envases/etiquetas/accesorios',
+    negOtro.length+' en negativo (el peor: '+negOtro[0]+')',
+    'Normalmente es compra sin registrar: registrar la entrada, no ajustar el saldo.');
+
+  // 2. Tanques con número imposible (así se detecta el tanque 13 con 2.026 L de una celda-fecha).
+  (inv.tambores||[]).forEach(function(t) {
+    var d = Number(t.disponible);
+    if (!isFinite(d)) add('TANQUE_NO_NUMERICO','ALTA','Tanque '+t.id,'Disponible no numérico: '+t.disponible,'Revisar la celda LitrosPreparados.');
+    else if (d > 500) add('TANQUE_VOLUMEN_IMPOSIBLE','ALTA','Tanque '+t.id,
+      t.producto+' marca '+d+' L','Ningún tanque llega a ese volumen: casi siempre es una celda con fecha o unidad mal puesta.');
+  });
+
+  // 3. Preparaciones duplicadas ya guardadas (las de antes del guardarraíl).
+  var prep = {};
+  datos.filas.forEach(function(r) {
+    var tp = normalizar(campo(r,['tiporegistro','tipo']));
+    var op = String(campo(r,['operacionid'])||'').trim();
+    if (!op) return;
+    if (tp.indexOf('preparar tambor') === 0) {
+      prep[op] = {tanque:String(campo(r,['tamborid','tambor'])||'').trim(),
+                  producto:String(campo(r,['producto'])||'').trim(),
+                  fecha:new Date(campo(r,['fechaservidor','fechahora'])).getTime(), comps:[]};
+    }
+  });
+  datos.filas.forEach(function(r) {
+    if (normalizar(campo(r,['tiporegistro','tipo'])).indexOf('consumo materia prima') !== 0) return;
+    var op = String(campo(r,['operacionid'])||'').trim();
+    if (prep[op]) prep[op].comps.push({item:String(campo(r,['item'])||'').trim(),
+      cantidad:num(campo(r,['cantidad'])), unidad:String(campo(r,['unidad'])||'').trim()});
+  });
+  var porFirma = {};
+  for (var op in prep) {
+    var p = prep[op];
+    if (!p.comps.length || !p.fecha) continue;
+    var f = firmaProduccion_(p.producto,p.tanque,p.comps);
+    (porFirma[f] = porFirma[f] || []).push({op:op, fecha:p.fecha, tanque:p.tanque, producto:p.producto});
+  }
+  for (var f in porFirma) {
+    var lista = porFirma[f].sort(function(a,b){return a.fecha-b.fecha;});
+    for (var k=1;k<lista.length;k++) {
+      var horas = (lista[k].fecha - lista[k-1].fecha)/3600000;
+      if (horas > 24) continue;
+      add('PREPARACION_DUPLICADA','ALTA','Tanque '+lista[k].tanque,
+        lista[k].producto+' registrado 2 veces con '+redondear_(horas,1)+' h de diferencia ('+lista[k-1].op+' y '+lista[k].op+')',
+        'Si fue error, revertir con Novedad/Corrección; no borrar el movimiento.');
+    }
+  }
+
+  // 4. Conteos que pisaron fuerte el saldo. NO es un error: es la señal de cuánto se
+  //    escapa sin registrar. Es el control que más dice sobre la salud del proceso.
+  var saldo = {};
+  var desvios = [];
+  datos.filas.forEach(function(r) {
+    var tp = normalizar(campo(r,['tiporegistro','tipo']));
+    var item = String(campo(r,['item'])||'').trim();
+    if (!item || normalizar(item)==='agua') return;
+    if (normalizar(String(campo(r,['categoria'])||'')) !== 'materia prima') return;
+    var clave = normalizar(item);
+    var conv = aBase(num(campo(r,['cantidad'])), String(campo(r,['unidad'])||''));
+    if (tp.indexOf('entrada') === 0) saldo[clave] = (saldo[clave]||0) + conv.v;
+    else if (tp.indexOf('consumo') === 0) saldo[clave] = (saldo[clave]||0) - conv.v;
+    else if (tp.indexOf('conteo') === 0) {
+      var antes = saldo[clave];
+      if (antes != null && Math.abs(antes) > 0.01) {
+        var dif = conv.v - antes;
+        // Un saldo previo absurdo (miles de litros de una materia prima) no es un desvío de
+        // conteo: es una celda dañada, normalmente una fecha leída como número (2017, 2026).
+        if (Math.abs(antes) > 1000) {
+          add('DATO_CORRUPTO','ALTA',item,
+            'El saldo llegó a '+redondear_(antes,1)+' '+conv.u+' antes del conteo del '+String(campo(r,['fechaservidor','fechahora'])||'').slice(0,10),
+            'Casi seguro una celda con fecha en vez de número. Buscar el movimiento con ese valor y corregir la celda.');
+        } else if (Math.abs(dif)/Math.abs(antes) > 0.5) {
+          desvios.push({item:item, antes:redondear_(antes,3), quedo:conv.v,
+            unidad:conv.u, fecha:String(campo(r,['fechaservidor','fechahora'])||'').slice(0,10)});
+        }
+      }
+      saldo[clave] = conv.v;
+    }
+  });
+  if (desvios.length) {
+    var ultimos = desvios.slice(-6).map(function(d){return d.item+' '+d.antes+'→'+d.quedo+' '+d.unidad+' ('+d.fecha+')';});
+    add('CONTEO_DESVIO_ALTO','ALTA','Materia prima',
+      desvios.length+' conteos corrigieron el saldo más del 50%. Últimos: '+ultimos.join(' · '),
+      'El conteo físico manda. La diferencia es material que se fue sin registrar: buscar la causa (mermas, derrames, consumos no anotados), no solo ajustar.');
+  }
+
+  // 5. Unidades mezcladas en un mismo ítem. Solo importa L contra kg: sumar volumen con peso
+  //    da un saldo falso. Que un ítem tenga L y "und" es normal (líquido a granel + empacado),
+  //    así que ese caso NO se reporta para no llenar de ruido el informe.
+  var unidadDe = {};
+  var yaAvisado = {};
+  datos.filas.forEach(function(r) {
+    var item = String(campo(r,['item'])||'').trim();
+    var uni = String(campo(r,['unidad'])||'').trim();
+    if (!item || !uni) return;
+    var clave = normalizar(item), base = aBase(1,uni).u;
+    if (base !== 'L' && base !== 'kg') return;
+    if (unidadDe[clave] && unidadDe[clave] !== base && !yaAvisado[clave]) {
+      yaAvisado[clave] = true;
+      add('UNIDAD_MEZCLADA','ALTA',item,'Tiene movimientos en '+unidadDe[clave]+' y en '+base,
+        'Sumar volumen con peso da un saldo falso. Unificar la unidad de este ítem.');
+    } else if (!unidadDe[clave]) unidadDe[clave] = base;
+  });
+
+  // 6. Consumido sin haber entrado nunca: el caso de las etiquetas.
+  var entro = {}, consumio = {};
+  datos.filas.forEach(function(r) {
+    var tp = normalizar(campo(r,['tiporegistro','tipo']));
+    var item = String(campo(r,['item'])||'').trim();
+    if (!item) return;
+    if (tp.indexOf('entrada') === 0 || tp.indexOf('conteo') === 0) entro[normalizar(item)] = true;
+    else if (tp.indexOf('consumo') === 0) consumio[normalizar(item)] = item;
+  });
+  var nuncaEntro = [];
+  for (var c in consumio) if (!entro[c] && c !== 'agua') nuncaEntro.push(consumio[c]);
+  if (nuncaEntro.length) add('CONSUMO_SIN_ENTRADA','MEDIA','Materia prima',
+    nuncaEntro.length+' ítems se consumieron sin registrar nunca una entrada: '+nuncaEntro.slice(0,6).join(', '),
+    'Registrar las compras: si nunca entra, el saldo solo puede bajar.');
+
+  // 7. Celdas numéricas que quedaron con formato de fecha. Es la causa raíz de los saldos
+  //    absurdos: se listan con la fila exacta de la hoja para poder corregirlas a mano.
+  var celdasFecha = [];
+  datos.filas.forEach(function(r) {
+    ['Cantidad','LitrosPreparados','CantidadPresentacion'].forEach(function(col) {
+      var v = String(r[col] == null ? '' : r[col]);
+      if (!/^\d{4}-\d{2}-\d{2}T/.test(v)) return;
+      celdasFecha.push('fila '+r._FilaOrigen+' ('+String(campo(r,['tiporegistro','tipo']))+' · '+
+        (String(campo(r,['item']))||String(campo(r,['producto'])))+' · '+col+')');
+    });
+  });
+  if (celdasFecha.length) add('CELDA_CON_FECHA','ALTA','Hoja REGISTRO_APP',
+    celdasFecha.length+' celdas numéricas tienen una fecha adentro: '+celdasFecha.slice(0,10).join(' · ')+
+    (celdasFecha.length>10 ? ' … y '+(celdasFecha.length-10)+' más' : ''),
+    'Poner el valor real en esas celdas y dejar la columna con formato Número. Los movimientos nuevos ya salen forzados a número.');
+
+  var orden = {ALTA:0, MEDIA:1, BAJA:2};
+  hallazgos.sort(function(a,b){ return (orden[a.prioridad]||9)-(orden[b.prioridad]||9); });
+  return {
+    ok: true,
+    generado: new Date().toISOString(),
+    resumen: {
+      hallazgos: hallazgos.length,
+      altas: hallazgos.filter(function(h){return h.prioridad==='ALTA';}).length,
+      items: (inv.items||[]).length,
+      tanques: (inv.tambores||[]).length,
+      movimientos: datos.filas.length,
+      itemsNegativos: negMp.length + negOtro.length
+    },
+    hallazgos: hallazgos
+  };
+}
+
 function leerMinimos() {
   var out = {};
   var hoja = getHoja().getSheetByName(HOJA_MINIMOS);
@@ -871,7 +1049,16 @@ function doPost(e) {
         estadoMovimiento:'ACTIVO', versionBOM:normalizar(p.TipoRegistro||'').indexOf('preparar tambor') === 0 ? 'MANUAL-v1' : ''
       });
     });
-    hoja.getRange(hoja.getLastRow() + 1, 1, filas.length, encabezados.length).setValues(filas);
+    var filaInicio = hoja.getLastRow() + 1;
+    // Las columnas numéricas se fuerzan a formato número ANTES de escribir. Si quedan con
+    // formato de fecha (pasó 19 veces en julio-2026), Sheets convierte el número a fecha y
+    // al leerlo se interpreta como el año: un conteo de alcohol pasó a valer 2.013 L.
+    ['Cantidad','LitrosPreparados','CantidadPresentacion'].forEach(function(nombreCol) {
+      var idx = indiceEncabezado_(encabezados, nombreCol);
+      if (idx < 0) return;
+      try { hoja.getRange(filaInicio, idx + 1, filas.length, 1).setNumberFormat('0.######'); } catch (eFmt) {}
+    });
+    hoja.getRange(filaInicio, 1, filas.length, encabezados.length).setValues(filas);
 
     // Si es una APROBACIÓN de ítem nuevo: agregarlo también a la hoja CATALOGOS (queda oficial)
     // (Los "Relacionado", "Renombrado" y "Eliminado" NO se agregan al catálogo)
