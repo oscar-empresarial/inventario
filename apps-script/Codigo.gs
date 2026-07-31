@@ -985,7 +985,67 @@ function validarProduccionPost_(payload) {
   if (cobertura < 0.80) throw new Error('Fórmula incompleta: solo se explican ' + redondear_(volumenL,3) + ' L de ' + litros + ' L (' + redondear_(cobertura*100,1) + '%).');
   if (cobertura > 1.05) throw new Error('La fórmula declara más volumen que la producción. Revisa cantidades y unidades.');
   validarStockComponentes_(componentes);
+  avisarSiPareceDuplicada_(payload,producto,tamborId,componentes);
   return {producto:producto,litros:litros,tamborId:tamborId,componentes:componentes,baseTanque:baseTanque,baseLitros:baseLitros};
+}
+
+// Firma de una preparación: producto + tanque + componentes (sin agua, que varía al ojo).
+// Dos preparaciones con la misma firma en pocas horas casi siempre son la misma tecleada dos veces.
+function firmaProduccion_(producto,tamborId,componentes) {
+  var partes = componentes
+    .filter(function(c){ return normalizar(c.item) !== 'agua'; })
+    .map(function(c){ var b=aBase(c.cantidad,c.unidad); return normalizar(c.item)+':'+redondear_(b.v,4)+b.u; })
+    .sort();
+  return normalizar(producto)+'@'+normalizar(tamborId)+'#'+partes.join(',');
+}
+
+// Guardarraíl anti-duplicado. AVISA y exige confirmar; no bloquea para siempre,
+// porque a veces sí se prepara dos veces el mismo producto el mismo día.
+// Para confirmar, la app reenvía el mismo movimiento con ConfirmoNoDuplicado: true.
+function avisarSiPareceDuplicada_(payload,producto,tamborId,componentes) {
+  var confirmado = payload.ConfirmoNoDuplicado === true || payload.confirmoNoDuplicado === true ||
+                   /^(si|sí|true|1)$/i.test(String(payload.ConfirmoNoDuplicado || payload.confirmoNoDuplicado || ''));
+  if (confirmado) return;
+  var firmaNueva = firmaProduccion_(producto,tamborId,componentes);
+  var datos = leerRegistros();
+  var VENTANA_MS = 24*60*60*1000;
+  var ahora = new Date().getTime();
+
+  // Agrupar las preparaciones recientes de ESTE tanque con sus componentes
+  var prepara = {}; // operacionId → {fecha, producto}
+  datos.filas.forEach(function(r) {
+    if (normalizar(campo(r,['tiporegistro','tipo'])).indexOf('preparar tambor') !== 0) return;
+    if (normalizar(String(campo(r,['tamborid','tambor'])||'')) !== normalizar(tamborId)) return;
+    var f = new Date(campo(r,['fechaservidor','fechahora'])).getTime();
+    if (!f || (ahora - f) > VENTANA_MS || f > ahora) return;
+    var op = String(campo(r,['operacionid'])||'').trim();
+    if (op) prepara[op] = {fecha:f, producto:String(campo(r,['producto'])||'').trim(), comps:[]};
+  });
+  if (!Object.keys(prepara).length) return;
+
+  datos.filas.forEach(function(r) {
+    if (normalizar(campo(r,['tiporegistro','tipo'])).indexOf('consumo materia prima') !== 0) return;
+    var op = String(campo(r,['operacionid'])||'').trim();
+    if (!prepara[op]) return;
+    prepara[op].comps.push({
+      item:String(campo(r,['item'])||'').trim(),
+      cantidad:num(campo(r,['cantidad'])),
+      unidad:String(campo(r,['unidad'])||'').trim()
+    });
+  });
+
+  for (var op in prepara) {
+    var p = prepara[op];
+    if (!p.comps.length) continue;
+    if (firmaProduccion_(p.producto,tamborId,p.comps) !== firmaNueva) continue;
+    var horas = redondear_((ahora - p.fecha)/3600000,1);
+    throw new Error(
+      'POSIBLE DUPLICADO: hace ' + horas + ' h ya se registró "' + p.producto + '" en el tanque ' +
+      tamborId + ' con las mismas materias primas (' + op + '). ' +
+      'Si de verdad preparaste otro lote igual, vuelve a guardar confirmando que NO es duplicado. ' +
+      'Si no, no lo registres otra vez: el lote anterior ya está en el sistema.'
+    );
+  }
 }
 
 function expandirProduccion_(payload,responsable,operacionId) {

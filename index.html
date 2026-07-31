@@ -2641,7 +2641,25 @@
             Responsable:records[0].Responsable,Movimientos:hijos,Origen:'GitHub Pages'
           };
         }
-        await enviarRegistro(envioPrincipal);
+        try {
+          await enviarRegistro(envioPrincipal);
+        } catch (errDup) {
+          // El servidor avisa cuando la preparación se parece a otra reciente del mismo
+          // tanque. No es un bloqueo: se le pregunta y, si confirma, se reenvía marcado.
+          if (!/POSIBLE DUPLICADO/i.test(String((errDup && errDup.message) || ''))) throw errDup;
+          if (!window.confirm(String(errDup.message) + '\n\n¿Registrarlo de todas formas?')) throw errDup;
+          var reintento = Object.assign({}, envioPrincipal);
+          reintento.RequestId = nuevoRequestId();   // clave nueva: el payload cambió
+          reintento.ConfirmoNoDuplicado = true;
+          if (Array.isArray(reintento.Movimientos)) {
+            reintento.Movimientos = reintento.Movimientos.map(function (m) {
+              var copia = Object.assign({}, m);
+              copia.ConfirmoNoDuplicado = true;
+              return copia;
+            });
+          }
+          await enviarRegistro(reintento);
+        }
         var resumen = records.map(function (r) {
           return r.TipoRegistro + (r.Item ? ' · ' + r.Item : (r.TamborID ? ' · ' + r.TamborID : ''));
         }).join(' | ');
