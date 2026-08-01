@@ -359,3 +359,76 @@ residuo de 10 L) → **170 (ajuste final indicado por Oscar)**.
 600 ml, Formol 45 ml. Hoy el tanque dice 170 L pero las materias primas descontadas son las
 del lote del 29-jul. **No se tocó porque no está confirmado cuál de los dos lotes fue el
 real.**
+
+---
+
+## ACTUALIZACIÓN 2026-08-01 — tres bugs más, dos de ellos míos
+
+### 1. El formato de fecha volvió a morder (tanque 25 con 2.026 L)
+
+El arreglo del 31-jul (formatear las filas nuevas antes de escribir) **no bastó**: sin
+`SpreadsheetApp.flush()`, `setNumberFormat` y `setValues` no tienen orden garantizado y el
+formato viejo a veces gana. Se comprobó leyendo la celda: `Cantidad` quedó con formato
+`0.######` pero `LitrosPreparados` con **`d.m`** en la misma fila.
+
+**Arreglo definitivo (3 capas):** formato a la columna **entera** (no solo las filas
+nuevas) → `flush()` → escribir → `flush()` → **releer y, si algo quedó Date, reescribirlo
+como número**. Así no depende del orden interno de Sheets.
+
+### 2. Reparación de las celdas ya dañadas — sin inventar números
+
+`?action=repararlitros` reconstruye `LitrosPreparados` **sumando los componentes reales de
+esa misma producción** (la app ya exige que expliquen el 80–105% del volumen). Sin
+`&aplicar=si` solo informa qué haría.
+
+| Tanque | Decía | Quedó | De dónde salió |
+|---|---|---|---|
+| 25 · Extermin | 2.026 L | **20 L** | 0,5 L de MP + 19,5 L de agua |
+| 13 · Gel antibacterial | 2.026 → 46.144 L | **2,04 L** | 10 g Carbopol + 6,7 ml TEA + 16,7 ml formol + 16,7 ml glicerina + 2 L agua |
+
+El 13 pasó por 46.144 porque al forzar el formato numérico la fecha se destapó como su
+número interno. Eso además **destapó sus componentes**, que antes también estaban dañados y
+por eso no se podía reparar el 31-jul.
+
+**Ya no queda ninguna celda con fecha ni ningún tanque con volumen imposible.**
+
+### 3. Trampa del motivo: "sobrante" significa SUMAR
+
+`getInventario` decide el signo de una `Novedad/Corrección` buscando palabras sueltas en el
+motivo. Un motivo escrito como *"Merma - sobrante no se suma aparte"* contenía **las dos**,
+y ganaba la suma: el ajuste **inflaba** en vez de restar. Un tanque de prueba quedó en 21 L
+en vez de 20.
+
+**Arreglado:** ahora la resta manda si el motivo menciona ambas cosas. Se verificó que solo
+2 movimientos cambiaban de signo, los dos de ese mismo día y los dos debían restar; ningún
+histórico se alteró.
+
+**Regla al escribir correcciones:** si el motivo debe RESTAR, no uses la palabra
+*sobrante* ni *desempaque*.
+
+### 4. La pregunta del sobrante estaba mal planteada (tanque 15)
+
+Preguntar *"¿aprovechaste el sobrante?"* se malinterpreta. Carlos tenía 11 L, preparó 1 L
+más para llegar a 12, respondió **que sí lo aprovechaba**… y el tanque quedó en **1 L**,
+porque esa respuesta significaba "lo registrado es el total".
+
+**Rediseñada:** ahora la pregunta muestra **con cuánto queda el tanque en cada opción**, que
+es lo único que el operario necesita decidir:
+
+> RESIDUO EN EL TANQUE 15: el sistema dice que ya había 11 L y estás registrando 1 L.
+> • Si los 1 L son ADICIONALES, el tanque queda con **12 L**.
+> • Si los 1 L son el TOTAL, queda con **1 L**.
+
+Probado con el caso exacto de Carlos: respondiendo *adicionales* queda en 12 L.
+Tanque 15 corregido a **12 L**.
+
+### Estado de tanques al cierre
+
+| Tanque | Litros | Nota |
+|---|---|---|
+| 1 · Ambientadores | **27 L** | correcto: de los 170 se empacaron 143 L la noche del 31-jul |
+| 13 · Gel antibacterial | **2,04 L** | reparado |
+| 15 · Detergente ropa | **12 L** | corregido |
+| 25 · Extermin | **20 L** | reparado |
+
+Todos los tanques `ZZ-PRUEBA-*` quedaron vacíos y el formol de las pruebas devuelto.

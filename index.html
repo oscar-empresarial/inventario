@@ -2652,12 +2652,15 @@
             if (!window.confirm(mensajeServidor + '\n\n¿Registrarlo de todas formas?')) throw errDup;
             marcas.ConfirmoNoDuplicado = true;
           } else if (/RESIDUO EN EL TANQUE/i.test(mensajeServidor)) {
-            // Aceptar = aprovechó las sobras (se suman, como siempre).
-            // Cancelar = el tanque estaba vacío, así que ese saldo fantasma se descarta.
+            // Lo que decide el número final no es qué hizo con el sobrante, sino qué
+            // significan los litros que escribió: total del tanque, o litros nuevos encima.
+            // El mensaje del servidor ya trae los dos totales calculados. Aquí solo se
+            // amarra cada botón a una de esas dos frases, con las mismas palabras.
             marcas.ResiduoTanque = window.confirm(
-              mensajeServidor + '\n\nACEPTAR = sí aproveché esas sobras en la mezcla.' +
-              '\nCANCELAR = el tanque estaba vacío, descarta esos litros.'
-            ) ? 'aprovechado' : 'vaciado';
+              mensajeServidor.replace(/>>> /g, '\n\n• ') +
+              '\n\n───────────────\nACEPTAR  =  son ADICIONALES (se suman)' +
+              '\nCANCELAR =  son el TOTAL del tanque'
+            ) ? 'adicional' : 'total';
           } else {
             throw errDup;
           }

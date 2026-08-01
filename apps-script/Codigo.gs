@@ -99,6 +99,9 @@ function doGet(e) {
       data = getEstadoOperacion_(p.requestId || p.idempotencyKey);
     } else if (p.action === 'auditoria') {
       data = getAuditoriaDiaria();
+    } else if (p.action === 'repararlitros') {
+      // Sin ?aplicar=si solo informa qué haría; nunca escribe por accidente.
+      data = repararLitrosConFecha_(String(p.aplicar||'') !== 'si');
     } else {
       data = { ok: true, version: API_VERSION, mensaje: 'API Full Company activa' };
     }
@@ -697,8 +700,10 @@ function getInventario() {
       // Desempaque devuelve. Otros motivos: solo trazabilidad.
       var mot = normalizar(campo(r, ['motivo']));
       var tamborNov = String(campo(r, ['tamborid', 'tambor']) || '').trim();
-      var esSuma = mot.indexOf('sobrante') >= 0 || mot.indexOf('desempaque') >= 0;
       var esResta = mot.indexOf('faltante') >= 0 || mot.indexOf('merma') >= 0 || mot.indexOf('registro de mas') >= 0;
+      // La resta manda si el motivo menciona las dos cosas: "merma - sobrante devuelto" debe
+      // restar, no sumar. Antes ganaba la suma y un ajuste terminaba inflando el saldo.
+      var esSuma = !esResta && (mot.indexOf('sobrante') >= 0 || mot.indexOf('desempaque') >= 0);
       if ((esSuma || esResta) && cant > 0) {
         var signo = esSuma ? 1 : -1;
         if (tamborNov && !item) {
@@ -776,6 +781,61 @@ function descontarEmpaque(mover, pres, nPres, etiq, acc) {
   if (acc && !/^sin accesorio|^seleccionar/i.test(acc)) {
     mover(acc, '', 'Accesorio', -nPres, 'und');
   }
+}
+
+// Repara las celdas `LitrosPreparados` que quedaron guardadas como fecha.
+// NO inventa números: usa la suma de los componentes de esa misma producción, que es dato
+// real ya registrado (la app exige que expliquen entre el 80% y el 105% del volumen).
+// Si algún componente también está dañado, no toca esa fila y la devuelve como pendiente.
+// Con `soloVer=true` no escribe nada: solo dice qué haría.
+function repararLitrosConFecha_(soloVer) {
+  var hoja = getHoja().getSheetByName(HOJA_REGISTRO);
+  var encabezados = hoja.getRange(1,1,1,hoja.getLastColumn()).getDisplayValues()[0];
+  var iLitros = indiceEncabezado_(encabezados,'LitrosPreparados');
+  if (iLitros < 0) throw new Error('No existe la columna LitrosPreparados.');
+  var datos = leerRegistros();
+
+  // Componentes sanos por operación
+  var comps = {};
+  datos.filas.forEach(function(r) {
+    if (normalizar(campo(r,['tiporegistro','tipo'])).indexOf('consumo') !== 0) return;
+    var op = String(campo(r,['operacionid'])||'').trim();
+    if (!op) return;
+    var crudo = r['Cantidad'];
+    var textoCrudo = String(crudo == null ? '' : crudo);
+    var danado = /^\d{4}-\d{2}-\d{2}T/.test(textoCrudo) || num(textoCrudo) > 100000;
+    var conv = aBase(num(crudo), String(campo(r,['unidad'])||''));
+    (comps[op] = comps[op] || {litros:0, danado:false});
+    if (danado) comps[op].danado = true;
+    else if (conv.u === 'L') comps[op].litros += conv.v;
+  });
+
+  var arreglados = [], pendientes = [];
+  datos.filas.forEach(function(r) {
+    if (normalizar(campo(r,['tiporegistro','tipo'])).indexOf('preparar tambor') !== 0) return;
+    var crudo = String(r['LitrosPreparados'] == null ? '' : r['LitrosPreparados']);
+    // Dos formas del mismo daño: la celda sigue siendo fecha, o ya se destapó como el
+    // número interno de esa fecha (46144 = 2-may-2026). Ningún tanque pasa de 1.000 L.
+    var esFecha = /^\d{4}-\d{2}-\d{2}T/.test(crudo);
+    var esAbsurdo = num(crudo) > 1000;
+    if (!esFecha && !esAbsurdo) return;   // esta fila está sana
+    var op = String(campo(r,['operacionid'])||'').trim();
+    var info = comps[op];
+    var etiqueta = 'fila '+r._FilaOrigen+' · tanque '+String(campo(r,['tamborid','tambor'])||'')+' · '+String(campo(r,['producto'])||'');
+    if (!info || info.danado || !(info.litros > 0)) {
+      pendientes.push(etiqueta + ' — sus componentes también están dañados o no suman volumen; necesita el dato real');
+      return;
+    }
+    var litros = redondear_(info.litros,3);
+    if (!soloVer) {
+      var celda = hoja.getRange(r._FilaOrigen, iLitros + 1);
+      celda.setNumberFormat('0.######');
+      celda.setValue(litros);
+    }
+    arreglados.push(etiqueta + ' → ' + litros + ' L (suma de sus materias primas)');
+  });
+  if (!soloVer) { try { SpreadsheetApp.flush(); } catch (e) {} }
+  return {ok:true, soloVer: !!soloVer, arreglados:arreglados, pendientes:pendientes};
 }
 
 // ================== AUDITORÍA DIARIA ==================
@@ -1050,15 +1110,42 @@ function doPost(e) {
       });
     });
     var filaInicio = hoja.getLastRow() + 1;
-    // Las columnas numéricas se fuerzan a formato número ANTES de escribir. Si quedan con
-    // formato de fecha (pasó 19 veces en julio-2026), Sheets convierte el número a fecha y
-    // al leerlo se interpreta como el año: un conteo de alcohol pasó a valer 2.013 L.
+    // Si una columna numérica queda con formato de fecha, Sheets convierte el número a
+    // fecha y al leerlo se interpreta como el año: "20 L" pasó a valer 2.026 L (1-ago-2026).
+    // Formatear solo las filas nuevas NO alcanzó: sin flush, setNumberFormat y setValues no
+    // tienen orden garantizado y el formato viejo llegó a ganar. Por eso ahora son 3 pasos
+    // con flush entre ellos, y al final se verifica lo que quedó escrito de verdad.
+    var colsNumericas = [];
     ['Cantidad','LitrosPreparados','CantidadPresentacion'].forEach(function(nombreCol) {
       var idx = indiceEncabezado_(encabezados, nombreCol);
-      if (idx < 0) return;
-      try { hoja.getRange(filaInicio, idx + 1, filas.length, 1).setNumberFormat('0.######'); } catch (eFmt) {}
+      if (idx >= 0) colsNumericas.push({nombre:nombreCol, col:idx + 1});
     });
+    colsNumericas.forEach(function(c) {
+      // Toda la columna, no solo las filas nuevas: así ninguna escritura futura hereda
+      // el formato de fecha que haya quedado en una fila vieja.
+      try { hoja.getRange(2, c.col, Math.max(hoja.getMaxRows() - 1, 1), 1).setNumberFormat('0.######'); } catch (eFmt) {}
+    });
+    try { SpreadsheetApp.flush(); } catch (eF1) {}
+
     hoja.getRange(filaInicio, 1, filas.length, encabezados.length).setValues(filas);
+    try { SpreadsheetApp.flush(); } catch (eF2) {}
+
+    // Red de seguridad: si algo quedó como fecha pese a todo, se reescribe como número.
+    colsNumericas.forEach(function(c) {
+      try {
+        var rango = hoja.getRange(filaInicio, c.col, filas.length, 1);
+        var leidos = rango.getValues();
+        var hayQueCorregir = false;
+        for (var i = 0; i < leidos.length; i++) {
+          if (!(leidos[i][0] instanceof Date)) continue;
+          var original = filas[i][c.col - 1];
+          var comoNumero = Number(String(original == null ? '' : original).replace(',','.'));
+          leidos[i][0] = isFinite(comoNumero) && String(original).trim() !== '' ? comoNumero : '';
+          hayQueCorregir = true;
+        }
+        if (hayQueCorregir) { rango.setNumberFormat('0.######'); rango.setValues(leidos); }
+      } catch (eFix) {}
+    });
 
     // Si es una APROBACIÓN de ítem nuevo: agregarlo también a la hoja CATALOGOS (queda oficial)
     // (Los "Relacionado", "Renombrado" y "Eliminado" NO se agregan al catálogo)
@@ -1179,9 +1266,14 @@ function validarProduccionPost_(payload) {
 }
 
 // Cuando se prepara sobre un tanque que "según el sistema" tiene sobras, el saldo viejo se
-// suma al lote nuevo. Si en la práctica el tanque se lavó o se vació, esos litros son un
-// fantasma que se arrastra para siempre (le pasó al tanque 1: cargaba 10 L del lote anterior).
-// Por eso ahora hay que decir qué se hizo con el residuo: aprovecharlo o descartarlo.
+// sumaba al lote nuevo sin avisar. Eso arrastra fantasmas (al tanque 1 le colgaban 10 L que
+// ya no existían) y también infla cuando el sobrante YA venía contado dentro de los litros
+// declarados (al tanque 25 lo dejó en 20,5 L siendo un tanque de 20 L).
+//
+// La pregunta que de verdad importa no es qué hizo con el sobrante, sino qué significan los
+// litros que declaró: ¿son el TOTAL que quedó en el tanque, o litros NUEVOS que se suman?
+//   'total'    → el tanque queda con lo declarado (el sobrante ya está adentro, o se botó)
+//   'adicional'→ el tanque queda con sobrante + lo declarado (rellenó el mismo tanque)
 function resolverResiduoTanque_(payload,tamborId) {
   var tambores = getInventario().tambores || [];
   var disponible = 0, existe = false;
@@ -1190,12 +1282,21 @@ function resolverResiduoTanque_(payload,tamborId) {
   }
   if (!existe || disponible <= 0.01) return 0;   // tanque nuevo o vacío: nada que preguntar
   var decision = normalizar(payload.ResiduoTanque || payload.residuoTanque || '');
-  if (decision === 'aprovechado') return 0;                 // se suma, comportamiento de siempre
-  if (decision === 'vaciado' || decision === 'descartado') return disponible;
+  // 'adicional' = se rellenó encima: se suman, comportamiento histórico.
+  if (decision === 'adicional' || decision === 'nuevos') return 0;
+  // 'total' cubre las dos formas de que el sobrante NO deba sumarse aparte: lo aprovechó
+  // dentro de la mezcla, o vació el tanque. En ambos casos el tanque queda con lo declarado.
+  if (decision === 'total' || decision === 'aprovechado' || decision === 'vaciado' || decision === 'descartado') return disponible;
+  // El texto muestra CON CUÁNTO QUEDA EL TANQUE en cada opción. Preguntar "¿aprovechaste el
+  // sobrante?" se malinterpretó: Carlos preparó 1 L sobre 11 L para llegar a 12, respondió
+  // que sí lo aprovechaba, y el tanque quedó en 1 L. Con los números a la vista no hay dudas.
+  var nuevos = Number(payload.LitrosPreparados || payload.litrosPreparados) || 0;
   throw new Error(
-    'RESIDUO EN EL TANQUE: el sistema dice que en el tanque ' + tamborId + ' todavía quedan ' +
-    redondear_(disponible,2) + ' L del lote anterior. ¿Los aprovechaste en esta mezcla o vaciaste el tanque? ' +
-    'Hay que responder para que esos litros no queden arrastrándose.'
+    'RESIDUO EN EL TANQUE ' + tamborId + ': el sistema dice que ya había ' + redondear_(disponible,2) +
+    ' L y estás registrando ' + redondear_(nuevos,2) + ' L. ¿Con cuánto debe quedar el tanque? ' +
+    '>>> Si los ' + redondear_(nuevos,2) + ' L son ADICIONALES a lo que había, el tanque queda con ' +
+    redondear_(disponible + nuevos,2) + ' L. ' +
+    '>>> Si los ' + redondear_(nuevos,2) + ' L son el TOTAL del tanque, queda con ' + redondear_(nuevos,2) + ' L.'
   );
 }
 
@@ -1269,10 +1370,13 @@ function expandirProduccion_(payload,responsable,operacionId) {
       TipoRegistro:'Novedad/Corrección',Responsable:responsable,
       TamborID:produccion.tamborId,Producto:produccion.producto,
       Cantidad:redondear_(produccion.residuoADescartar,3),Unidad:'L',
-      Motivo:'Merma - tanque vaciado antes de preparar',
+      // CUIDADO con el texto del motivo: getInventario decide el signo buscando palabras
+      // sueltas, y "sobrante" significa SUMAR. Un motivo como "merma - sobrante…" sumaba en
+      // vez de restar. Este texto solo lleva "merma", que es lo que resta.
+      Motivo:'Merma - saldo previo del tanque, no se suma aparte',
       ReferenciaOriginal:operacionId,
       Observacion:'El sistema traía '+redondear_(produccion.residuoADescartar,2)+' L en el tanque '+
-                  produccion.tamborId+' y el operario confirmó que estaba vacío al preparar.'
+                  produccion.tamborId+' y el operario confirmó que los litros registrados son el total del tanque.'
     });
   }
   filas.push(payload);
