@@ -443,6 +443,27 @@
     }
     .overlay.visible { display: flex; }
 
+    /* ===== Conteo total contra Siigo ===== */
+    .tab-btn.conteo-siigo.active { background:#065f46; }
+    .ct-resumen { display:flex; flex-wrap:wrap; gap:8px; margin:10px 0 4px; }
+    .ct-chip { background:#f1f5f9; border-radius:999px; padding:5px 12px; font-size:13px; font-weight:600; color:#334155; }
+    .ct-chip.ok { background:#dcfce7; color:#166534; }
+    .ct-chip.pend { background:#fef9c3; color:#854d0e; }
+    .ct-chip.err { background:#fee2e2; color:#991b1b; }
+    .ct-lista { margin-top:10px; }
+    .ct-item { border:1px solid #e2e8f0; border-radius:12px; padding:10px 12px; margin-bottom:8px; }
+    .ct-item.contado { border-color:#86efac; background:#f0fdf4; }
+    .ct-item.malo { border-color:#fca5a5; background:#fef2f2; }
+    .ct-nombre { font-weight:700; font-size:15px; line-height:1.3; }
+    .ct-sku { font-size:12px; color:#64748b; font-family:ui-monospace,monospace; }
+    .ct-campos { display:flex; gap:8px; margin-top:8px; align-items:center; flex-wrap:wrap; }
+    .ct-campos input.ct-cant { flex:0 0 110px; font-size:17px; font-weight:700; text-align:center; }
+    .ct-campos input.ct-nota { flex:1; min-width:140px; }
+    .ct-estado { font-size:12px; margin-top:6px; min-height:16px; }
+    .ct-estado.ok { color:#166534; }
+    .ct-estado.pend { color:#854d0e; }
+    .ct-estado.err { color:#b91c1c; font-weight:600; }
+
     /* ===== Pregunta obligatoria al operario ===== */
     .preg-caja {
       background: #fff; color: #0f172a; border-radius: 18px; padding: 22px 20px;
@@ -458,6 +479,8 @@
     .preg-fila { display:flex; gap:8px; margin-bottom:10px; }
     .preg-fila input { flex:1; min-width:0; }
     .preg-fila select { flex:0 0 100px; }
+    .preg-fila textarea { flex:1; min-width:0; width:100%; font-family:inherit; font-size:14px;
+      padding:8px 10px; border:1px solid #cbd5e1; border-radius:10px; resize:vertical; }
     .preg-error { margin:0 0 10px; font-size:13px; color:#b91c1c; min-height:18px; }
     .preg-botones { display:flex; flex-direction:column; gap:8px; }
     .preg-botones button { width:100%; }
@@ -580,6 +603,10 @@
       <button type="button" class="tab-btn" data-tab="exportar">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
         Exportar
+      </button>
+      <button type="button" class="tab-btn conteo-siigo" data-tab="conteo">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+        Conteo total
       </button>
       <button type="button" class="tab-btn" id="btnTour">❔ Ayuda</button>
     </div>
@@ -1068,6 +1095,49 @@
         <div class="small-note">“Materia prima gastada” suma los consumos de cada materia prima en el rango de fechas: ideal para el contador cada semana. Los archivos abren directo en Excel.</div>
       </div>
     </section>
+
+    <!-- ================= CONTEO TOTAL CONTRA SIIGO ================= -->
+    <section id="view-conteo" class="view hidden">
+      <div class="card">
+        <div class="section-title">Conteo total del inventario</div>
+        <p class="small-note" style="margin-top:0">
+          Aquí están TODOS los productos de Siigo con su código (SKU). Busca uno, escribe
+          cuántos hay y sigue con el siguiente. <b>Lo que escribes se guarda en este
+          teléfono al instante</b>, aunque se caiga el internet, y se va enviando solo.
+          Si te equivocaste, vuelve a escribir el número encima: queda el último.
+        </p>
+        <div class="row">
+          <div class="field">
+            <label for="ctResponsable">¿Quién está contando?</label>
+            <input type="text" id="ctResponsable" placeholder="Tu nombre" autocomplete="off">
+          </div>
+        </div>
+        <div id="ctResumen" class="ct-resumen"></div>
+        <div class="row">
+          <div class="field" style="flex:2">
+            <label for="ctBuscar">Buscar producto o código</label>
+            <input type="search" id="ctBuscar" placeholder="Ej: deterfull, galon, FUL362..." autocomplete="off">
+          </div>
+          <div class="field">
+            <label for="ctFiltro">Mostrar</label>
+            <select id="ctFiltro">
+              <option value="pendientes">Falta contar</option>
+              <option value="contados">Ya contados</option>
+              <option value="error">Con problema</option>
+              <option value="todos">Todos</option>
+            </select>
+          </div>
+        </div>
+        <div id="ctEstado" class="status"></div>
+        <div id="ctLista" class="ct-lista"></div>
+        <div id="ctMas" style="text-align:center;margin-top:10px"></div>
+        <div class="botones" style="margin-top:14px">
+          <button type="button" class="btn-azul" id="ctEnviarYa">Enviar ahora lo que falte</button>
+          <button type="button" class="btn-azul" id="ctExportar">Bajar el conteo (Excel/CSV)</button>
+        </div>
+        <div class="small-note" id="ctNotaSiigo"></div>
+      </div>
+    </section>
     <div class="small-note" style="text-align:center;margin-top:14px" id="versoPie"></div>
   </main>
 
@@ -1257,6 +1327,9 @@
       </div>
       <div class="preg-fila" id="pregFilaResponsable" style="display:none">
         <input type="text" id="pregResponsable" placeholder="¿Quién responde?" autocomplete="off">
+      </div>
+      <div class="preg-fila">
+        <textarea id="pregNota" rows="2" placeholder="Escribe lo que sepas (opcional): dónde estaba, qué pasó, si falta revisar algo..."></textarea>
       </div>
       <p class="preg-error" id="pregError"></p>
       <div class="preg-botones">
@@ -1455,6 +1528,19 @@
 
       llenarDatalistMp();
       agregarFilaMp();
+      var ctBuscarEl = document.getElementById('ctBuscar');
+      var ctTimer = null;
+      ctBuscarEl.addEventListener('input', function () {
+        clearTimeout(ctTimer);
+        ctTimer = setTimeout(function () { ctMostrando = CT_MOSTRAR; ctPintar(); }, 180);
+      });
+      document.getElementById('ctFiltro').addEventListener('change', function () { ctMostrando = CT_MOSTRAR; ctPintar(); });
+      document.getElementById('ctEnviarYa').addEventListener('click', function () { ctEnviarPendientes(); });
+      document.getElementById('ctExportar').addEventListener('click', ctExportar);
+      document.getElementById('ctResponsable').addEventListener('blur', function () {
+        var v = String(this.value || '').trim();
+        if (v) { lsSet('fullcompany_conteo_responsable', v); ctEnviarPendientes(); }
+      });
       document.getElementById('pregGuardar').addEventListener('click', responderPregunta);
       document.getElementById('pregNoSe').addEventListener('click', aplazarActual);
       document.getElementById('pregCantidad').addEventListener('keydown', function (ev) {
@@ -1596,6 +1682,305 @@
       throw err;
     }
 
+    // ================== CONTEO TOTAL CONTRA SIIGO ==================
+    // Pensado para un día de locos: lo que el operario escribe se guarda en el teléfono
+    // ANTES de intentar mandarlo. Si se cae el internet, si cierran la app o si el Apps
+    // Script está ocupado, el conteo no se pierde: queda en cola y se reintenta solo.
+    var CT_KEY = 'fullcompany_conteo_total_v1';
+    var CT_LOTE = 20;            // líneas por envío (el backend acepta hasta 25)
+    var CT_MOSTRAR = 40;         // cuántas fichas se pintan de una (el celular no aguanta 1245)
+    var ctCatalogo = [];
+    var ctDatos = {};            // sku -> {cantidad, nota, estado, enviadoCon, error, fecha}
+    var ctMostrando = CT_MOSTRAR;
+    var ctEnviando = false;
+    var ctCargado = false;
+
+    function ctLeer() {
+      try {
+        var d = JSON.parse(lsGet(CT_KEY) || '{}');
+        return (d && typeof d === 'object' && !Array.isArray(d)) ? d : {};
+      } catch (err) { return {}; }
+    }
+    function ctGuardar() {
+      try { lsSet(CT_KEY, JSON.stringify(ctDatos)); }
+      catch (err) {
+        // Si el teléfono se queda sin espacio hay que decirlo, no fallar en silencio.
+        ctEstado('No se pudo guardar en el teléfono (memoria llena). Envía lo que llevas antes de seguir contando.', 'err');
+      }
+    }
+    function ctEstado(msg, tipo) {
+      var el = document.getElementById('ctEstado');
+      el.className = 'status ' + (tipo || '');
+      el.textContent = msg || '';
+    }
+
+    // Acepta "12", "12,5", " 12.5 ". Rechaza letras. Devuelve null si no sirve.
+    function ctNumero(txt) {
+      var t = String(txt == null ? '' : txt).trim().replace(',', '.');
+      if (t === '') return null;
+      if (!/^\d+(\.\d+)?$/.test(t)) return NaN;
+      var n = parseFloat(t);
+      return isFinite(n) && n >= 0 ? n : NaN;
+    }
+
+    function cargarConteoSiigo() {
+      if (ctCargado) { ctPintar(); return; }
+      ctEstado('Cargando el catálogo de Siigo...', 'warn');
+      fetch('catalogo_siigo.json?v=' + Date.now())
+        .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+        .then(function (d) {
+          ctCatalogo = (d && d.productos) || [];
+          ctDatos = ctLeer();
+          // Si la app se cerró en mitad de un envío, esos conteos quedaron marcados
+          // "enviando" y nadie los volvería a mandar. Se devuelven a la cola.
+          Object.keys(ctDatos).forEach(function (sku) {
+            if (ctDatos[sku] && ctDatos[sku].estado === 'enviando') ctDatos[sku].estado = 'pendiente';
+          });
+          ctGuardar();
+          ctCargado = true;
+          var f = d && d.generado ? String(d.generado).slice(0, 10) : '';
+          document.getElementById('ctNotaSiigo').textContent =
+            'Catálogo de Siigo del ' + f + ': ' + ctCatalogo.length + ' productos activos. ' +
+            'Siigo NO permite subir existencias por su API (está verificado), así que al terminar ' +
+            'se baja el archivo con el botón de arriba y se carga en Siigo desde el computador.';
+          var r = lsGet('fullcompany_conteo_responsable');
+          if (r) document.getElementById('ctResponsable').value = r;
+          ctEstado('', '');
+          ctPintar();
+          ctEnviarPendientes();
+          // Red de seguridad: si alguien contó y dejó el teléfono quieto, igual se manda.
+          if (!cargarConteoSiigo._reloj) {
+            cargarConteoSiigo._reloj = setInterval(ctEnviarPendientes, 60000);
+          }
+        })
+        .catch(function (e) {
+          ctEstado('No se pudo cargar el catálogo de Siigo (' + e.message + '). Recarga la página.', 'err');
+        });
+    }
+
+    function ctFiltrados() {
+      var q = normalize(document.getElementById('ctBuscar').value || '');
+      var filtro = document.getElementById('ctFiltro').value;
+      return ctCatalogo.filter(function (p) {
+        var d = ctDatos[p.sku];
+        if (filtro === 'pendientes' && d && d.cantidad !== '' && d.cantidad != null) return false;
+        if (filtro === 'contados' && !(d && d.cantidad !== '' && d.cantidad != null)) return false;
+        if (filtro === 'error' && !(d && d.estado === 'error')) return false;
+        if (!q) return true;
+        return normalize(p.nombre).indexOf(q) >= 0 || normalize(p.sku).indexOf(q) >= 0;
+      });
+    }
+
+    function ctPintar() {
+      var lista = document.getElementById('ctLista');
+      // Nunca repintar mientras alguien está escribiendo: le borraría lo que va tecleando
+      // justo cuando termina de entrar un lote. Se espera a que suelte el campo.
+      if (document.activeElement && lista.contains(document.activeElement)) {
+        clearTimeout(ctPintar._t);
+        ctPintar._t = setTimeout(ctPintar, 1500);
+        ctResumen();
+        return;
+      }
+      var res = ctFiltrados();
+      var visibles = res.slice(0, ctMostrando);
+      lista.innerHTML = '';
+      if (!res.length) {
+        lista.innerHTML = '<div class="small-note">No hay productos que coincidan con esa búsqueda.</div>';
+      }
+      visibles.forEach(function (p) {
+        var d = ctDatos[p.sku] || {};
+        var contado = d.cantidad !== '' && d.cantidad != null;
+        var div = document.createElement('div');
+        div.className = 'ct-item' + (d.estado === 'error' ? ' malo' : (contado ? ' contado' : ''));
+        div.innerHTML =
+          '<div class="ct-nombre">' + escapeHtml(p.nombre) + '</div>' +
+          '<div class="ct-sku">' + escapeHtml(p.sku) + (p.grupo ? ' · ' + escapeHtml(p.grupo) : '') +
+          (p.controlaStock ? '' : ' · <b>sin control de stock</b>') + '</div>' +
+          '<div class="ct-campos">' +
+            '<input class="ct-cant" type="text" inputmode="decimal" placeholder="¿Cuántos?" value="' + escapeHtml(d.cantidad == null ? '' : String(d.cantidad)) + '">' +
+            '<span class="ct-sku">' + escapeHtml(p.unidad || 'unidad') + '</span>' +
+            '<input class="ct-nota" type="text" placeholder="Nota (opcional): dañado, en bodega 2, ..." value="' + escapeHtml(d.nota || '') + '">' +
+          '</div>' +
+          '<div class="ct-estado"></div>';
+        var inpCant = div.querySelector('.ct-cant');
+        var inpNota = div.querySelector('.ct-nota');
+        var elEstado = div.querySelector('.ct-estado');
+
+        function pintarEstado() {
+          var dd = ctDatos[p.sku] || {};
+          var n = ctNumero(dd.cantidad);
+          if (dd.cantidad != null && dd.cantidad !== '' && isNaN(n)) {
+            elEstado.className = 'ct-estado err';
+            elEstado.textContent = 'Eso no es un número. Escribe solo cifras, por ejemplo 12 o 12,5.';
+            return;
+          }
+          if (dd.estado === 'error') {
+            elEstado.className = 'ct-estado err';
+            elEstado.textContent = 'No se pudo guardar: ' + (dd.error || 'error desconocido') + '. Se reintenta solo.';
+          } else if (dd.estado === 'guardado') {
+            elEstado.className = 'ct-estado ok';
+            elEstado.textContent = 'Guardado ✓' +
+              (dd.anterior != null && String(dd.anterior) !== String(dd.cantidad)
+                ? ' — corregido: antes habías puesto ' + dd.anterior : '');
+          } else if (dd.cantidad !== '' && dd.cantidad != null) {
+            elEstado.className = 'ct-estado pend';
+            elEstado.textContent = dd.estado === 'enviando' ? 'Enviando...' : 'Anotado. Falta enviarlo (se manda solo).';
+          } else {
+            elEstado.className = 'ct-estado';
+            elEstado.textContent = '';
+          }
+        }
+
+        function anotar() {
+          var d2 = ctDatos[p.sku] || {};
+          var txt = String(inpCant.value || '').trim();
+          // Si cambia el valor de algo que ya se guardó, vuelve a la cola: es una corrección.
+          var cambio = String(d2.cantidad == null ? '' : d2.cantidad) !== txt || String(d2.nota || '') !== String(inpNota.value || '');
+          d2.cantidad = txt;
+          d2.nota = String(inpNota.value || '').trim();
+          d2.nombre = p.nombre;
+          d2.unidad = p.unidad || 'unidad';
+          d2.fecha = new Date().toISOString();
+          // Si corrige algo que YA estaba guardado, se recuerda el valor viejo para
+          // poder mostrárselo: es la señal de que su corrección sí entró.
+          if (cambio && d2.estado === 'guardado' && String(d2.enviadoCon) !== txt) d2.anterior = d2.enviadoCon;
+          if (cambio) d2.estado = txt === '' ? '' : 'pendiente';
+          d2.error = '';
+          ctDatos[p.sku] = d2;
+          ctGuardar();
+          pintarEstado();
+          ctResumen();
+        }
+
+        inpCant.addEventListener('input', anotar);
+        inpNota.addEventListener('input', anotar);
+        inpCant.addEventListener('blur', function () { anotar(); ctEnviarPendientes(); });
+        inpCant.addEventListener('keydown', function (ev) {
+          if (ev.key === 'Enter') { ev.preventDefault(); inpCant.blur(); }
+        });
+        pintarEstado();
+        lista.appendChild(div);
+      });
+
+      var mas = document.getElementById('ctMas');
+      mas.innerHTML = '';
+      if (res.length > visibles.length) {
+        var b = document.createElement('button');
+        b.type = 'button'; b.className = 'clear';
+        b.textContent = 'Ver más (' + (res.length - visibles.length) + ' sin mostrar)';
+        b.addEventListener('click', function () { ctMostrando += CT_MOSTRAR; ctPintar(); });
+        mas.appendChild(b);
+      }
+      ctResumen();
+    }
+
+    function ctResumen() {
+      var total = ctCatalogo.length, contados = 0, sinEnviar = 0, malos = 0;
+      Object.keys(ctDatos).forEach(function (sku) {
+        var d = ctDatos[sku];
+        if (d.cantidad === '' || d.cantidad == null) return;
+        contados++;
+        if (d.estado === 'error' || isNaN(ctNumero(d.cantidad))) malos++;
+        else if (d.estado !== 'guardado') sinEnviar++;
+      });
+      // "Todo enviado" solo si de verdad no queda nada: ni en cola ni con problema.
+      // Decir "todo enviado" con 2 fichas en rojo es justo lo que hace que dejen de creerle.
+      document.getElementById('ctResumen').innerHTML =
+        '<span class="ct-chip ok">Contados ' + contados + ' de ' + total + '</span>' +
+        (sinEnviar ? '<span class="ct-chip pend">' + sinEnviar + ' sin enviar</span>' : '') +
+        (malos ? '<span class="ct-chip err">' + malos + ' con problema</span>' : '') +
+        (!sinEnviar && !malos && contados ? '<span class="ct-chip ok">todo enviado ✓</span>' : '');
+    }
+
+    // Envía en lotes, de a uno, porque el Apps Script atiende una petición a la vez.
+    function ctEnviarPendientes() {
+      if (ctEnviando) return;
+      var responsable = String(document.getElementById('ctResponsable').value || '').trim();
+      var listos = Object.keys(ctDatos).filter(function (sku) {
+        var d = ctDatos[sku];
+        return d && d.cantidad !== '' && d.cantidad != null &&
+               !isNaN(ctNumero(d.cantidad)) && d.estado !== 'guardado' && d.estado !== 'enviando';
+      });
+      if (!listos.length) return;
+      if (!responsable) { ctEstado('Escribe arriba quién está contando: sin nombre no se puede guardar.', 'warn'); return; }
+      lsSet('fullcompany_conteo_responsable', responsable);
+
+      ctEnviando = true;
+      var lote = listos.slice(0, CT_LOTE);
+      lote.forEach(function (sku) { ctDatos[sku].estado = 'enviando'; });
+      ctGuardar();
+      ctEstado('Enviando ' + lote.length + ' conteo(s)...', 'warn');
+
+      var rec = baseRecord('Movimiento compuesto');
+      rec.Responsable = responsable;
+      rec.Movimientos = lote.map(function (sku) {
+        var d = ctDatos[sku];
+        return {
+          TipoRegistro: 'Conteo inventario',
+          Responsable: responsable,
+          Categoria: 'Producto Siigo',
+          Item: d.nombre,
+          // El SKU va de Variante a propósito: hay 7 productos de Siigo con el MISMO
+          // nombre y distinto código (DOMICILIO/AA36, RINDEX 2KG SUQ632/CAJ221...). Si el
+          // saldo se guardara solo por nombre, el conteo de uno le pisaría el del otro.
+          Variante: sku,
+          Cantidad: ctNumero(d.cantidad),
+          Unidad: d.unidad || 'unidad',
+          SKU: sku,
+          NuevoItem: 'No',
+          PendienteAprobacion: 'No',
+          Observacion: 'Conteo total ' + new Date().toISOString().slice(0, 10) + ' · SKU ' + sku +
+            (d.nota ? ' · NOTA: ' + d.nota : '')
+        };
+      });
+
+      enviarRegistro(rec).then(function () {
+        lote.forEach(function (sku) {
+          ctDatos[sku].estado = 'guardado';
+          ctDatos[sku].enviadoCon = ctDatos[sku].cantidad;
+          ctDatos[sku].error = '';
+        });
+        ctGuardar(); ctEstado('', ''); ctPintar();
+        ctEnviando = false;
+        ctEnviarPendientes();       // sigue con el resto
+      }).catch(function (e) {
+        var msg = (e && e.message) ? e.message : 'no se pudo enviar';
+        lote.forEach(function (sku) {
+          // Un fallo de transporte NO significa que se perdió: queda pendiente y se
+          // reintenta. Solo se marca error para que se vea que algo pasó.
+          ctDatos[sku].estado = e && e.resultadoDesconocido ? 'pendiente' : 'error';
+          ctDatos[sku].error = msg;
+        });
+        ctGuardar(); ctPintar();
+        ctEstado('Quedaron conteos sin enviar: ' + msg + '. No los vuelvas a escribir, se reintentan solos.', 'err');
+        ctEnviando = false;
+        setTimeout(ctEnviarPendientes, 20000);
+      });
+    }
+
+    function ctExportar() {
+      var filas = [['SKU', 'Producto', 'Cantidad contada', 'Unidad', 'Nota', 'Estado', 'Contado por', 'Fecha']];
+      var responsable = String(document.getElementById('ctResponsable').value || '').trim();
+      ctCatalogo.forEach(function (p) {
+        var d = ctDatos[p.sku];
+        if (!d || d.cantidad === '' || d.cantidad == null) return;
+        filas.push([p.sku, p.nombre, String(d.cantidad).replace('.', ','), p.unidad || 'unidad',
+          d.nota || '', d.estado === 'guardado' ? 'Guardado' : 'SIN ENVIAR', responsable,
+          (d.fecha || '').slice(0, 16).replace('T', ' ')]);
+      });
+      if (filas.length === 1) { ctEstado('Todavía no has contado nada.', 'warn'); return; }
+      var csv = filas.map(function (f) {
+        return f.map(function (c) { return '"' + String(c).replace(/"/g, '""') + '"'; }).join(';');
+      }).join('\n');
+      var blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+      var a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'conteo_total_' + new Date().toISOString().slice(0, 10) + '.csv';
+      a.click();
+      setTimeout(function () { URL.revokeObjectURL(a.href); }, 4000);
+      ctEstado('Archivo bajado: ' + (filas.length - 1) + ' productos contados.', 'ok');
+    }
+
     // ================== PREGUNTAS OBLIGATORIAS AL OPERARIO ==================
     // El backend (action=preguntas) devuelve solo lo que ningún cálculo puede resolver:
     // saldos que no pueden ser ciertos. Se responden con un Conteo inventario normal, así
@@ -1655,6 +2040,7 @@
       document.getElementById('pregPregunta').textContent = pregActual.pregunta || '';
       document.getElementById('pregError').textContent = '';
       document.getElementById('pregCantidad').value = '';
+      document.getElementById('pregNota').value = '';
       var sel = document.getElementById('pregUnidad');
       sel.innerHTML = '';
       (pregActual.unidades && pregActual.unidades.length ? pregActual.unidades : ['L']).forEach(function (u) {
@@ -1694,7 +2080,9 @@
       rec.Unidad = unidad;
       rec.NuevoItem = 'No';
       rec.PendienteAprobacion = 'No';
-      rec.Observacion = 'Conteo de corrección: el saldo anterior era imposible (' + (pregActual.titulo || '') + '). Respondido desde la alerta de la app.';
+      var nota = String(document.getElementById('pregNota').value || '').trim();
+      rec.Observacion = 'Conteo de corrección: el saldo anterior era imposible (' + (pregActual.titulo || '') + '). Respondido desde la alerta de la app.' +
+        (nota ? ' NOTA DE QUIEN CONTÓ: ' + nota : '');
 
       enviarRegistro(rec).then(function () {
         pregPendientes = pregPendientes.filter(function (p) { return p.id !== pregActual.id; });
@@ -2964,9 +3352,10 @@
       document.querySelectorAll('.tab-btn').forEach(function (btn) {
         btn.classList.toggle('active', btn.dataset.tab === tab);
       });
-      ['registro', 'inventario', 'movimientos', 'correcciones', 'revisar', 'exportar'].forEach(function (t) {
+      ['registro', 'inventario', 'movimientos', 'correcciones', 'revisar', 'exportar', 'conteo'].forEach(function (t) {
         document.getElementById('view-' + t).classList.toggle('hidden', t !== tab);
       });
+      if (tab === 'conteo') cargarConteoSiigo();
       if (tab === 'inventario') loadInventario(); // siempre se actualiza al abrir
       if (tab === 'movimientos' && !state.registros) loadMovimientos();
       if (tab === 'correcciones') loadCorrecciones(false);

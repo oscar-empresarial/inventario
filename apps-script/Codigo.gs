@@ -1323,7 +1323,9 @@ function registrarErrorPost_(payload, requestId, err) {
 
 function asegurarColumnasAuditoria_(hoja) {
   var encabezados = hoja.getRange(1,1,1,Math.max(hoja.getLastColumn(),1)).getValues()[0].map(String);
-  ['OperacionID','IdempotencyKey','RequestHash','EstadoMovimiento','FechaServidor','Usuario','VersionBOM','HashIntegridad','DestinoTambor','ReferenciaOriginal','AprobadoPor'].forEach(function (nombre) {
+  // SKU: es la llave con Siigo. Sin ella, un conteo del inventario general no se puede
+  // cruzar con el producto de Siigo y toca hacerlo a mano por nombre, que nunca cuadra.
+  ['OperacionID','IdempotencyKey','RequestHash','EstadoMovimiento','FechaServidor','Usuario','VersionBOM','HashIntegridad','DestinoTambor','ReferenciaOriginal','AprobadoPor','SKU'].forEach(function (nombre) {
     if (indiceEncabezado_(encabezados,nombre) < 0) {
       encabezados.push(nombre);
       hoja.getRange(1,encabezados.length).setValue(nombre);
