@@ -91,8 +91,11 @@ arreglo que impide que vuelvan a aparecer celdas-fecha, y se verificó que funci
 - **CMC CHINO y Trietanolamina (TEA)** mezclan peso con volumen (kg con L). Hoy el saldo de
   ambos queda en 0 porque se cuentan y se consumen completos el mismo día, así que no está
   haciendo daño, pero hay que unificar la unidad de cada ítem.
-- **Las pruebas automáticas (`npm test`) están rotas: 12 fallan.** Se verificó que
-  **fallaban igual antes de estos cambios** (mismo listado exacto en el commit anterior):
-  los tests son más viejos que el backend y no simulan la hoja que ahora leen las
-  validaciones de residuo y duplicado. No es una regresión, pero mientras sigan así no
-  protegen de nada.
+- ~~Las pruebas automáticas están rotas~~ → **ARREGLADO el mismo día. Van 66 pruebas,
+  0 fallos** (antes 55 con 12 fallos). Los 12 fallos eran **un solo problema**: el
+  simulacro preparaba 120 L en el tanque 12, que ya tenía 120 L, y el guardarraíl de
+  residuo lo rechaza con razón. El código estaba bien; el simulacro estaba viejo.
+  Se agregaron **11 pruebas nuevas** sobre las reglas que no tenían ninguna (residuo,
+  duplicado, conteo con SKU, y los tres arreglos de auditoría de este documento), y se
+  comprobó que **tienen dientes**: al romper el código a propósito, fallan.
+  Correr antes de tocar la app: `npm test`.
