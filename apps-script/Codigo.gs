@@ -99,6 +99,8 @@ function doGet(e) {
       data = getEstadoOperacion_(p.requestId || p.idempotencyKey);
     } else if (p.action === 'auditoria') {
       data = getAuditoriaDiaria();
+    } else if (p.action === 'preguntas') {
+      data = getPreguntasPendientes();
     } else if (p.action === 'repararlitros') {
       // Sin ?aplicar=si solo informa qué haría; nunca escribe por accidente.
       data = repararLitrosConFecha_(String(p.aplicar||'') !== 'si');
@@ -114,6 +116,28 @@ function doGet(e) {
 // Confirma desde la interfaz si un POST opaco se guardó o fue rechazado.
 // Es importante porque Apps Script no siempre permite leer directamente la
 // respuesta de un POST hecho desde GitHub Pages.
+// Cuántas filas del final se revisan para buscar un RequestId. Un reintento real ocurre
+// en segundos o minutos, nunca semanas después, así que esta ventana lo cubre de sobra y
+// evita que el costo crezca para siempre con el tamaño de la hoja.
+var VENTANA_BUSQUEDA_FILAS = 500;
+
+// Marca los registros de prueba técnica para que no ensucien la auditoría ni las listas.
+// Deliberadamente estricto: solo el prefijo ZZ-PRUEBA de los tanques de prueba y los
+// productos que empiezan por "prueba ". Un producto real jamás se llama así.
+function esDePrueba_(tanque, producto) {
+  var t = normalizar(tanque), p = normalizar(producto);
+  return t.indexOf('zz-prueba') === 0 || p.indexOf('prueba tecnica') === 0 ||
+         p.indexOf('prueba formato') === 0 || p.indexOf('prueba sobrante') === 0 ||
+         p.indexOf('prueba mensaje') === 0;
+}
+
+function ventanaFinal_(hoja, filas) {
+  var ultima = hoja.getLastRow();
+  if (ultima < 2) return null;
+  var inicio = Math.max(2, ultima - filas + 1);
+  return hoja.getRange(inicio, 1, ultima - inicio + 1, hoja.getLastColumn());
+}
+
 function getEstadoOperacion_(requestId) {
   requestId = String(requestId || '').trim();
   if (requestId.length < 8) return {ok:false,encontrada:false,version:API_VERSION,error:'RequestId inválido.'};
@@ -124,7 +148,11 @@ function getEstadoOperacion_(requestId) {
     var iReq = indiceEncabezado_(encabezados,'IdempotencyKey');
     var iOp = indiceEncabezado_(encabezados,'OperacionID');
     if (iReq >= 0) {
-      var valores = hoja.getRange(2,1,hoja.getLastRow()-1,hoja.getLastColumn()).getDisplayValues();
+      // La app consulta esto hasta 12 veces por cada guardado. Leer TODA la hoja cada vez
+      // era lo que ponía lento al Apps Script y hacía que las peticiones se encolaran.
+      // El movimiento que se está confirmando acaba de escribirse: está al final.
+      var rango = ventanaFinal_(hoja, VENTANA_BUSQUEDA_FILAS);
+      var valores = rango ? rango.getDisplayValues() : [];
       var movimientos = 0;
       var operacionId = '';
       valores.forEach(function(fila) {
@@ -755,6 +783,9 @@ function getInventario() {
   // conteo de IDs pasó de 30, el tanque 1 desapareció de la app y del validador de
   // empaque ("Tambor no encontrado") aunque su preparación SÍ estaba guardada.
   var tamboresDisponibles = tambores
+    // Los tanques de prueba técnica (ZZ-PRUEBA-*) no son producción: ensucian la lista que
+    // ve el operario y disparan alertas falsas en la auditoría. Nunca tienen producto real.
+    .filter(function (t) { return !esDePrueba_(t.id, t.producto); })
     .map(function (t) {
       var vacio = t.disponible <= 0.01;
       return {
@@ -843,6 +874,71 @@ function repararLitrosConFecha_(soloVer) {
 // duplicados, negativos, conteos que pisan el saldo, números imposibles y unidades mezcladas.
 // Práctica estándar de la industria que se respeta aquí: conteo cíclico + análisis de la causa
 // de cada variación, no solo corregir el número.
+// ================== PREGUNTAS AL OPERARIO (action=preguntas) ==================
+// Devuelve SOLO lo que ningún cálculo puede resolver: hay que preguntárselo a quien está
+// en la planta. Cada pregunta se responde con un Conteo inventario normal, así que en
+// cuanto se responde el saldo deja de ser absurdo y la pregunta desaparece sola. No hay
+// estado que mantener ni lista que actualizar a mano.
+function getPreguntasPendientes() {
+  var inv = getInventario();
+  var datos = leerRegistros();
+  var preguntas = [];
+
+  // Unidades que ha usado cada ítem a lo largo de su historia, para sugerir la correcta.
+  var unidadesDe = {};
+  datos.filas.forEach(function(r) {
+    var it = normalizar(String(campo(r,['item'])||'').trim());
+    var uni = String(campo(r,['unidad'])||'').trim();
+    if (!it || !uni) return;
+    unidadesDe[it] = unidadesDe[it] || {};
+    unidadesDe[it][uni] = (unidadesDe[it][uni] || 0) + 1;
+  });
+  function unidadesUsadas(item) {
+    var m = unidadesDe[normalizar(item)] || {};
+    return Object.keys(m).sort(function(a,b){return m[b]-m[a];});
+  }
+
+  (inv.items||[]).forEach(function(i) {
+    if (normalizar(i.Categoria) !== 'materia prima') return;
+    var usadas = unidadesUsadas(i.Item);
+    var saldo = Number(i.Stock);
+
+    // 1) Saldo imposible: casi siempre una celda de conteo que quedó con formato de fecha.
+    if (Math.abs(saldo) > 1000) {
+      preguntas.push({
+        id: 'saldo_imposible|' + normalizar(i.Item) + '|' + normalizar(i.Variante),
+        item: i.Item, variante: i.Variante || '', categoria: i.Categoria,
+        titulo: i.Item + ' marca ' + redondear_(saldo,1) + ' ' + i.Unidad,
+        detalle: 'Eso es imposible en planta. Pasó porque la celda de un conteo viejo quedó con formato de fecha y Sheets convirtió el número en una fecha. Nunca se ha vuelto a contar, así que el saldo sigue mal desde entonces.',
+        pregunta: '¿Cuánto hay HOY de ' + i.Item + '?',
+        unidades: usadas.length ? usadas : [i.Unidad],
+        unidadSugerida: usadas[0] || i.Unidad
+      });
+      return;
+    }
+
+    // 2) El saldo quedó en "und" pero el ítem siempre se movió a granel (L o kg): un conteo
+    //    en "und" borra los litros y deja un saldo que no dice nada.
+    var baseSaldo = aBase(1, i.Unidad).u;
+    if (baseSaldo !== 'L' && baseSaldo !== 'kg') {
+      var granel = usadas.filter(function(u){ var b = aBase(1,u).u; return b === 'L' || b === 'kg'; });
+      if (granel.length) {
+        preguntas.push({
+          id: 'unidad_saldo|' + normalizar(i.Item) + '|' + normalizar(i.Variante),
+          item: i.Item, variante: i.Variante || '', categoria: i.Categoria,
+          titulo: i.Item + ' marca ' + i.Stock + ' ' + i.Unidad + ', pero siempre se ha movido en ' + granel[0],
+          detalle: 'El último conteo se registró en "' + i.Unidad + '" y eso borró los ' + granel[0] + ' que traía. Así el saldo no sirve para saber si alcanza para producir.',
+          pregunta: '¿Cuánto hay HOY de ' + i.Item + ', en ' + granel[0] + '?',
+          unidades: granel,
+          unidadSugerida: granel[0]
+        });
+      }
+    }
+  });
+
+  return { ok:true, version:API_VERSION, generado:new Date().toISOString(), preguntas:preguntas };
+}
+
 function getAuditoriaDiaria() {
   var inv = getInventario();
   var datos = leerRegistros();
@@ -865,6 +961,19 @@ function getAuditoriaDiaria() {
   if (negOtro.length) add('STOCK_NEGATIVO_ENVASE','MEDIA','Envases/etiquetas/accesorios',
     negOtro.length+' en negativo (el peor: '+negOtro[0]+')',
     'Normalmente es compra sin registrar: registrar la entrada, no ajustar el saldo.');
+
+  // 1b. Materia prima con un saldo imposible HOY. Este control faltaba y por eso la Soda
+  //     Cáustica llevaba desde el 25-jul marcando 46.052 kg (46 toneladas) sin que nadie
+  //     lo viera: el control viejo solo miraba el saldo ANTERIOR a un conteo, así que un
+  //     ítem contado UNA sola vez —y justo esa vez con la celda dañada— no se detectaba.
+  (inv.items||[]).forEach(function(i) {
+    if (normalizar(i.Categoria) !== 'materia prima') return;
+    var s = Number(i.Stock);
+    if (!(Math.abs(s) > 1000)) return;
+    add('SALDO_IMPOSIBLE','ALTA', i.Item,
+      'Marca '+redondear_(s,1)+' '+i.Unidad+' hoy. Ninguna materia prima llega a ese volumen.',
+      'Casi seguro un conteo cuya celda quedó con formato de fecha. Hay que preguntar cuánto hay de verdad y registrar un Conteo con el valor real.');
+  });
 
   // 2. Tanques con número imposible (así se detecta el tanque 13 con 2.026 L de una celda-fecha).
   (inv.tambores||[]).forEach(function(t) {
@@ -892,10 +1001,30 @@ function getAuditoriaDiaria() {
     if (prep[op]) prep[op].comps.push({item:String(campo(r,['item'])||'').trim(),
       cantidad:num(campo(r,['cantidad'])), unidad:String(campo(r,['unidad'])||'').trim()});
   });
+  // Salidas de cada tanque (empaque o consumo de base). Sirven para saber si el tanque se
+  // vació entre dos preparaciones: preparar, empacar todo y volver a preparar es el trabajo
+  // normal, NO un duplicado. Sin esta comprobación el tanque 28 generaba alertas falsas.
+  var salidasPorTanque = {};
+  datos.filas.forEach(function(r) {
+    var tp = normalizar(campo(r,['tiporegistro','tipo']));
+    if (tp.indexOf('empacar') !== 0 && tp.indexOf('consumo base') !== 0) return;
+    var tq = normalizar(String(campo(r,['tamborid','tambor'])||'').trim());
+    if (!tq) return;
+    var fch = new Date(campo(r,['fechaservidor','fechahora'])).getTime();
+    if (!fch) return;
+    (salidasPorTanque[tq] = salidasPorTanque[tq] || []).push(fch);
+  });
+  function huboSalidaEntre_(tanque, desde, hasta) {
+    var lista = salidasPorTanque[normalizar(tanque)] || [];
+    for (var s=0;s<lista.length;s++) if (lista[s] > desde && lista[s] < hasta) return true;
+    return false;
+  }
+
   var porFirma = {};
   for (var op in prep) {
     var p = prep[op];
     if (!p.comps.length || !p.fecha) continue;
+    if (esDePrueba_(p.tanque, p.producto)) continue; // pruebas técnicas, no producción
     var f = firmaProduccion_(p.producto,p.tanque,p.comps);
     (porFirma[f] = porFirma[f] || []).push({op:op, fecha:p.fecha, tanque:p.tanque, producto:p.producto});
   }
@@ -904,8 +1033,10 @@ function getAuditoriaDiaria() {
     for (var k=1;k<lista.length;k++) {
       var horas = (lista[k].fecha - lista[k-1].fecha)/3600000;
       if (horas > 24) continue;
+      // Si el tanque se vació en el intermedio, la segunda preparación es legítima.
+      if (huboSalidaEntre_(lista[k].tanque, lista[k-1].fecha, lista[k].fecha)) continue;
       add('PREPARACION_DUPLICADA','ALTA','Tanque '+lista[k].tanque,
-        lista[k].producto+' registrado 2 veces con '+redondear_(horas,1)+' h de diferencia ('+lista[k-1].op+' y '+lista[k].op+')',
+        lista[k].producto+' registrado 2 veces con '+redondear_(horas,1)+' h de diferencia, sin salida del tanque en el intermedio ('+lista[k-1].op+' y '+lista[k].op+')',
         'Si fue error, revertir con Novedad/Corrección; no borrar el movimiento.');
     }
   }
@@ -914,6 +1045,7 @@ function getAuditoriaDiaria() {
   //    escapa sin registrar. Es el control que más dice sobre la salud del proceso.
   var saldo = {};
   var desvios = [];
+  var corruptosHist = [];
   datos.filas.forEach(function(r) {
     var tp = normalizar(campo(r,['tiporegistro','tipo']));
     var item = String(campo(r,['item'])||'').trim();
@@ -930,9 +1062,10 @@ function getAuditoriaDiaria() {
         // Un saldo previo absurdo (miles de litros de una materia prima) no es un desvío de
         // conteo: es una celda dañada, normalmente una fecha leída como número (2017, 2026).
         if (Math.abs(antes) > 1000) {
-          add('DATO_CORRUPTO','ALTA',item,
-            'El saldo llegó a '+redondear_(antes,1)+' '+conv.u+' antes del conteo del '+String(campo(r,['fechaservidor','fechahora'])||'').slice(0,10),
-            'Casi seguro una celda con fecha en vez de número. Buscar el movimiento con ese valor y corregir la celda.');
+          // Ya lo tapó el conteo de esta misma línea. Se acumula para informarlo UNA vez
+          // como historia; antes salía como ALTA todos los días para siempre, y ese ruido
+          // es lo que hace que nadie lea la auditoría.
+          corruptosHist.push(item+' ('+String(campo(r,['fechaservidor','fechahora'])||'').slice(0,10)+')');
         } else if (Math.abs(dif)/Math.abs(antes) > 0.5) {
           desvios.push({item:item, antes:redondear_(antes,3), quedo:conv.v,
             unidad:conv.u, fecha:String(campo(r,['fechaservidor','fechahora'])||'').slice(0,10)});
@@ -941,6 +1074,11 @@ function getAuditoriaDiaria() {
       saldo[clave] = conv.v;
     }
   });
+  if (corruptosHist.length) {
+    add('DATO_CORRUPTO_HISTORICO','BAJA','Materia prima',
+      corruptosHist.length+' conteos viejos quedaron con una fecha en la celda y ya fueron tapados por un conteo posterior: '+corruptosHist.slice(0,6).join(' · '),
+      'No hay nada que hacer: el saldo de hoy ya no depende de esos valores. Queda como historia.');
+  }
   if (desvios.length) {
     var ultimos = desvios.slice(-6).map(function(d){return d.item+' '+d.antes+'→'+d.quedo+' '+d.unidad+' ('+d.fecha+')';});
     add('CONTEO_DESVIO_ALTO','ALTA','Materia prima',
@@ -1052,7 +1190,9 @@ function doPost(e) {
     var idxRequest = indiceEncabezado_(encabezados, 'IdempotencyKey');
     var idxRequestHash = indiceEncabezado_(encabezados, 'RequestHash');
     if (idxRequest >= 0 && hoja.getLastRow() > 1) {
-      var anteriores = hoja.getRange(2, 1, hoja.getLastRow() - 1, encabezados.length).getDisplayValues();
+      // Ventana final en vez de la hoja completa: ver VENTANA_BUSQUEDA_FILAS.
+      var rangoPrev = ventanaFinal_(hoja, VENTANA_BUSQUEDA_FILAS);
+      var anteriores = rangoPrev ? rangoPrev.getDisplayValues() : [];
       for (var a = 0; a < anteriores.length; a++) {
         if (String(anteriores[a][idxRequest] || '').trim() !== requestId) continue;
         var hashAnterior = idxRequestHash >= 0 ? String(anteriores[a][idxRequestHash] || '').trim() : '';

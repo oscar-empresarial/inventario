@@ -442,6 +442,25 @@
       padding: 16px;
     }
     .overlay.visible { display: flex; }
+
+    /* ===== Pregunta obligatoria al operario ===== */
+    .preg-caja {
+      background: #fff; color: #0f172a; border-radius: 18px; padding: 22px 20px;
+      max-width: 470px; width: 100%; box-shadow: 0 25px 60px rgba(0,0,0,.35);
+      border-top: 6px solid #dc2626;
+    }
+    .preg-encabezado { display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:10px; }
+    .preg-alerta { background:#fee2e2; color:#991b1b; font-weight:700; font-size:12px; padding:4px 10px; border-radius:999px; }
+    .preg-contador { font-size:12px; color:#64748b; }
+    .preg-caja h3 { margin:0 0 8px; font-size:18px; line-height:1.3; }
+    .preg-detalle { margin:0 0 12px; font-size:14px; line-height:1.5; color:#475569; }
+    .preg-pregunta { margin:0 0 10px; font-size:16px; font-weight:700; }
+    .preg-fila { display:flex; gap:8px; margin-bottom:10px; }
+    .preg-fila input { flex:1; min-width:0; }
+    .preg-fila select { flex:0 0 100px; }
+    .preg-error { margin:0 0 10px; font-size:13px; color:#b91c1c; min-height:18px; }
+    .preg-botones { display:flex; flex-direction:column; gap:8px; }
+    .preg-botones button { width:100%; }
     .popup {
       position: relative;
       background: linear-gradient(160deg, #1d4ed8, #0f172a);
@@ -1221,6 +1240,31 @@
       </div>
     </div>
   </div>
+  <!-- Preguntas que la app NO puede resolver sola: solo las sabe quien está en planta.
+       No tiene botón de cerrar a propósito. -->
+  <div id="modalPreguntas" class="overlay">
+    <div class="preg-caja">
+      <div class="preg-encabezado">
+        <span class="preg-alerta">Hay que confirmar un dato</span>
+        <span class="preg-contador" id="pregContador"></span>
+      </div>
+      <h3 id="pregTitulo"></h3>
+      <p class="preg-detalle" id="pregDetalle"></p>
+      <p class="preg-pregunta" id="pregPregunta"></p>
+      <div class="preg-fila">
+        <input type="text" id="pregCantidad" inputmode="decimal" placeholder="Cantidad" autocomplete="off">
+        <select id="pregUnidad"></select>
+      </div>
+      <div class="preg-fila" id="pregFilaResponsable" style="display:none">
+        <input type="text" id="pregResponsable" placeholder="¿Quién responde?" autocomplete="off">
+      </div>
+      <p class="preg-error" id="pregError"></p>
+      <div class="preg-botones">
+        <button type="button" class="btn-azul" id="pregGuardar">Guardar el dato real</button>
+        <button type="button" class="clear" id="pregNoSe">No sé, preguntar a Carlos</button>
+      </div>
+    </div>
+  </div>
   <datalist id="dlMp"></datalist>
   <script>
     // ============================================================
@@ -1411,6 +1455,11 @@
 
       llenarDatalistMp();
       agregarFilaMp();
+      document.getElementById('pregGuardar').addEventListener('click', responderPregunta);
+      document.getElementById('pregNoSe').addEventListener('click', aplazarActual);
+      document.getElementById('pregCantidad').addEventListener('keydown', function (ev) {
+        if (ev.key === 'Enter') { ev.preventDefault(); responderPregunta(); }
+      });
       // EN SERIE, no en paralelo: antes se lanzaban ping + init + inventario juntos y
       // se hacían cola entre ellos; el ping perdía y la app se auto-bloqueaba ("no se
       // pudo verificar la conexión") aunque el Apps Script estuviera perfecto.
@@ -1426,9 +1475,11 @@
         return recuperarOperacionesPendientes();
       }).catch(function () {}).then(function () {
         loadInitJsonp();
+        // Encadenada, no en paralelo: 'preguntas' sale cuando 'inventario' ya contestó.
         jsonp({ action: 'inventario' }, function (data) {
           if (data && !data.error) state.inventario = parseInventario(data);
-        }, function () {});
+          cargarPreguntasPendientes();
+        }, function () { cargarPreguntasPendientes(); });
       });
     });
 
@@ -1543,6 +1594,127 @@
       var err = new Error('El Apps Script no alcanzó a responder la verificación de versión (suele ser porque está atendiendo otra petición).');
       err.noVerificado = true;
       throw err;
+    }
+
+    // ================== PREGUNTAS OBLIGATORIAS AL OPERARIO ==================
+    // El backend (action=preguntas) devuelve solo lo que ningún cálculo puede resolver:
+    // saldos que no pueden ser ciertos. Se responden con un Conteo inventario normal, así
+    // que en cuanto se responden desaparecen solas. Aquí no se guarda ninguna lista fija.
+    var PREGUNTAS_APLAZADAS_KEY = 'fullcompany_preguntas_aplazadas_v1';
+    var HORAS_APLAZAR = 12;
+    var pregPendientes = [];
+    var pregActual = null;
+
+    function leerAplazadas() {
+      try {
+        var d = JSON.parse(lsGet(PREGUNTAS_APLAZADAS_KEY) || '{}');
+        return (d && typeof d === 'object' && !Array.isArray(d)) ? d : {};
+      } catch (err) { return {}; }
+    }
+    function estaAplazada(id) {
+      var hasta = leerAplazadas()[id];
+      return !!hasta && Date.now() < hasta;
+    }
+    function aplazarPregunta(id) {
+      var d = leerAplazadas();
+      d[id] = Date.now() + HORAS_APLAZAR * 3600000;
+      lsSet(PREGUNTAS_APLAZADAS_KEY, JSON.stringify(d));
+    }
+
+    function cargarPreguntasPendientes(intento) {
+      intento = intento || 1;
+      jsonp({ action: 'preguntas' }, function (data) {
+        var lista = (data && data.preguntas) || [];
+        pregPendientes = lista.filter(function (p) { return p && p.id && !estaAplazada(p.id); });
+        mostrarSiguientePregunta();
+      }, function () {
+        // El Apps Script atiende de a una: si está ocupado con el inventario, esta consulta
+        // se queda sin turno. Se reintenta en silencio; si no sale, no se estorba al operario.
+        if (intento < 3) setTimeout(function () { cargarPreguntasPendientes(intento + 1); }, 15000);
+      }, 30000);
+    }
+
+    function mostrarSiguientePregunta() {
+      var overlay = document.getElementById('modalPreguntas');
+      if (!pregPendientes.length) {
+        overlay.classList.remove('visible');
+        pregActual = null;
+        return;
+      }
+      // No pisar la bienvenida, el tour ni ningún otro modal abierto: se espera el turno.
+      var otroAbierto = Array.prototype.some.call(
+        document.querySelectorAll('.overlay.visible'),
+        function (el) { return el.id !== 'modalPreguntas'; });
+      if (otroAbierto) { setTimeout(mostrarSiguientePregunta, 1200); return; }
+
+      pregActual = pregPendientes[0];
+      document.getElementById('pregContador').textContent =
+        pregPendientes.length > 1 ? '1 de ' + pregPendientes.length : '';
+      document.getElementById('pregTitulo').textContent = pregActual.titulo || '';
+      document.getElementById('pregDetalle').textContent = pregActual.detalle || '';
+      document.getElementById('pregPregunta').textContent = pregActual.pregunta || '';
+      document.getElementById('pregError').textContent = '';
+      document.getElementById('pregCantidad').value = '';
+      var sel = document.getElementById('pregUnidad');
+      sel.innerHTML = '';
+      (pregActual.unidades && pregActual.unidades.length ? pregActual.unidades : ['L']).forEach(function (u) {
+        var o = document.createElement('option');
+        o.value = u; o.textContent = u;
+        if (u === pregActual.unidadSugerida) o.selected = true;
+        sel.appendChild(o);
+      });
+      // El conteo tiene que quedar firmado por alguien: si el formulario no trae
+      // responsable, se pide aquí mismo.
+      var hayResp = !!valueOf('Responsable');
+      document.getElementById('pregFilaResponsable').style.display = hayResp ? 'none' : 'flex';
+      overlay.classList.add('visible');
+      setTimeout(function () { document.getElementById('pregCantidad').focus(); }, 60);
+    }
+
+    function responderPregunta() {
+      if (!pregActual) return;
+      var err = document.getElementById('pregError');
+      var cant = String(document.getElementById('pregCantidad').value || '').trim().replace(',', '.');
+      var unidad = document.getElementById('pregUnidad').value;
+      var responsable = valueOf('Responsable') || String(document.getElementById('pregResponsable').value || '').trim();
+      if (!esNumero(cant, true)) { err.textContent = 'Escribe cuánto hay. Puede ser 0 si no queda nada.'; return; }
+      if (!unidad) { err.textContent = 'Falta la unidad.'; return; }
+      if (!responsable) { err.textContent = 'Escribe quién está respondiendo.'; return; }
+      var btn = document.getElementById('pregGuardar');
+      var textoBtn = btn.textContent;
+      btn.disabled = true; btn.textContent = 'Guardando...';
+      err.textContent = '';
+
+      var rec = baseRecord('Conteo inventario');
+      rec.Responsable = responsable;
+      rec.Categoria = pregActual.categoria || 'Materia prima';
+      rec.Item = pregActual.item;
+      rec.Variante = pregActual.variante || '';
+      rec.Cantidad = cant;
+      rec.Unidad = unidad;
+      rec.NuevoItem = 'No';
+      rec.PendienteAprobacion = 'No';
+      rec.Observacion = 'Conteo de corrección: el saldo anterior era imposible (' + (pregActual.titulo || '') + '). Respondido desde la alerta de la app.';
+
+      enviarRegistro(rec).then(function () {
+        pregPendientes = pregPendientes.filter(function (p) { return p.id !== pregActual.id; });
+        state.inventario = null;
+        state.registrosTodos = null;
+        showStatus('Listo. ' + rec.Item + ' quedó en ' + cant + ' ' + unidad + '.', 'ok');
+        btn.disabled = false; btn.textContent = textoBtn;
+        mostrarSiguientePregunta();
+      }).catch(function (e) {
+        btn.disabled = false; btn.textContent = textoBtn;
+        err.textContent = (e && e.message) ? e.message : 'No se pudo guardar. Intenta otra vez.';
+      });
+    }
+
+    function aplazarActual() {
+      if (!pregActual) return;
+      aplazarPregunta(pregActual.id);
+      pregPendientes = pregPendientes.filter(function (p) { return p.id !== pregActual.id; });
+      showStatus('Anotado. La app vuelve a preguntarlo más tarde y el dato sigue marcado como malo en la auditoría.', 'warn');
+      mostrarSiguientePregunta();
     }
 
     function leerOperacionesPendientes() {
