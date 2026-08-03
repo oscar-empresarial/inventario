@@ -20,7 +20,23 @@ const context = {
     getActiveUser: () => ({ getEmail: () => '' }),
     getEffectiveUser: () => ({ getEmail: () => 'owner@fullcompany.test' })
   },
-  SpreadsheetApp: { openById() { throw new Error('La hoja no se usa en estas pruebas unitarias'); } },
+  // Antes esto lanzaba un error a propósito ("la hoja no se usa aquí"), pero el backend
+  // ya no valida una producción sin mirar el historial: avisarSiPareceDuplicada_ lee
+  // REGISTRO_APP para detectar la misma preparación tecleada dos veces. Con la hoja
+  // rota, TODA validación fallaba y el archivo entero de pruebas quedó inútil.
+  // Aquí va una hoja vacía: sin historial no hay duplicado que avisar.
+  SpreadsheetApp: {
+    openById() {
+      const hojaVacia = {
+        getName: () => 'REGISTRO_APP',
+        getLastRow: () => 1,
+        getLastColumn: () => 1,
+        getRange: () => ({ getValues: () => [['ID']], getDisplayValues: () => [['ID']] }),
+        getDataRange: () => ({ getValues: () => [['ID']], getDisplayValues: () => [['ID']] })
+      };
+      return { getSheetByName: () => hojaVacia, insertSheet: () => hojaVacia };
+    }
+  },
   ContentService: {}, LockService: {}
 };
 vm.createContext(context);
@@ -34,12 +50,18 @@ context.getInventario = () => ({
   ],
   tambores: [
     { id: '12', producto: 'Ecovarsol', disponible: 120 },
-    { id: 'BASE-1', producto: 'Base múltiple', disponible: 200 }
+    { id: 'BASE-1', producto: 'Base múltiple', disponible: 200 },
+    // Tanque limpio: es donde se prepara. Antes se preparaba en el 12, que ya tenía
+    // 120 L, y desde que existe el guardarraíl de residuo eso se rechaza (con razón:
+    // preparar encima de lo que ya hay es justo el error que se quiere evitar).
+    { id: '77', producto: '', disponible: 0 }
   ]
 });
 
+// Preparación normal: tanque vacío. Para probar el caso "el tanque ya tenía producto"
+// está el test del guardarraíl de residuo más abajo.
 function prod(componentes, extra = {}) {
-  return { TipoRegistro: 'Preparar tambor', Producto: 'Ecovarsol', TamborID: '12', LitrosPreparados: 120, FormulaCompleta: true, Componentes: componentes, ...extra };
+  return { TipoRegistro: 'Preparar tambor', Producto: 'Ecovarsol', TamborID: '77', LitrosPreparados: 120, FormulaCompleta: true, Componentes: componentes, ...extra };
 }
 
 test('bloquea el incidente: 120 L con solo 1 L de fragancia', () => {
@@ -59,7 +81,9 @@ test('acepta una base trazada más otro componente', () => {
 });
 test('bloquea base insuficiente o tomada del tanque destino', () => {
   assert.throws(() => context.validarProduccionPost_(prod([{ Item: 'Fragancia', Cantidad: 1, Unidad: 'L' }], { BaseTanque: 'BASE-1', BaseLitros: 201 })), /Base insuficiente/);
-  assert.throws(() => context.validarProduccionPost_(prod([{ Item: 'Fragancia', Cantidad: 1, Unidad: 'L' }], { BaseTanque: '12', BaseLitros: 119 })), /mismo tanque/);
+  // Sacar la base del MISMO tanque donde se está preparando es imposible: por eso el
+  // tanque de la base tiene que ser el de destino (77) para que salte el bloqueo.
+  assert.throws(() => context.validarProduccionPost_(prod([{ Item: 'Fragancia', Cantidad: 1, Unidad: 'L' }], { BaseTanque: '77', BaseLitros: 119 })), /mismo tanque/);
 });
 test('exige confirmación de fórmula completa', () => {
   assert.throws(() => context.validarProduccionPost_(prod([{ Item: 'Agua', Cantidad: 119, Unidad: 'L' }, { Item: 'Fragancia', Cantidad: 1, Unidad: 'L' }], { FormulaCompleta: false })), /confirmar FormulaCompleta/);

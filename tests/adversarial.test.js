@@ -108,7 +108,10 @@ function makeBackend(options = {}) {
     tambores: [
       { id: '1', producto: 'Base corta', disponible: 18 },
       { id: '12', producto: 'Ecovarsol', disponible: 120 },
-      { id: 'BASE-1', producto: 'Base múltiple', disponible: 500 }
+      { id: 'BASE-1', producto: 'Base múltiple', disponible: 500 },
+      // Tanque limpio donde se prepara. El 12 se queda lleno porque sirve de ORIGEN de
+      // base en otras pruebas; preparar encima de él lo rechaza el guardarraíl de residuo.
+      { id: '77', producto: '', disponible: 0 }
     ]
   });
   return { context, workbook, sheets, registro, lock };
@@ -117,7 +120,7 @@ function makeBackend(options = {}) {
 function validProduction(extra = {}) {
   return {
     RequestId: 'REQ-VALID-0001', TipoRegistro: 'Preparar tambor', Responsable: 'Carlos',
-    Producto: 'Ecovarsol', TamborID: '12', LitrosPreparados: 120, FormulaCompleta: true,
+    Producto: 'Ecovarsol', TamborID: '77', LitrosPreparados: 120, FormulaCompleta: true,
     Componentes: [
       { Item: 'Agua', Cantidad: 119, Unidad: 'L' },
       { Item: 'Fragancia', Cantidad: 1, Unidad: 'L' }
@@ -381,7 +384,7 @@ test('contrato frontend-backend de Preparar tambor permanece compatible', () => 
   assert.equal(expanded.length, 3);
   expanded.slice(1).forEach(row => {
     assert.equal(row.TipoRegistro, 'Consumo materia prima');
-    assert.equal(row.TamborID, '12');
+    assert.equal(row.TamborID, '77');
     assert.equal(row.Producto, 'Ecovarsol');
   });
 });
@@ -450,7 +453,8 @@ test('POST de completar producción persiste una corrección atómica e idempote
   assert.equal(original.ok, true);
   const payload = {
     RequestId: 'REQ-CORR-PROD-01', TipoRegistro: 'Corrección producción',
-    Responsable: 'Carlos', ReferenciaOriginal: original.operacionId, TamborID: '12',
+    // Mismo tanque que la preparación que se está corrigiendo.
+    Responsable: 'Carlos', ReferenciaOriginal: original.operacionId, TamborID: '77',
     Motivo: 'Se confirmaron componentes omitidos',
     AprobadoPor: 'Oscar',
     Componentes: [
@@ -480,7 +484,7 @@ test('POST de corregir tanque escribe una corrección, no una segunda preparaci�
   const result = post(context, {
     RequestId: 'REQ-CORR-TANK-01', TipoRegistro: 'Corrección tanque',
     Responsable: 'Neyder', ReferenciaOriginal: original.operacionId,
-    TamborID: '12', Producto: 'Blanqueador',
+    TamborID: '77', Producto: 'Blanqueador',
     Motivo: 'Se seleccionó el producto equivocado',
     AprobadoPor: 'Oscar',
     TrasladarEmpacados: false
@@ -491,4 +495,177 @@ test('POST de corregir tanque escribe una corrección, no una segunda preparaci�
   assert.equal(registro.data.at(-1)[3], 'Corrección tanque');
   assert.equal(registro.data.at(-1)[11], 'Blanqueador');
   assert.equal(registro.data.at(-1)[registro.data[0].indexOf('AprobadoPor')], 'Oscar');
+});
+
+// ===========================================================================
+// GUARDARRAÍLES QUE NO TENÍAN PRUEBA
+// Estos tres bloques cubren reglas que se agregaron después de escribirse las
+// pruebas y que, por no estar cubiertas, rompieron el archivo entero sin que
+// nadie se enterara. Van aquí para que no vuelva a pasar en silencio.
+// ===========================================================================
+
+test('preparar sobre un tanque que ya tiene producto se detiene y pregunta con cuánto queda', () => {
+  const { context } = makeBackend();
+  // El tanque 12 ya tiene 120 L: registrar otros 120 L sin decir qué pasó con lo
+  // anterior es exactamente cómo se duplicó la preparación del tanque 1.
+  assert.throws(
+    () => context.validarProduccionPost_(validProduction({ TamborID: '12' })),
+    /RESIDUO EN EL TANQUE 12/
+  );
+});
+
+test('el residuo se resuelve diciendo si los litros son adicionales o el total', () => {
+  const { context } = makeBackend();
+  // "total": el tanque queda con lo declarado (aprovechó el sobrante o lo vació).
+  assert.doesNotThrow(() => context.validarProduccionPost_(
+    validProduction({ TamborID: '12', ResiduoTanque: 'total' })));
+  // "adicional": se rellenó encima, los litros se suman a lo que había.
+  assert.doesNotThrow(() => context.validarProduccionPost_(
+    validProduction({ TamborID: '12', ResiduoTanque: 'adicional' })));
+});
+
+test('la misma preparación registrada dos veces en el día avisa antes de duplicarla', () => {
+  const { context } = makeBackend();
+  const primera = post(context, validProduction({ RequestId: 'REQ-DUP-PRIMERA' }));
+  assert.equal(primera.ok, true);
+  // Mismo producto, mismo tanque, mismos componentes, otro RequestId: para el
+  // sistema es una operación nueva, pero casi siempre es la misma tecleada dos veces.
+  const segunda = post(context, validProduction({ RequestId: 'REQ-DUP-SEGUNDA' }));
+  assert.equal(segunda.ok, false, 'debe frenarse y pedir confirmación');
+  assert.match(String(segunda.error), /ya (se )?registr|duplicad/i);
+  // Si el operario confirma que de verdad son dos tandas distintas, pasa.
+  const confirmada = post(context, validProduction({
+    RequestId: 'REQ-DUP-CONFIRMADA', ConfirmoNoDuplicado: true
+  }));
+  assert.equal(confirmada.ok, true);
+});
+
+test('el conteo total contra Siigo persiste un lote con su SKU', () => {
+  const { context, registro } = makeBackend();
+  // Es lo que manda la pestaña "Conteo total": varios conteos en una sola operación.
+  // Los dos DOMICILIO tienen el MISMO nombre y distinto código: si el SKU no viajara,
+  // el conteo de uno le pisaría el saldo al otro.
+  const result = post(context, {
+    RequestId: 'REQ-CONTEO-SIIGO-01', TipoRegistro: 'Movimiento compuesto', Responsable: 'Carlos',
+    Movimientos: [
+      { TipoRegistro: 'Conteo inventario', Categoria: 'Producto Siigo', Item: 'DOMICILIO',
+        Variante: 'DOMICILIO', Cantidad: 0, Unidad: 'unidad', SKU: 'DOMICILIO',
+        Observacion: 'Conteo total' },
+      { TipoRegistro: 'Conteo inventario', Categoria: 'Producto Siigo', Item: 'DOMICILIO',
+        Variante: 'AA36', Cantidad: 3, Unidad: 'unidad', SKU: 'AA36',
+        Observacion: 'Conteo total' }
+    ]
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.movimientos, 2);
+  const iSku = registro.data[0].indexOf('SKU');
+  assert.ok(iSku >= 0, 'la columna SKU se crea sola');
+  const filas = registro.data.slice(-2);
+  assert.deepEqual(filas.map(r => r[iSku]), ['DOMICILIO', 'AA36']);
+  const iVariante = registro.data[0].indexOf('Variante');
+  assert.deepEqual(filas.map(r => r[iVariante]), ['DOMICILIO', 'AA36'],
+    'cada SKU es su propia línea de saldo aunque el nombre sea idéntico');
+});
+
+test('un conteo sin observación se rechaza y no escribe nada', () => {
+  const { context, registro } = makeBackend();
+  const antes = registro.getLastRow();
+  const result = post(context, {
+    RequestId: 'REQ-CONTEO-SIN-OBS', TipoRegistro: 'Movimiento compuesto', Responsable: 'Carlos',
+    Movimientos: [
+      { TipoRegistro: 'Conteo inventario', Categoria: 'Producto Siigo', Item: 'DOMICILIO',
+        Variante: 'AA36', Cantidad: 3, Unidad: 'unidad', SKU: 'AA36' }
+    ]
+  });
+  assert.equal(result.ok, false);
+  assert.match(String(result.error), /observaci/i);
+  assert.equal(registro.getLastRow(), antes, 'un lote rechazado no deja filas a medias');
+});
+
+// ===========================================================================
+// AUDITORÍA DIARIA
+// La auditoría solo sirve si lo que reporta es cierto. Con 14 alertas ALTA falsas
+// nadie la lee, y ahí es cuando se cuela la de verdad (la Soda Cáustica marcando
+// 46 toneladas pasó 9 días invisible). Estas pruebas fijan las tres reglas.
+// ===========================================================================
+
+function auditoriaCon(context, { items = [], filas = [], tambores = [] }) {
+  context.getInventario = () => ({ items, tambores });
+  context.leerRegistros = () => ({ encabezados: [], filas });
+  return context.getAuditoriaDiaria();
+}
+const codigos = a => a.hallazgos.map(h => h.codigo);
+
+function preparacion(op, tanque, fecha, producto = 'Deterfull preparado') {
+  return [
+    { TipoRegistro: 'Preparar tambor', OperacionID: op, TamborID: tanque, Producto: producto,
+      FechaServidor: fecha, LitrosPreparados: 20 },
+    { TipoRegistro: 'Consumo materia prima', OperacionID: op, Item: 'Fragancia',
+      Cantidad: 1, Unidad: 'L', FechaServidor: fecha }
+  ];
+}
+
+test('auditoría: preparar, empacar todo y volver a preparar NO es un duplicado', () => {
+  const { context } = makeBackend();
+  // Es el caso real del tanque 28: preparó 20 L, empacó 5 galones de 4 L (los 20 L
+  // completos) y volvió a preparar. Es el trabajo normal de un día.
+  const a = auditoriaCon(context, { filas: [
+    ...preparacion('OP-A', '28', '2026-07-24T20:37:00Z'),
+    { TipoRegistro: 'Empacar desde tambor', OperacionID: 'OP-EMP', TamborID: '28',
+      Presentacion: 'Galon 4 L', CantidadPresentacion: 5, FechaServidor: '2026-07-24T21:23:00Z' },
+    ...preparacion('OP-B', '28', '2026-07-24T21:25:00Z')
+  ] });
+  assert.ok(!codigos(a).includes('PREPARACION_DUPLICADA'),
+    'vaciar el tanque en el intermedio hace legítima la segunda preparación');
+});
+
+test('auditoría: dos preparaciones seguidas SIN vaciar el tanque sí se reportan', () => {
+  const { context } = makeBackend();
+  const a = auditoriaCon(context, { filas: [
+    ...preparacion('OP-A', '28', '2026-07-24T20:37:00Z'),
+    ...preparacion('OP-B', '28', '2026-07-24T21:25:00Z')
+  ] });
+  assert.ok(codigos(a).includes('PREPARACION_DUPLICADA'),
+    'sin salida del tanque en medio, es la misma preparación tecleada dos veces');
+});
+
+test('auditoría: los tanques de prueba técnica no generan alertas ni salen en la lista', () => {
+  const { context } = makeBackend();
+  const a = auditoriaCon(context, { filas: [
+    ...preparacion('OP-P1', 'ZZ-PRUEBA-GUARDARRAIL', '2026-07-31T20:41:00Z', 'Prueba tecnica guardarrail'),
+    ...preparacion('OP-P2', 'ZZ-PRUEBA-GUARDARRAIL', '2026-07-31T20:41:00Z', 'Prueba tecnica guardarrail')
+  ] });
+  assert.ok(!codigos(a).includes('PREPARACION_DUPLICADA'),
+    'una prueba técnica no es producción y no debe ensuciar el informe');
+});
+
+test('auditoría: una materia prima con un saldo imposible HOY se reporta como ALTA', () => {
+  const { context } = makeBackend();
+  // El caso Soda Cáustica: un solo conteo en toda su historia, y justo ese con la
+  // celda dañada. La regla vieja solo miraba el saldo ANTERIOR a un conteo, así que
+  // este ítem era invisible. Son 46 toneladas de soda.
+  const a = auditoriaCon(context, {
+    items: [{ Item: 'Soda Cáustica', Variante: '', Categoria: 'Materia prima', Stock: 46052.9, Unidad: 'kg' }]
+  });
+  const hallazgo = a.hallazgos.find(h => h.codigo === 'SALDO_IMPOSIBLE');
+  assert.ok(hallazgo, 'tiene que detectarlo');
+  assert.equal(hallazgo.prioridad, 'ALTA');
+  assert.equal(hallazgo.entidad, 'Soda Cáustica');
+});
+
+test('auditoría: un saldo normal no dispara la alerta de saldo imposible', () => {
+  const { context } = makeBackend();
+  const a = auditoriaCon(context, {
+    items: [{ Item: 'Hipoclorito puro', Variante: '', Categoria: 'Materia prima', Stock: 36, Unidad: 'L' }]
+  });
+  assert.ok(!codigos(a).includes('SALDO_IMPOSIBLE'));
+});
+
+test('auditoría: un producto terminado con muchas unidades NO es un saldo imposible', () => {
+  const { context } = makeBackend();
+  // 5.000 envases sí caben en una bodega; 5.000 litros de una materia prima no.
+  const a = auditoriaCon(context, {
+    items: [{ Item: 'Tapa normal', Variante: '', Categoria: 'Envase', Stock: 5000, Unidad: 'und' }]
+  });
+  assert.ok(!codigos(a).includes('SALDO_IMPOSIBLE'));
 });
