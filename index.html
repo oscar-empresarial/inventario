@@ -1411,15 +1411,25 @@
 
       llenarDatalistMp();
       agregarFilaMp();
-      loadInitJsonp();
-      verificarBackendCompatible(true).then(function () {
-        recuperarOperacionesPendientes();
-      }).catch(function (errBackend) {
-        showStatus('Envíos bloqueados: ' + (errBackend.message || String(errBackend)), 'err');
+      // EN SERIE, no en paralelo: antes se lanzaban ping + init + inventario juntos y
+      // se hacían cola entre ellos; el ping perdía y la app se auto-bloqueaba ("no se
+      // pudo verificar la conexión") aunque el Apps Script estuviera perfecto.
+      verificarBackendCompatible(true).catch(function (errBackend) {
+        if (errBackend && errBackend.backendIncompatible) {
+          showStatus('Envíos bloqueados: ' + errBackend.message, 'err');
+          throw errBackend;
+        }
+        // No se pudo verificar ≠ backend malo. Se avisa y se sigue: el guardado lleva
+        // clave de idempotencia y se confirma después contra el servidor.
+        showStatus('El servidor está lento. Puedes registrar igual: cada movimiento se confirma después de guardarlo.', 'warn');
+      }).then(function () {
+        return recuperarOperacionesPendientes();
+      }).catch(function () {}).then(function () {
+        loadInitJsonp();
+        jsonp({ action: 'inventario' }, function (data) {
+          if (data && !data.error) state.inventario = parseInventario(data);
+        }, function () {});
       });
-      jsonp({ action: 'inventario' }, function (data) {
-        if (data && !data.error) state.inventario = parseInventario(data);
-      }, function () {});
     });
 
     // ================== UTILIDADES ==================
@@ -1502,24 +1512,37 @@
       return data;
     }
 
-    function verificarBackendCompatible(forzar) {
-      if (!forzar && state.backendCompatible && state.backendVersion === BACKEND_VERSION_REQUERIDA) {
-        return Promise.resolve(state.backendVersion);
-      }
+    // Apps Script atiende las peticiones prácticamente de a una. Un ping que solo
+    // tarda ~1 s puede tardar 30 s si la app está cargando inventario o registros al
+    // mismo tiempo, o si hay otro empleado usando la app. Por eso el ping reintenta
+    // con ventana amplia en vez de rendirse a los 10 s.
+    function pingBackend(timeoutMs) {
       return new Promise(function (resolve, reject) {
-        jsonp({ action: 'ping' }, function (data) {
-          try {
-            validarVersionBackend(data);
-            resolve(state.backendVersion);
-          } catch (err) {
-            reject(err);
-          }
-        }, function () {
-          var err = new Error('No se pudo verificar la versión del Apps Script. No se envió ningún dato. Revisa la conexión y vuelve a intentar.');
-          err.backendIncompatible = true;
-          reject(err);
-        }, 10000);
+        jsonp({ action: 'ping' }, resolve, function () {
+          reject(new Error('sin respuesta'));
+        }, timeoutMs);
       });
+    }
+
+    async function verificarBackendCompatible(forzar) {
+      if (!forzar && state.backendCompatible && state.backendVersion === BACKEND_VERSION_REQUERIDA) {
+        return state.backendVersion;
+      }
+      var esperas = [20000, 25000, 30000];
+      for (var i = 0; i < esperas.length; i++) {
+        var data;
+        try {
+          data = await pingBackend(esperas[i]);
+        } catch (errRed) {
+          continue; // el servidor está ocupado, no incompatible: se reintenta
+        }
+        // Una respuesta con versión distinta SÍ es incompatibilidad real y debe cortar.
+        validarVersionBackend(data);
+        return state.backendVersion;
+      }
+      var err = new Error('El Apps Script no alcanzó a responder la verificación de versión (suele ser porque está atendiendo otra petición).');
+      err.noVerificado = true;
+      throw err;
     }
 
     function leerOperacionesPendientes() {
@@ -1555,8 +1578,11 @@
       try {
         await verificarBackendCompatible(false);
       } catch (errVersion) {
-        showStatus(errVersion.message || String(errVersion), 'err');
-        return;
+        // Solo una incompatibilidad real corta la recuperación; un servidor lento no.
+        if (errVersion && errVersion.backendIncompatible) {
+          showStatus(errVersion.message || String(errVersion), 'err');
+          return;
+        }
       }
       var confirmadas = 0;
       var rechazadas = [];
@@ -2550,7 +2576,16 @@
 
     async function enviarRegistro(record) {
       if (!record.RequestId) record.RequestId = nuevoRequestId();
-      await globalThis.verificarBackendCompatible(true);
+      // Verificación de versión: bloquea SOLO si el backend responde y es incompatible.
+      // Si no alcanza a responder, se envía igual — el RequestId impide duplicados y el
+      // resultado se confirma abajo contra el servidor. Antes esto abortaba el envío y
+      // dejaba al ingeniero sin poder guardar nada con el backend en perfecto estado.
+      try {
+        await globalThis.verificarBackendCompatible(false);
+      } catch (errVersion) {
+        if (errVersion && errVersion.backendIncompatible) throw errVersion;
+        showStatus('El servidor está lento; se envía igual y se confirma enseguida.', 'warn');
+      }
       guardarOperacionPendiente(record);
       var errorTransporte = null;
       try {
