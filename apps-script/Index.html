@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <base target="_top">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Full Company · Registro laboratorio</title>
+  <style>
+    :root{--bg:#f4f7fb;--card:#fff;--ink:#0f172a;--muted:#64748b;--brand:#1d4ed8;--brand2:#0f766e;--warn:#dc2626;--line:#e2e8f0;--soft:#eff6ff}
+    *{box-sizing:border-box} body{margin:0;background:var(--bg);font-family:Inter,Arial,sans-serif;color:var(--ink)}
+    header{background:linear-gradient(135deg,#0f172a,#1d4ed8);color:#fff;padding:22px 18px;border-bottom-left-radius:24px;border-bottom-right-radius:24px;box-shadow:0 8px 24px #1e293b22}
+    header h1{margin:0;font-size:22px;letter-spacing:.2px} header p{margin:7px 0 0;color:#dbeafe;font-size:14px}
+    main{max-width:960px;margin:18px auto;padding:0 14px 40px}.card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:18px;margin-bottom:16px;box-shadow:0 8px 22px #0f172a0c}
+    .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.typeBtn{border:1px solid var(--line);background:#fff;padding:14px 10px;border-radius:14px;text-align:left;cursor:pointer;font-weight:700;color:#0f172a;min-height:76px}.typeBtn span{display:block;font-size:12px;color:var(--muted);font-weight:500;margin-top:4px}.typeBtn.active{background:var(--soft);border-color:var(--brand);box-shadow:0 0 0 2px #1d4ed81a}
+    label{display:block;font-weight:700;font-size:13px;margin:12px 0 6px} input,select,textarea{width:100%;padding:12px 12px;border:1px solid var(--line);border-radius:12px;background:#fff;font-size:15px} textarea{min-height:78px;resize:vertical}.row{display:grid;grid-template-columns:1fr 1fr;gap:12px}.row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}.hide{display:none!important}.hint{font-size:12px;color:var(--muted);margin-top:4px}.bar{display:flex;gap:10px;align-items:center;justify-content:space-between}.pill{background:#e0f2fe;color:#075985;padding:7px 10px;border-radius:999px;font-size:12px;font-weight:700}.btn{background:var(--brand);color:#fff;border:0;border-radius:14px;padding:14px 18px;font-size:16px;font-weight:800;cursor:pointer;width:100%;box-shadow:0 8px 20px #1d4ed833}.btn:disabled{opacity:.6;cursor:not-allowed}.secondary{background:#0f766e}.danger{background:#dc2626}.status{padding:12px;border-radius:12px;margin-top:12px;font-weight:700}.ok{background:#dcfce7;color:#166534}.bad{background:#fee2e2;color:#991b1b}.sectionTitle{display:flex;align-items:center;gap:8px;margin:0 0 10px;font-size:17px}.mini{font-size:12px;color:#64748b}.footerActions{position:sticky;bottom:0;background:#ffffffcc;backdrop-filter:blur(8px);padding:12px;border-top:1px solid var(--line)}
+    @media(max-width:760px){.grid{grid-template-columns:1fr 1fr}.row,.row3{grid-template-columns:1fr} header h1{font-size:19px}}
+  </style>
+</head>
+<body>
+<header>
+  <h1>Full Company · Registro laboratorio</h1>
+  <p>Un solo formulario. Fecha automática. Nada de navegar entre hojas.</p>
+</header>
+<main>
+  <div class="card">
+    <div class="bar"><h2 class="sectionTitle">👤 Datos básicos</h2><span class="pill" id="clock">Cargando...</span></div>
+    <div class="row">
+      <div><label>Responsable *</label><select id="responsable"></select></div>
+      <div><label>Observación</label><input id="observacion" placeholder="Opcional"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2 class="sectionTitle">¿Qué vas a registrar?</h2>
+    <div class="grid" id="tipoGrid"></div>
+  </div>
+
+  <form id="form">
+    <section class="card hide" data-section="inventario">
+      <h2 class="sectionTitle">📦 Inventario / materia prima / salida</h2>
+      <div class="row3">
+        <div><label>Categoría</label><select id="categoria"></select></div>
+        <div><label>Ítem</label><select id="item"></select></div>
+        <div><label>Variante / aroma / detalle</label><input id="variante" placeholder="Ej: chicle, canela, transparente"></div>
+      </div>
+      <div class="row3">
+        <div><label>Cantidad</label><input id="cantidad" type="number" step="0.001"></div>
+        <div><label>Unidad</label><select id="unidad"></select></div>
+        <div><label>Motivo</label><select id="motivo"></select></div>
+      </div>
+      <label><input type="checkbox" id="nuevoItem"> Es un ítem nuevo / no aparece en lista</label>
+      <div class="row hide" id="newItemBox">
+        <div><label>Nombre nuevo ítem</label><input id="nombreNuevoItem"></div>
+        <div><label>Unidad nuevo ítem</label><select id="unidadNuevoItem"></select></div>
+      </div>
+    </section>
+
+    <section class="card hide" data-section="tambor">
+      <h2 class="sectionTitle">🛢️ Preparar tambor</h2>
+      <div class="row">
+        <div><label>Producto preparado</label><select id="productoTambor"></select></div>
+        <div><label>Variante / aroma / color</label><input id="varianteTambor" placeholder="Ej: canela, sin aroma, azul"></div>
+      </div>
+      <div class="row">
+        <div><label>Tanque usado</label><select id="tanque"></select></div>
+        <div><label>Litros preparados</label><input id="litrosPreparados" type="number" step="0.001"></div>
+      </div>
+      <p class="hint">El código del tambor se genera automáticamente.</p>
+    </section>
+
+    <section class="card hide" data-section="empaque">
+      <h2 class="sectionTitle">🧴 Empacar desde tambor</h2>
+      <label>Tambor disponible</label><select id="tamborId"></select>
+      <div class="row3">
+        <div><label>Presentación</label><select id="presentacion"></select></div>
+        <div><label>Cantidad presentación</label><input id="cantidadPresentacion" type="number" step="0.001"></div>
+        <div><label>Accesorio</label><select id="accesorio"></select></div>
+      </div>
+      <div class="row">
+        <div><label>Etiqueta</label><select id="etiqueta"></select></div>
+        <div><label>Sin etiqueta</label><select id="sinEtiqueta"><option value="No">No</option><option value="Sí">Sí</option></select></div>
+      </div>
+      <p class="hint">Si es recarga, escoge “Recarga litros” y no descuenta envase.</p>
+    </section>
+
+    <section class="card hide" data-section="polvo">
+      <h2 class="sectionTitle">⚖️ Empacar sólido / polvo</h2>
+      <div class="row3">
+        <div><label>Producto / polvo</label><select id="productoPolvo"></select></div>
+        <div><label>Presentación</label><select id="presentacionPolvo"></select></div>
+        <div><label>Cantidad</label><input id="cantidadPolvo" type="number" step="0.001"></div>
+      </div>
+      <p class="hint">También sirve para bulto completo u otra presentación.</p>
+    </section>
+
+    <section class="card hide" data-section="palos">
+      <h2 class="sectionTitle">🧹 Fabricar palos</h2>
+      <div class="row">
+        <div><label>Tipo de palo</label><select id="productoPalo"></select></div>
+        <div><label>Cantidad fabricada</label><input id="cantidadPalo" type="number" step="1"></div>
+      </div>
+      <p class="hint">Mariposa descuenta 2 tornillos y 2 tuercas mariposa por palo.</p>
+    </section>
+
+    <div class="footerActions"><button type="submit" class="btn" id="saveBtn">Guardar registro</button><div id="status"></div></div>
+  </form>
+</main>
+<script>
+let DATA = {}; let tipoActual = '';
+const tipoInfo = {
+ 'Entrada mercancía':['📦','Lo que llegó'], 'Consumo materia prima':['🧪','Lo que se usó'], 'Preparar tambor':['🛢️','Producto preparado'],
+ 'Empacar desde tambor':['🧴','Galones, litros, recarga'], 'Empacar sólido/polvo':['⚖️','Bolsas, tarros, bultos'], 'Salida directa/Baja':['🚚','Venta, exhibición, daño'],
+ 'Fabricar palos':['🧹','Rosca o mariposa'], 'Novedad/Corrección':['⚠️','Algo raro o ajuste']
+};
+function fill(id, arr, opts={}){ const el=document.getElementById(id); if(!el) return; el.innerHTML=''; if(opts.blank!==false) el.add(new Option('Selecciona...','')); (arr||[]).forEach(x=>{ if(typeof x==='object') el.add(new Option(x.label,x.id)); else el.add(new Option(x,x)); }); }
+function load(){ google.script.run.withSuccessHandler(init).withFailureHandler(err).getInitData(); }
+function err(e){ show('Error: '+(e.message||e), false); }
+function init(d){ DATA=d; document.getElementById('clock').textContent=d.now; fill('responsable',d.responsables,{blank:true}); fill('categoria',d.categorias); fill('item',[...d.materiasPrimas,...d.productos]); fill('unidad',d.unidades); fill('unidadNuevoItem',d.unidades); fill('motivo',d.motivos); fill('productoTambor',d.productos); fill('tanque',d.tanques); fill('tamborId',d.tambores); fill('presentacion',d.presentaciones); fill('accesorio',d.accesorios); fill('etiqueta',d.etiquetas); fill('productoPolvo',d.productos); fill('presentacionPolvo',d.presentaciones); fill('productoPalo',d.palos); renderTipos(d.tiposRegistro); }
+function renderTipos(tipos){ const g=document.getElementById('tipoGrid'); g.innerHTML=''; tipos.forEach(t=>{ const b=document.createElement('button'); b.type='button'; b.className='typeBtn'; b.innerHTML=`${tipoInfo[t]?.[0]||'➕'} ${t}<span>${tipoInfo[t]?.[1]||''}</span>`; b.onclick=()=>setTipo(t,b); g.appendChild(b); }); }
+function setTipo(t,btn){ tipoActual=t; document.querySelectorAll('.typeBtn').forEach(x=>x.classList.remove('active')); btn.classList.add('active'); document.querySelectorAll('[data-section]').forEach(s=>s.classList.add('hide'));
+ if(['Entrada mercancía','Consumo materia prima','Salida directa/Baja','Novedad/Corrección'].includes(t)) document.querySelector('[data-section="inventario"]').classList.remove('hide');
+ if(t==='Preparar tambor') document.querySelector('[data-section="tambor"]').classList.remove('hide');
+ if(t==='Empacar desde tambor') document.querySelector('[data-section="empaque"]').classList.remove('hide');
+ if(t==='Empacar sólido/polvo') document.querySelector('[data-section="polvo"]').classList.remove('hide');
+ if(t==='Fabricar palos') document.querySelector('[data-section="palos"]').classList.remove('hide');
+}
+document.getElementById('nuevoItem').addEventListener('change',e=>document.getElementById('newItemBox').classList.toggle('hide',!e.target.checked));
+document.getElementById('form').addEventListener('submit',e=>{ e.preventDefault(); save(); });
+function val(id){ const el=document.getElementById(id); return el ? el.value : ''; }
+function checked(id){ const el=document.getElementById(id); return !!(el&&el.checked); }
+function save(){ if(!tipoActual) return show('Selecciona qué vas a registrar.', false); const payload={ responsable: val('responsable'), tipoRegistro: tipoActual, observacion: val('observacion') };
+ if(['Entrada mercancía','Consumo materia prima','Salida directa/Baja','Novedad/Corrección'].includes(tipoActual)){ Object.assign(payload,{ categoria:val('categoria'), item:val('item'), variante:val('variante'), cantidad:val('cantidad'), unidad:val('unidad'), motivo:val('motivo'), movimiento: tipoActual==='Entrada mercancía'?'Entrada': tipoActual==='Consumo materia prima'?'Consumo': tipoActual==='Salida directa/Baja'?'Salida/Baja':'Corrección', nuevoItem:checked('nuevoItem'), nombreNuevoItem:val('nombreNuevoItem'), unidadNuevoItem:val('unidadNuevoItem') }); }
+ if(tipoActual==='Preparar tambor'){ Object.assign(payload,{ producto:val('productoTambor'), variante:val('varianteTambor'), tanque:val('tanque'), litrosPreparados:val('litrosPreparados') }); }
+ if(tipoActual==='Empacar desde tambor'){ Object.assign(payload,{ tamborId:val('tamborId'), presentacion:val('presentacion'), cantidadPresentacion:val('cantidadPresentacion'), accesorio:val('accesorio'), etiqueta:val('etiqueta'), sinEtiqueta: val('sinEtiqueta')==='Sí' }); }
+ if(tipoActual==='Empacar sólido/polvo'){ Object.assign(payload,{ producto:val('productoPolvo'), presentacion:val('presentacionPolvo'), cantidadPresentacion:val('cantidadPolvo'), unidad:'kg' }); }
+ if(tipoActual==='Fabricar palos'){ Object.assign(payload,{ producto:val('productoPalo'), cantidad:val('cantidadPalo'), unidad:'und' }); }
+ document.getElementById('saveBtn').disabled=true; show('Guardando...', true);
+ google.script.run.withSuccessHandler(res=>{ show(res.mensaje, res.estado==='OK'); document.getElementById('saveBtn').disabled=false; if(res.tambores) fill('tamborId',res.tambores); clearForm(); }).withFailureHandler(e=>{ document.getElementById('saveBtn').disabled=false; err(e); }).guardarRegistro(payload);
+}
+function clearForm(){ ['cantidad','variante','litrosPreparados','cantidadPresentacion','cantidadPolvo','cantidadPalo','observacion','nombreNuevoItem','varianteTambor'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=''; }); }
+function show(msg,ok){ const s=document.getElementById('status'); s.className='status '+(ok?'ok':'bad'); s.textContent=msg; }
+load();
+</script>
+</body>
+</html>

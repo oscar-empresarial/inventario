@@ -1868,7 +1868,14 @@ function validarStockItem_(item,variante,cantidad,unidad) {
       if (conv.u === base) disponible += conv.v;
     }
   }
-  if (solicitado > disponible + 0.000001) throw new Error('Inventario insuficiente de ' + item + ': disponible ' + redondear_(disponible,3) + ' ' + base + ', solicitado ' + redondear_(solicitado,3) + ' ' + base + '.');
+  // 2026-08-08, decision de Oscar tras el conteo general: este control YA NO BLOQUEA.
+  // El conteo fisico se aplico en el sistema nuevo (D1) y esta hoja quedo con las materias
+  // primas en cero, asi que el ingeniero no podia registrar NINGUNA preparacion. El registro
+  // pasa aunque el saldo no alcance: el faltante queda visible en el saldo negativo y lo
+  // corrige el siguiente conteo. El control es el registro, no el candado.
+  if (solicitado > disponible + 0.000001) {
+    Logger.log('Aviso: ' + item + ' queda en negativo (disponible ' + redondear_(disponible,3) + ' ' + base + ', solicitado ' + redondear_(solicitado,3) + ' ' + base + ').');
+  }
 }
 
 function positivo_(valor,mensaje) {
