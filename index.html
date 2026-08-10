@@ -593,10 +593,11 @@
       <div class="card">
         <div class="section-title">¿Qué vas a registrar?</div>
         <div class="type-grid" id="typeGrid">
-          <button type="button" class="type-btn" data-type="Entrada mercancía">
-            <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8l-9-5-9 5v8l9 5 9-5V8z"/><path d="M3 8l9 5 9-5"/><path d="M12 13v8"/></svg></span>
-            Llegó mercancía
-          </button>
+          <!-- "Llegó mercancía" salió de aquí el 2026-08-10. Lo que entra a la bodega
+               (materia prima, envases, etiquetas, accesorios) ahora se registra en la
+               app de compras, cuando la orden se marca como recibida. Así el costo entra
+               con su precio y su flete, cosa que este formulario nunca supo hacer.
+               Quien prepara y empaca ya no registra ingresos. -->
           <button type="button" class="type-btn" data-type="Preparación">
             <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3v6l-5.3 8.5A3 3 0 0 0 7.2 22h9.6a3 3 0 0 0 2.5-4.5L14 9V3"/><path d="M8.5 3h7"/><path d="M7 15h10"/></svg></span>
             Preparé / usé materia prima
