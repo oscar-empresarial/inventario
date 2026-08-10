@@ -3832,6 +3832,19 @@
       });
       return (t && t.producto) ? id + ' (' + t.producto + ')' : id;
     }
+    // Qué producto hay en un tanque. En un empaque, el producto NO viene en la fila: lo
+    // define el tanque del que se sacó. Sin esto, la lista de movimientos muestra el
+    // número del tanque y toca adivinar de qué era.
+    function productoDelTanque(id) {
+      if (!id) return '';
+      // `init` y `inventario` escriben los dos en state.catalogos.tambores, así que con
+      // mirar ahí basta: sirve tanto si el operario entró primero a Movimientos como si
+      // venía de Inventario.
+      var t = (state.catalogos.tambores || []).find(function (x) {
+        return normalize(x.id || '') === normalize(id);
+      });
+      return (t && t.producto) ? t.producto : '';
+    }
     function renderMovimientos() {
       var lista = document.getElementById('movLista');
       var filtro = normalize(valueOf('movBuscar'));
@@ -3856,7 +3869,15 @@
         var fecha = campoReg(r, ['fecha', 'timestamp', 'fechaservidor', 'fechacliente']);
         var fechaTxt = fecha ? new Date(fecha).toLocaleString('es-CO', { dateStyle: 'short', timeStyle: 'short' }) : '';
         if (fechaTxt === 'Invalid Date') fechaTxt = fecha;
-        var item = campoReg(r, ['item']) || campoReg(r, ['producto']) || campoReg(r, ['tamborid']);
+        // El título tiene que decir QUÉ se movió, no de qué tanque salió. Un empaque no
+        // trae Item ni Producto (el producto lo define el tanque), y antes el título
+        // terminaba mostrando "11": había que abrirlo y adivinar. Ahora dice
+        // "Vinagre para consumo y limpieza · Recarga litros × 4".
+        var item = campoReg(r, ['item']) || campoReg(r, ['producto']);
+        if (!item) {
+          var tqTitulo = campoReg(r, ['tamborid']);
+          item = productoDelTanque(tqTitulo) || campoReg(r, ['etiqueta']) || tqTitulo;
+        }
         var variante = campoReg(r, ['variante']);
         var detalles = [];
         var cant = campoReg(r, ['cantidad']);
@@ -3886,8 +3907,15 @@
           var diaTxt = isNaN(fd.getTime()) ? dia : fd.toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' });
           encabezadoDia = '<div class="section-title" style="font-size:14px;margin:12px 0 2px;color:var(--blue)">📅 ' + escapeHtml(diaTxt) + '</div>';
         }
+        // El titular se lee de un vistazo, sin abrir la fila:
+        //   "Vinagre para consumo y limpieza · Recarga litros × 4"
+        //   "Ecovarsol · Galon transparente 4 L × 5"
+        var titulo = item + (variante ? ' · ' + variante : '');
+        if (pres) titulo += ' · ' + pres + (cantPres ? ' × ' + cantPres : '');
+        else if (cant) titulo += ' · ' + cant + (uni ? ' ' + uni : '');
+        else if (litros) titulo += ' · ' + litros + ' L';
         return encabezadoDia + '<div class="mov-row" data-mov-idx="'+idx+'">' +
-          '<div class="mov-titulo">' + escapeHtml(item + (variante ? ' · ' + variante : '')) + '</div>' +
+          '<div class="mov-titulo">' + escapeHtml(titulo) + '</div>' +
           '<div class="mov-detalle">' + escapeHtml(fechaTxt) + (detalles.length ? ' — ' + escapeHtml(detalles.join(' · ')) : '') + '</div>' +
           '<div class="mov-badges">' +
           '<span class="badge ' + (esCorreccion?'correccion':(esConteo ? 'conteo' : 'tipo')) + '">' + escapeHtml(tipo || 'Registro') + '</span>' +

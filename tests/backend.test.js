@@ -149,7 +149,10 @@ test('conciliación agrupa auditoría legacy y conserva los litros preparados', 
 });
 
 test('solo el flujo controlado puede resolver revisiones', () => {
-  assert.throws(() => context.validarTipoPermitido_('Eliminar item'), /no permitido/);
+  // 'Eliminar item' SÍ se permite desde el 2026-08-10: es como se sacan los duplicados del
+  // catálogo sin borrarles los movimientos. 'Aprobación item' sigue prohibida por POST
+  // directo: solo puede nacer del flujo de revisión.
+  assert.doesNotThrow(() => context.validarTipoPermitido_('Eliminar item'));
   assert.throws(() => context.validarTipoPermitido_('Aprobación item'), /no permitido/);
   assert.doesNotThrow(() => context.validarTipoPermitido_('Revisión item'));
   const rows = context.construirRevisionItem_({
