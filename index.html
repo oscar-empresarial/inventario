@@ -1441,8 +1441,13 @@
       setupSuggest('Presentacion', 'presentacionSuggestions', getPresentacionOptions, null, 'envase');
       setupSuggest('TamborID', 'tamborSuggestions', getTamborOptions, updateTanqueCampos);
       document.getElementById('TamborID').addEventListener('input', updateTanqueCampos);
+      // Mismo campo de siempre, mismo sitio: lo único que cambia es que ahora también
+      // sugiere los productos DE SIIGO. Al escoger uno, el SKU viaja solo con el registro
+      // y ya no hay que traducir nombres a mano después. Lo que ya conocía (Sin etiqueta,
+      // Genérica, los productos propios) sigue primero para no descolocarlo.
       setupSuggest('Etiqueta', 'etiquetaSuggestions', function () {
-        return unique(['Sin etiqueta', 'Genérica'].concat(getCatalog('productos')));
+        var propias = unique(['Sin etiqueta', 'Genérica'].concat(getCatalog('productos')));
+        return propias.concat(opcionesSiigo());
       }, null, 'libre');
       setupSuggest('BaseTanque', 'baseSuggestions', getTamborOptions);
       setupSuggest('ItemDestino', 'itemDestinoSuggestions', getItemOptions);
@@ -1496,6 +1501,7 @@
         return recuperarOperacionesPendientes();
       }).catch(function () {}).then(function () {
         loadInitJsonp();
+        cargarCatalogoSiigo();
         // Encadenada, no en paralelo: 'preguntas' sale cuando 'inventario' ya contestó.
         jsonp({ action: 'inventario' }, function (data) {
           if (data && !data.error) state.inventario = parseInventario(data);
@@ -2068,6 +2074,30 @@
     }
 
     // ================== SUGERENCIAS ==================
+    // ================== PRODUCTOS DE SIIGO DENTRO DE LA APP ==================
+    // El ingeniero escribía la etiqueta a mano y por eso el detergente de coco se perdió:
+    // quedó como una nota ("2 coco / 1 convencional") en vez de ser un producto. Con la
+    // lista de Siigo aquí, escoge el producto de verdad y el SKU se guarda solo.
+    var siigoProductos = [];
+    var siigoPorNombre = {};
+    function cargarCatalogoSiigo() {
+      fetch('catalogo_siigo.json?v=' + Date.now())
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (d) {
+          siigoProductos = (d && d.productos) || [];
+          siigoProductos.forEach(function (p) { siigoPorNombre[normalize(p.nombre)] = p.sku; });
+        })
+        .catch(function () { /* sin catálogo se sigue como antes, escribiendo a mano */ });
+    }
+    function opcionesSiigo() {
+      return siigoProductos.map(function (p) { return { value: p.nombre, label: p.nombre + '  ·  ' + p.sku }; });
+    }
+    // Devuelve el SKU si lo que quedó escrito es un producto de Siigo. Si el operario
+    // escribió otra cosa, devuelve '' y todo sigue funcionando como antes.
+    function skuDe(nombre) {
+      return siigoPorNombre[normalize(nombre)] || '';
+    }
+
     function setupSuggest(inputId, boxId, optionsProvider, afterPick, allowCreate) {
       var input = document.getElementById(inputId);
       var box = document.getElementById(boxId);
@@ -2431,6 +2461,7 @@
         r.Presentacion = valueOf('Presentacion');
         r.CantidadPresentacion = valueOf('CantidadPresentacion');
         r.Etiqueta = valueOf('Etiqueta');
+        r.SKU = skuDe(valueOf('Etiqueta'));
         r.Cantidad = '';
         r.Unidad = '';
         if (!r.Item) return { error: 'Debes escribir el polvo/sólido que empacas.' };
@@ -2614,6 +2645,9 @@
           r.CantidadPresentacion = nPres;
           r.Accesorio = acc;
           r.Etiqueta = etiq;
+          // Si la etiqueta escogida es un producto de Siigo, el SKU se guarda con el
+          // movimiento. Es lo que amarra lo que se empaca con lo que se factura.
+          r.SKU = skuDe(etiq);
           return [r];
         };
         if (!tamborExiste(tambor)) {
@@ -2642,6 +2676,7 @@
       rm.CantidadPresentacion = nPres;
       rm.Accesorio = acc;
       rm.Etiqueta = etiq;
+      rm.SKU = skuDe(etiq);
       return { records: [rm] };
     }
 
