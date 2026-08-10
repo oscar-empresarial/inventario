@@ -706,6 +706,17 @@ function getInventario() {
       }
       if (nPres > 0 && item) mover(item + ' ' + pres, '', 'Producto terminado', nPres, 'und');
 
+    } else if (tipo.indexOf('abrir paquete') === 0) {
+      // Se rompe un empaque y salen unidades sueltas: 1 bolsa de 50 pastillas de cloro
+      // deja de ser 1 bolsa y pasa a ser 50 pastillas. NO es un traslado (ahí entra y sale
+      // la misma cantidad) ni una baja (no se perdió nada): la cantidad se MULTIPLICA.
+      var porPaquete = num(campo(r, ['cantidadpresentacion'])) || 0;
+      var sueltoDe = String(campo(r, ['producto']) || '').trim();
+      if (item && sueltoDe && cant > 0 && porPaquete > 0) {
+        mover(item, variante, cat, -cant, uni || 'und');
+        mover(sueltoDe, '', cat || 'Producto terminado', cant * porPaquete, 'und');
+      }
+
     } else if (tipo.indexOf('salida') === 0 || tipo.indexOf('baja') >= 0) {
       mover(item, variante, cat, -cant, uni);
 
@@ -1706,6 +1717,7 @@ function validarMovimientoPost_(payload, tipo) {
     if (!existeTanque) throw new Error('No existe el tanque ' + tanqueEstado + '.');
   }
   if (nTipo === 'traslado inventario') validarTrasladoPost_(payload);
+  if (nTipo === 'abrir paquete') validarAbrirPaquetePost_(payload);
   if (nTipo === 'conteo inventario') {
     if (!String(payload.Item || '').trim()) throw new Error('El conteo requiere Item.');
     if (!String(payload.Unidad || '').trim()) throw new Error('El conteo requiere Unidad.');
@@ -1721,7 +1733,13 @@ function validarTipoPermitido_(tipo) {
     'correccion tanque','correccion produccion',
     'empacar desde tambor','empacar producto','empacar materia prima','empacar solido/polvo',
     'salida directa/baja','fabricar palos','novedad/correccion','traslado inventario',
-    'conteo inventario','revision item','movimiento compuesto'
+    'conteo inventario','revision item','movimiento compuesto','abrir paquete',
+    // 'eliminar item' saca un item del catalogo (el motor ya lo entendia, pero doPost lo
+    // rechazaba, asi que solo se podia hacer editando la hoja a mano). Sirve para los
+    // duplicados: el item deja de aparecer en las listas y de sumar saldo, pero SUS
+    // MOVIMIENTOS NO SE BORRAN — la trazabilidad de las preparaciones viejas queda intacta,
+    // que es justo lo que pidio Oscar el 2026-08-10.
+    'eliminar item'
   ];
   var n=normalizar(tipo);
   if (permitidos.indexOf(n)<0) throw new Error('Tipo de movimiento no permitido: '+tipo+'.');
@@ -1743,6 +1761,23 @@ function itemExisteOficial_(item) {
   var valores=hoja.getDataRange().getValues();
   for (var f=1;f<valores.length;f++) for (var c=0;c<valores[f].length;c++) if (normalizar(valores[f][c])===objetivo) return true;
   return false;
+}
+
+// Abrir un empaque: sale del inventario 1 bolsa y entran las unidades que traía dentro.
+// El candado importante es el de existencias: no se puede abrir una bolsa que no hay, o el
+// saldo de sueltas queda inventado.
+function validarAbrirPaquetePost_(payload) {
+  var paquete = String(payload.Item || '').trim();
+  var suelto = String(payload.Producto || payload.ItemDestino || '').trim();
+  var cuantos = positivo_(payload.Cantidad, 'Escribe cuántos paquetes se abrieron.');
+  var porPaquete = positivo_(payload.CantidadPresentacion, 'Escribe cuántas unidades trae cada paquete.');
+  if (!paquete) throw new Error('Falta el paquete que se abrió.');
+  if (!suelto) throw new Error('Falta decir qué producto sale del paquete.');
+  if (normalizar(paquete) === normalizar(suelto)) throw new Error('El paquete y lo que sale de él no pueden ser el mismo ítem.');
+  var disponible = saldoItem_(paquete, payload.Variante || '');
+  if (cuantos > disponible + 0.000001) {
+    throw new Error('Solo hay ' + redondear_(disponible, 2) + ' de "' + paquete + '" y estás abriendo ' + cuantos + '. Cuenta primero lo que hay.');
+  }
 }
 
 function validarTrasladoPost_(payload) {
@@ -1868,14 +1903,40 @@ function validarStockItem_(item,variante,cantidad,unidad) {
       if (conv.u === base) disponible += conv.v;
     }
   }
-  // 2026-08-08, decision de Oscar tras el conteo general: este control YA NO BLOQUEA.
-  // El conteo fisico se aplico en el sistema nuevo (D1) y esta hoja quedo con las materias
-  // primas en cero, asi que el ingeniero no podia registrar NINGUNA preparacion. El registro
-  // pasa aunque el saldo no alcance: el faltante queda visible en el saldo negativo y lo
-  // corrige el siguiente conteo. El control es el registro, no el candado.
+  // 2026-08-10, decision de Oscar: el candado VUELVE, con UNA excepcion.
+  //
+  // El 08-ago se habia quitado porque la hoja tenia todo en cero (el conteo del 07 se
+  // habia aplicado al sistema nuevo pero no aqui) y sin eso no se podia trabajar. Ya se
+  // cargaron los saldos reales, asi que el candado vuelve a tener sentido.
+  //
+  // LAS ETIQUETAS SI PASAN: se acaban a cada rato, se reponen solas y frenar una
+  // produccion entera por una etiqueta no tiene sentido. Todo lo demas (materia prima,
+  // envases, tapas, accesorios) FRENA el registro.
+  //
+  // El mensaje dice el faltante y nada mas — a proposito no sugiere a quien acudir.
   if (solicitado > disponible + 0.000001) {
-    Logger.log('Aviso: ' + item + ' queda en negativo (disponible ' + redondear_(disponible,3) + ' ' + base + ', solicitado ' + redondear_(solicitado,3) + ' ' + base + ').');
+    if (esEtiqueta_(item, variante)) {
+      Logger.log('Etiqueta ' + item + ' queda en negativo; se deja pasar a proposito.');
+      return;
+    }
+    throw new Error('No hay existencias suficientes de ' + item +
+      (variante ? ' (' + variante + ')' : '') + ': disponible ' + redondear_(disponible,3) + ' ' + base +
+      ', se necesitan ' + redondear_(solicitado,3) + ' ' + base + '. No se puede registrar hasta que el inventario este al dia.');
   }
+}
+
+/** ¿Este item es una etiqueta? Se mira la categoria del inventario y, si no aparece, el
+ *  propio nombre — hay etiquetas registradas como "Etiqueta (Deterfull)". */
+function esEtiqueta_(item, variante) {
+  if (/etiqueta/i.test(String(item || ''))) return true;
+  var items = getInventario().items || [];
+  for (var i = 0; i < items.length; i++) {
+    if (normalizar(items[i].Item) === normalizar(item) &&
+        normalizar(items[i].Variante) === normalizar(variante || '')) {
+      return normalizar(items[i].Categoria) === 'etiqueta';
+    }
+  }
+  return false;
 }
 
 function positivo_(valor,mensaje) {

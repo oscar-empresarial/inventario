@@ -5,7 +5,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 const crypto = require('node:crypto');
 
-const backendSource = fs.readFileSync(path.join(__dirname, '..', 'apps-script', 'Codigo.gs'), 'utf8');
+const backendSource = fs.readFileSync(path.join(__dirname, '..', 'apps-script', 'Código.js'), 'utf8');
 const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
 const frontendSource = [...html.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/gi)].map(m => m[1]).join('\n');
 
@@ -65,7 +65,10 @@ function makeBackend(options = {}) {
     'ID', 'FechaHora', 'Responsable', 'TipoRegistro', 'Categoria', 'Item', 'Variante',
     'Cantidad', 'Unidad', 'Movimiento', 'Motivo', 'Producto', 'LitrosPreparados', 'TamborID',
     'Observacion', 'OperacionID', 'IdempotencyKey', 'EstadoMovimiento', 'FechaServidor',
-    'Usuario', 'VersionBOM', 'HashIntegridad', 'DestinoTambor'
+    'Usuario', 'VersionBOM', 'HashIntegridad', 'DestinoTambor',
+    // La hoja real las tiene; sin ellas aquí, un movimiento que las use se guarda "bien"
+    // en la prueba pero pierde el dato en la hoja de verdad.
+    'CantidadPresentacion', 'Presentacion', 'SKU'
   ];
   const registro = new FakeSheet('REGISTRO_APP', [headers]);
   const catalogos = new FakeSheet('CATALOGOS', [['Materias primas', 'Productos'], ['Fragancia', 'Ecovarsol'], ['Varsol', '']]);
@@ -100,6 +103,9 @@ function makeBackend(options = {}) {
   vm.createContext(context);
   vm.runInContext(backendSource, context);
   context.salida = data => data;
+  // El getInventario de verdad, antes de taparlo con el falso: sirve para probar el
+  // cálculo real de saldos a partir de movimientos.
+  const getInventarioReal = context.getInventario;
   context.getInventario = () => ({
     items: [
       { Item: 'Fragancia', Variante: '', Stock: 1000, Unidad: 'L' },
@@ -114,7 +120,7 @@ function makeBackend(options = {}) {
       { id: '77', producto: '', disponible: 0 }
     ]
   });
-  return { context, workbook, sheets, registro, lock };
+  return { context, workbook, sheets, registro, lock, getInventarioReal };
 }
 
 function validProduction(extra = {}) {
@@ -668,4 +674,65 @@ test('auditoría: un producto terminado con muchas unidades NO es un saldo impos
     items: [{ Item: 'Tapa normal', Variante: '', Categoria: 'Envase', Stock: 5000, Unidad: 'und' }]
   });
   assert.ok(!codigos(a).includes('SALDO_IMPOSIBLE'));
+});
+
+// ===========================================================================
+// ABRIR PAQUETE: 1 bolsa de 50 pastillas deja de ser bolsa y pasa a ser 50 pastillas.
+// No es traslado (ahí entra y sale lo mismo) ni baja (no se perdió nada): multiplica.
+// ===========================================================================
+
+function inventarioCon(context, items) {
+  context.getInventario = () => ({ items, tambores: [] });
+}
+const BOLSA = 'Pastilla Cloro 91% Bolsa x 50Unid 1Kl';
+const SUELTA = 'Pastilla Cloro 91% x Unidad';
+function abrir(extra = {}) {
+  return {
+    RequestId: 'REQ-ABRIR-0001', TipoRegistro: 'Abrir paquete', Responsable: 'Carlos',
+    Categoria: 'Producto terminado', Item: BOLSA, Producto: SUELTA,
+    Cantidad: 1, CantidadPresentacion: 50, Unidad: 'und',
+    Observacion: 'Se abrió un paquete', ...extra,
+  };
+}
+
+test('abrir paquete: saca 1 bolsa y mete 50 sueltas', () => {
+  const { context, getInventarioReal } = makeBackend();
+  context.leerRegistros = () => ({ filas: [
+    { TipoRegistro: 'Entrada mercancía', Categoria: 'Producto terminado', Item: BOLSA, Cantidad: 92, Unidad: 'und' },
+    { TipoRegistro: 'Abrir paquete', Categoria: 'Producto terminado', Item: BOLSA,
+      Producto: SUELTA, Cantidad: 1, CantidadPresentacion: 50, Unidad: 'und' },
+  ] });
+  const inv = getInventarioReal();
+  const bolsas = inv.items.find(i => i.Item === BOLSA);
+  const sueltas = inv.items.find(i => i.Item === SUELTA);
+  assert.equal(bolsas.Stock, 91, 'quedan 91 bolsas');
+  assert.equal(sueltas.Stock, 50, 'salieron 50 pastillas sueltas');
+});
+
+test('abrir paquete: no deja abrir bolsas que no hay', () => {
+  const { context } = makeBackend();
+  inventarioCon(context, [{ Item: BOLSA, Variante: '', Categoria: 'Producto terminado', Stock: 2, Unidad: 'und' }]);
+  assert.throws(() => context.validarAbrirPaquetePost_(abrir({ Cantidad: 5 })), /Solo hay 2/);
+  assert.doesNotThrow(() => context.validarAbrirPaquetePost_(abrir({ Cantidad: 2 })));
+});
+
+test('abrir paquete: exige saber qué sale y cuántas trae', () => {
+  const { context } = makeBackend();
+  inventarioCon(context, [{ Item: BOLSA, Variante: '', Categoria: 'Producto terminado', Stock: 90, Unidad: 'und' }]);
+  assert.throws(() => context.validarAbrirPaquetePost_(abrir({ Producto: '' })), /qué producto sale|Falta/i);
+  assert.throws(() => context.validarAbrirPaquetePost_(abrir({ CantidadPresentacion: 0 })), /unidades trae/i);
+  assert.throws(() => context.validarAbrirPaquetePost_(abrir({ Producto: BOLSA })), /no pueden ser el mismo/);
+});
+
+test('abrir paquete: se guarda como UNA fila y queda el rastro de lo que salió', () => {
+  const { context, registro } = makeBackend();
+  inventarioCon(context, [{ Item: BOLSA, Variante: '', Categoria: 'Producto terminado', Stock: 92, Unidad: 'und' }]);
+  const r = post(context, abrir());
+  assert.equal(r.ok, true);
+  assert.equal(r.movimientos, 1);
+  const fila = registro.data.at(-1), cab = registro.data[0];
+  assert.equal(fila[cab.indexOf('TipoRegistro')], 'Abrir paquete');
+  assert.equal(fila[cab.indexOf('Item')], BOLSA);
+  assert.equal(fila[cab.indexOf('Producto')], SUELTA);
+  assert.equal(Number(fila[cab.indexOf('CantidadPresentacion')]), 50);
 });

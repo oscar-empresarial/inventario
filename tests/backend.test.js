@@ -5,7 +5,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 const crypto = require('node:crypto');
 
-const source = fs.readFileSync(path.join(__dirname, '..', 'apps-script', 'Codigo.gs'), 'utf8');
+const source = fs.readFileSync(path.join(__dirname, '..', 'apps-script', 'Código.js'), 'utf8');
 const context = {
   console,
   Logger: { log() {} },
@@ -92,7 +92,9 @@ test('bloquea materias primas duplicadas', () => {
   assert.throws(() => context.validarProduccionPost_(prod([{ Item: 'Agua', Cantidad: 60, Unidad: 'L' }, { Item: 'Agua', Cantidad: 60, Unidad: 'L' }])), /duplicada/);
 });
 test('bloquea consumo y empaque sin inventario suficiente', () => {
-  assert.throws(() => context.validarStockItem_('Fragancia', '', 51, 'L'), /Inventario insuficiente/);
+  // El texto cambió el 8-ago ("No hay existencias suficientes de…"). Lo que importa es que
+  // siga frenando, no la redacción exacta.
+  assert.throws(() => context.validarStockItem_('Fragancia', '', 51, 'L'), /no hay existencias suficientes|inventario insuficiente/i);
   assert.throws(() => context.validarEmpaquePost_({ TamborID: '12', Presentacion: 'Galón 4 L', CantidadPresentacion: 31 }), /Inventario insuficiente/);
 });
 test('permite usar exactamente el saldo disponible', () => {

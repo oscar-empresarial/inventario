@@ -610,6 +610,10 @@
             <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18"/><path d="M7 21h10"/><path d="M3 7h3c2 0 4-.7 6-2 2 1.3 4 2 6 2h3"/><path d="m17 15 2.5-8 2.5 8a4.2 4.2 0 0 1-5 0Z"/><path d="m2 15 2.5-8 2.5 8a4.2 4.2 0 0 1-5 0Z"/></svg></span>
             Empaqué sólido/polvo
           </button>
+          <button type="button" class="type-btn" data-type="Abrir paquete">
+            <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7l9-4 9 4v10l-9 4-9-4V7z"/><path d="M3 7l9 4 9-4"/><path d="M12 11v10"/><path d="M8 5l8 3.5"/></svg></span>
+            Abrí un paquete
+          </button>
           <button type="button" class="type-btn" data-type="Salida directa/Baja">
             <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h12v11H3z"/><path d="M15 10h4l3 3v4h-7"/><circle cx="7" cy="19" r="1.8"/><circle cx="18" cy="19" r="1.8"/></svg></span>
             Salida directa / baja
@@ -1370,9 +1374,11 @@
       'Empacar sólido/polvo': ['responsable', 'item', 'variante', 'presentacion', 'cantpres', 'etiqueta', 'merma', 'observacion'],
       'Salida directa/Baja': ['responsable', 'categoria', 'item', 'variante', 'cantidad', 'unidad', 'motivo', 'observacion'],
       'Fabricar palos': ['responsable', 'item', 'cantidad', 'observacion'],
-      'Novedad/Corrección': ['responsable', 'categoria', 'item', 'variante', 'cantidad', 'unidad', 'motivo', 'referencia', 'observacion']
+      'Novedad/Corrección': ['responsable', 'categoria', 'item', 'variante', 'cantidad', 'unidad', 'motivo', 'referencia', 'observacion'],
+      // Abrir un empaque: se rompe 1 bolsa y salen las unidades que traía dentro.
+      'Abrir paquete': ['responsable', 'categoria', 'item', 'variante', 'cantidad', 'itemdestino', 'cantpres', 'observacion']
     };
-    var tiposConCategoria = ['Entrada mercancía', 'Salida directa/Baja', 'Novedad/Corrección'];
+    var tiposConCategoria = ['Entrada mercancía', 'Salida directa/Baja', 'Novedad/Corrección', 'Abrir paquete'];
 
     document.addEventListener('DOMContentLoaded', function () {
       state.catalogos = JSON.parse(JSON.stringify(catalogosLocales));
@@ -1455,6 +1461,12 @@
       });
       iniciarBienvenida();
       document.getElementById('Motivo').addEventListener('change', toggleItemDestino);
+      document.getElementById('Item').addEventListener('change', function () {
+        if (state.selectedType !== 'Abrir paquete') return;
+        var n = adivinarPorPaquete(this.value);
+        var campo = document.getElementById('CantidadPresentacion');
+        if (n && !campo.value) campo.value = n;
+      });
       document.getElementById('btnExpTanques').addEventListener('click', function () { exportar('tanques'); });
 
       var hoy = new Date();
@@ -1865,7 +1877,24 @@
       clearStatus();
       document.getElementById('Item').value = '';
       document.getElementById('CrearNuevoItem').checked = false;
-      document.getElementById('itemLabel').textContent = (type === 'Fabricar palos') ? 'Tipo de palo' : (type === 'Empacar sólido/polvo' ? 'Polvo / sólido que empacas' : 'Ítem');
+      document.getElementById('itemLabel').textContent = (type === 'Fabricar palos') ? 'Tipo de palo'
+        : (type === 'Empacar sólido/polvo' ? 'Polvo / sólido que empacas'
+        : (type === 'Abrir paquete' ? '¿Cuál paquete abriste?' : 'Ítem'));
+      // Palabras del taller, no de contabilidad: el ingeniero abrió una bolsa, no ejecutó
+      // una conversión de unidad de medida.
+      var esAbrir = type === 'Abrir paquete';
+      document.querySelector('label[for="ItemDestino"]').textContent = esAbrir
+        ? '¿Qué sale del paquete?' : 'Ítem destino (a dónde pasa el inventario)';
+      document.querySelector('label[for="Cantidad"]').textContent = esAbrir
+        ? '¿Cuántos paquetes abriste?' : 'Cantidad';
+      document.querySelector('label[for="CantidadPresentacion"]').textContent = esAbrir
+        ? '¿Cuántas unidades trae cada paquete?' : 'Cantidad de presentaciones';
+      document.getElementById('ItemDestino').placeholder = esAbrir
+        ? 'Ej: Pastilla Cloro 91% x Unidad' : 'Ej: Galón 4 L transparente';
+      if (esAbrir) {
+        document.getElementById('Unidad').value = 'und';
+        document.getElementById('CantidadPresentacion').value = '';
+      }
       validateItemSoft();
       hideSuggestions();
       if (type === 'Fabricar palos') document.getElementById('Unidad').value = 'und';
@@ -1983,8 +2012,18 @@
     }
 
     function toggleItemDestino() {
-      var mostrar = state.selectedType === 'Novedad/Corrección' && valueOf('Motivo') === 'Traslado a otro ítem';
+      // En "Abrir paquete" el destino SIEMPRE va: es lo que sale de la bolsa.
+      var mostrar = state.selectedType === 'Abrir paquete' ||
+        (state.selectedType === 'Novedad/Corrección' && valueOf('Motivo') === 'Traslado a otro ítem');
       document.querySelectorAll('[data-field="itemdestino"]').forEach(function (f) { f.classList.toggle('hidden', !mostrar); });
+    }
+
+    // Si el nombre del paquete dice cuántas trae ("Bolsa x 50 Und", "x100", "PAQ 6"),
+    // se llena solo. El ingeniero no tiene que contar la bolsa para saberlo.
+    function adivinarPorPaquete(nombre) {
+      var m = String(nombre || '').match(/(?:x|por|paq\.?|paquete)\s*(\d{1,4})\b/i) ||
+              String(nombre || '').match(/\b(\d{2,4})\s*(?:und|unid|unidades|u)\b/i);
+      return m ? Number(m[1]) : null;
     }
 
     // ================== MATERIAS PRIMAS DINÁMICAS ==================
@@ -2306,6 +2345,29 @@
       r.Unidad = valueOf('Unidad');
       r.Motivo = valueOf('Motivo');
       r.ReferenciaOriginal = valueOf('ReferenciaOriginal');
+
+      if (type === 'Abrir paquete') {
+        var suelto = valueOf('ItemDestino');
+        var porPaq = valueOf('CantidadPresentacion');
+        if (!r.Categoria) return { error: 'Selecciona categoría.' };
+        if (!r.Item) return { error: '¿Cuál paquete abriste? Escríbelo o búscalo.' };
+        if (!suelto) return { error: '¿Qué sale del paquete? Escribe el producto suelto.' };
+        if (!esNumero(r.Cantidad, false)) return { error: '¿Cuántos paquetes abriste? Tiene que ser 1 o más.' };
+        if (!esNumero(porPaq, false)) return { error: '¿Cuántas unidades trae cada paquete?' };
+        if (normalize(r.Item) === normalize(suelto)) return { error: 'El paquete y lo que sale de él no pueden ser lo mismo.' };
+        r.TipoRegistro = 'Abrir paquete';
+        r.Producto = suelto;
+        r.CantidadPresentacion = porPaq;
+        r.Unidad = 'und';
+        var salen = Number(String(r.Cantidad).replace(',', '.')) * Number(String(porPaq).replace(',', '.'));
+        return {
+          records: [r],
+          confirmar: 'Vas a sacar ' + r.Cantidad + ' de "' + r.Item + '" y meter ' +
+            salen + ' de "' + suelto + '".\n\n¿Está bien?',
+          build: function () { return [r]; },
+          alCancelar: 'Abrir paquete'
+        };
+      }
 
       if (type === 'Entrada mercancía' || type === 'Salida directa/Baja' || type === 'Novedad/Corrección') {
         var esTraslado = (type === 'Novedad/Corrección' && r.Motivo === 'Traslado a otro ítem');
