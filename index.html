@@ -1446,8 +1446,14 @@
       // y ya no hay que traducir nombres a mano después. Lo que ya conocía (Sin etiqueta,
       // Genérica, los productos propios) sigue primero para no descolocarlo.
       setupSuggest('Etiqueta', 'etiquetaSuggestions', function () {
+        // LOS DE SIIGO VAN PRIMERO. Antes iban los nombres propios arriba y pasaba esto:
+        // al escribir "suavizante" salía "Suavizante de telas" (el nombre de siempre, sin
+        // código) antes que "SUAVIZANTE PIMPINA · 8875". El operario escogía el que
+        // conocía, el SKU no viajaba, y el producto terminado NO llegaba al stock — o sea
+        // que después no se podía facturar. Lo que decide si se puede vender va de primero.
+        var siigo = opcionesSiigo();
         var propias = unique(['Sin etiqueta', 'Genérica'].concat(getCatalog('productos')));
-        return propias.concat(opcionesSiigo());
+        return siigo.concat(propias);
       }, null, 'libre');
       setupSuggest('BaseTanque', 'baseSuggestions', getTamborOptions);
       setupSuggest('ItemDestino', 'itemDestinoSuggestions', getItemOptions);
@@ -2634,6 +2640,27 @@
       if (eP) return { error: eP };
       if (!etiq) return { error: 'Indica la etiqueta usada. Si no lleva, escribe “Sin etiqueta”.' };
       if (!acc) return { error: 'Selecciona la tapa o accesorio usado (siempre va tapado con algo).' };
+
+      // SIN CÓDIGO DE SIIGO, LO EMPACADO NO SE PUEDE VENDER.
+      //
+      // El producto terminado solo llega al stock si la etiqueta escogida es un producto
+      // de Siigo (trae su código). Si el operario escribe el nombre de siempre —
+      // "Suavizante de telas" en vez de "SUAVIZANTE PIMPINA · 8875" — el registro se
+      // guarda igual, pero el producto no entra a existencias y después no se puede
+      // facturar. Se avisa ANTES de guardar, con los dos caminos claros.
+      if (!skuDe(etiq) && !/^sin etiqueta/i.test(etiq)) {
+        var parecidos = siigoProductos
+          .filter(function (p) { return normalize(p.nombre).indexOf(normalize(etiq).split(' ')[0]) >= 0; })
+          .slice(0, 6).map(function (p) { return '   · ' + p.nombre; });
+        if (!window.confirm(
+          '“' + etiq + '” no es un producto de Siigo, así que lo que empaques NO va a quedar disponible para facturar.\n\n' +
+          (parecidos.length ? 'En Siigo existen:\n' + parecidos.join('\n') + '\n\n' : '') +
+          '· CANCELAR = volver y escoger el de la lista (recomendado)\n' +
+          '· ACEPTAR  = guardar así de todas formas'
+        )) {
+          return { error: 'Escoge el producto de la lista: son los que traen el código al lado.' };
+        }
+      }
 
       if (sub === 'tambor') {
         var tambor = valueOf('TamborID');
