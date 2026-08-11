@@ -2930,13 +2930,20 @@
           if (r[k]) r[k] = cap(r[k]);
         });
       });
+      var faltantesAlGuardar = [];
       if (!state.omitirStock) {
-        var faltantes = faltantesDe(records);
-        if (faltantes.length) {
-          showStatus('Algunos ítems no tienen existencia registrada. Regístralas abajo o presiona “Guardar de todas formas”.', 'warn');
-          mostrarStockAviso(faltantes);
-          return;
-        }
+        // 2026-08-11: ANTES AQUÍ HABÍA UN `return` Y SE PERDÍA EL TRABAJO.
+        //
+        // Si algún ítem no tenía existencia, la app mostraba el aviso y se salía SIN
+        // GUARDAR. El formulario quedaba lleno, así que el ingeniero creía que ya había
+        // registrado — y si no le daba Guardar otra vez, esa producción se iba al vacío.
+        // Con las materias primas mostrando 0 (la hoja nunca recibió el conteo del 7),
+        // esto le saltaba en casi cada registro.
+        //
+        // Ahora SIEMPRE se guarda. El aviso se sigue mostrando, para que registre la
+        // existencia que falta, pero ya no cuesta perder lo que acababa de hacer:
+        // lo que pasó en la planta pasó, y el registro tiene que quedar.
+        faltantesAlGuardar = faltantesDe(records);
       }
       ocultarStockAviso();
       var btn = document.getElementById('btnSubmit');
@@ -2994,6 +3001,16 @@
         }).join(' | ');
         showStatus('✔ Guardado y confirmado (' + records.length + (records.length === 1 ? ' operación' : ' operaciones') + '): ' + resumen, 'ok');
         explosionBurbujas();
+        // El aviso de existencias va DESPUÉS de guardar, nunca antes: primero se asegura
+        // que el trabajo quedó registrado, y solo entonces se le pide que cuente lo que
+        // falta. Al revés era como se perdía la producción.
+        if (faltantesAlGuardar.length) {
+          setTimeout(function () {
+            mostrarStockAviso(faltantesAlGuardar);
+            showStatus('✔ Quedó guardado. Ojo: ' + faltantesAlGuardar.length +
+              ' ítem(s) no tienen existencia registrada. Cuéntalos abajo cuando puedas.', 'warn');
+          }, 1200);
+        }
         var keepType = state.selectedType;
         var keepResp = valueOf('Responsable');
         resetForm(false);
