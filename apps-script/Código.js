@@ -1914,9 +1914,21 @@ function validarStockItem_(item,variante,cantidad,unidad) {
   // envases, tapas, accesorios) FRENA el registro.
   //
   // El mensaje dice el faltante y nada mas — a proposito no sugiere a quien acudir.
+  // 2026-08-11, Oscar: el candado queda ABIERTO mientras se limpian los saldos.
+  //
+  // Motivo: quedaron 30 saldos en negativo que NO son culpa de quien registra — 18 son
+  // etiquetas e insumos que no entraron al conteo del 7, y el resto son productos que se
+  // contaron en cero y luego se vendieron. Con el candado puesto, el ingeniero no puede
+  // registrar lo que de verdad está haciendo, y entonces el inventario se ensucia MÁS.
+  //
+  // Se deja el aviso en el log para no perder el rastro. VOLVER A PONERLO en cuanto se
+  // termine el conteo de las 29 cosas pendientes: el candado es lo que avisa cuando algo
+  // se está yendo mal, y sin él los errores entran callados.
+  var CANDADO_ABIERTO = true;
   if (solicitado > disponible + 0.000001) {
-    if (esEtiqueta_(item, variante)) {
-      Logger.log('Etiqueta ' + item + ' queda en negativo; se deja pasar a proposito.');
+    if (CANDADO_ABIERTO || esEtiqueta_(item, variante)) {
+      Logger.log('PASA SIN EXISTENCIA: ' + item + (variante ? ' (' + variante + ')' : '') +
+        ' — disponible ' + redondear_(disponible,3) + ', pedido ' + redondear_(solicitado,3));
       return;
     }
     throw new Error('No hay existencias suficientes de ' + item +

@@ -92,9 +92,14 @@ test('bloquea materias primas duplicadas', () => {
   assert.throws(() => context.validarProduccionPost_(prod([{ Item: 'Agua', Cantidad: 60, Unidad: 'L' }, { Item: 'Agua', Cantidad: 60, Unidad: 'L' }])), /duplicada/);
 });
 test('bloquea consumo y empaque sin inventario suficiente', () => {
-  // El texto cambió el 8-ago ("No hay existencias suficientes de…"). Lo que importa es que
-  // siga frenando, no la redacción exacta.
-  assert.throws(() => context.validarStockItem_('Fragancia', '', 51, 'L'), /no hay existencias suficientes|inventario insuficiente/i);
+  // CANDADO ABIERTO desde el 2026-08-11 (decisión de Oscar): quedaron 30 saldos en
+  // negativo que no son culpa de quien registra, y con el candado puesto el ingeniero no
+  // podía registrar lo que de verdad estaba haciendo.
+  //
+  // ESTA PRUEBA ESTÁ AL REVÉS A PROPÓSITO. Cuando se termine de contar las 29 cosas
+  // pendientes hay que poner CANDADO_ABIERTO = false en validarStockItem_ y devolver
+  // esta prueba a assert.throws(/no hay existencias suficientes/).
+  assert.doesNotThrow(() => context.validarStockItem_('Fragancia', '', 51, 'L'));
   assert.throws(() => context.validarEmpaquePost_({ TamborID: '12', Presentacion: 'Galón 4 L', CantidadPresentacion: 31 }), /Inventario insuficiente/);
 });
 test('permite usar exactamente el saldo disponible', () => {
