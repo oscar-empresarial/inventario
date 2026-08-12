@@ -1446,14 +1446,21 @@
       // y ya no hay que traducir nombres a mano después. Lo que ya conocía (Sin etiqueta,
       // Genérica, los productos propios) sigue primero para no descolocarlo.
       setupSuggest('Etiqueta', 'etiquetaSuggestions', function () {
-        // LOS DE SIIGO VAN PRIMERO. Antes iban los nombres propios arriba y pasaba esto:
-        // al escribir "suavizante" salía "Suavizante de telas" (el nombre de siempre, sin
-        // código) antes que "SUAVIZANTE PIMPINA · 8875". El operario escogía el que
-        // conocía, el SKU no viajaba, y el producto terminado NO llegaba al stock — o sea
-        // que después no se podía facturar. Lo que decide si se puede vender va de primero.
-        var siigo = opcionesSiigo();
+        // AQUÍ CABEN LAS DOS LISTAS, Y ESO IMPORTA.
+        //
+        // Primero puse los 1.245 de Siigo de primeras (para que el SKU viajara) y le tapé
+        // al ingeniero SUS propias etiquetas: la caja de sugerencias solo muestra 10, así
+        // que los nombres de toda la vida quedaron fuera. Oscar, 2026-08-12: "en la app del
+        // ingeniero solo aparecen productos de siigo, los que tenía antes no aparecen".
+        //
+        // Ahora se reparte el cupo: primero lo suyo (que es poco y se lo sabe), y detrás
+        // los de Siigo que coincidan con lo que está escribiendo. Así ve sus etiquetas Y
+        // encuentra el producto con código cuando lo busca.
         var propias = unique(['Sin etiqueta', 'Genérica'].concat(getCatalog('productos')));
-        return siigo.concat(propias);
+        var escrito = normalize(valueOf('Etiqueta'));
+        var siigo = opcionesSiigo();
+        if (escrito) siigo = siigo.filter(function (o) { return normalize(o.value).indexOf(escrito) >= 0; });
+        return propias.concat(siigo.slice(0, 40));
       }, null, 'libre');
       setupSuggest('BaseTanque', 'baseSuggestions', getTamborOptions);
       setupSuggest('ItemDestino', 'itemDestinoSuggestions', getItemOptions);
@@ -2136,7 +2143,10 @@
       if (value) {
         list = list.filter(function (o) { return normalize(o.label).includes(value) || normalize(o.value).includes(value); });
       }
-      list = list.slice(0, 10);
+      // 10 alcanzaban cuando la lista era solo la de la casa. Con los productos de Siigo
+      // adentro, 10 dejaban por fuera lo que el operario buscaba. 18 caben en pantalla y
+      // dan aire para que salgan las dos listas.
+      list = list.slice(0, 18);
       var esModalEnvase = allowCreate === 'envase' || (input.id === 'Item' && valueOf('Categoria') === 'Envase' && allowCreate);
       var puedeCrear = allowCreate && !hayExacto && (input.value.trim() || esModalEnvase);
       if (!list.length && !puedeCrear) {
