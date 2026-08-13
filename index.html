@@ -1285,6 +1285,9 @@
     // Apps Script, la URL cambió. Abre "Implementar → Administrar
     // implementaciones", copia la URL que termina en /exec y pégala aquí.
     // ============================================================
+    // Cuántos días de historial piden las pantallas que no filtran por fecha. Sin esto
+    // pedían TODO y Google tardaba hasta 35 segundos: la app se rendía y decía "sin conexión".
+    var DIAS_HISTORIAL = 90;
     var APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxAWuJv7dfjjyobgnEc9yIMJN7uqSnOu9vM80G88JCiDV-0oam5DebiEeqG0FLgcN8I/exec';
     var BACKEND_VERSION_REQUERIDA = '2.2.0-revisiones';
     var OPERACIONES_PENDIENTES_KEY = 'fullcompany_operaciones_pendientes_v1';
@@ -3516,11 +3519,14 @@
         det.innerHTML = '<div style="font-weight:bold;font-size:13px;margin-bottom:4px">📋 Lote / historia de ' + escapeHtml(id) + '</div>' + html;
         fila.insertAdjacentElement('afterend', det);
       };
+      // Mismo caso que en cargarRegistrosTodos: con filtro de días y con paciencia, o el
+      // ingeniero ve "sin conexión" cuando Google simplemente está lento.
       if (state.registrosTodos) { pinta(state.registrosTodos); return; }
-      jsonp({ action: 'registros' }, function (data) {
+      var desdeDet = new Date(Date.now() - DIAS_HISTORIAL*86400000).toISOString().slice(0,10);
+      jsonp({ action: 'registros', desde: desdeDet }, function (data) {
         state.registrosTodos = (data && data.registros) || [];
         pinta(state.registrosTodos);
-      }, function () { pinta(state.registros || []); }, 20000);
+      }, function () { pinta(state.registros || []); }, 45000);
     }
 
     function renderInventario() {
@@ -3773,12 +3779,22 @@
       return op||id||(fila?'FILA-'+fila:'');
     }
 
+    // ESTA ERA LA CAUSA DE "no se puede verificar conexión con Apps Script".
+    //
+    // Pedía TODO el histórico sin filtro: 1.000 movimientos con sus 46 columnas, 1,16 MB.
+    // Medido el 13-ago, la misma llamada tardó entre 3 y **35 segundos** según cómo esté
+    // Google — y la app se rendía a los 20. Cuando se pasaba, el ingeniero veía "no hay
+    // conexión" aunque el servidor estuviera perfecto: el error era de paciencia, no de red.
+    //
+    // Con 90 días alcanza de sobra para lo que estas pantallas hacen (correcciones y el
+    // detalle de un movimiento), y baja de 3 años de historia a unas semanas.
     function cargarRegistrosTodos(callback,forzar) {
       if (state.registrosTodos && !forzar) { callback(state.registrosTodos); return; }
-      jsonp({action:'registros'},function(data) {
+      var desde = new Date(Date.now() - DIAS_HISTORIAL*86400000).toISOString().slice(0,10);
+      jsonp({action:'registros', desde: desde},function(data) {
         state.registrosTodos=(data&&data.registros)||[];
         callback(state.registrosTodos);
-      },function(){callback(state.registros||[]);},20000);
+      },function(){callback(state.registros||[]);},45000);
     }
 
     function prepararListaCorrecciones() {
