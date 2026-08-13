@@ -2111,6 +2111,116 @@
       return siigoPorNombre[normalize(nombre)] || '';
     }
 
+    // ============ LA ETIQUETA ES UNA ETIQUETA, NO UN PRODUCTO DE SIIGO ============
+    //
+    // Oscar, 2026-08-13: "va a seleccionar la etiqueta y dice que no es un producto de
+    // Siigo. Obvio, la etiqueta es etiqueta".
+    //
+    // Tenía razón: el ingeniero escoge la etiqueta que pegó ("Deterfull") y el tamaño lo
+    // dice la PRESENTACIÓN ("1 L", "500 ml", "Galón 4 L"). Exigirle que escribiera
+    // "DETERFULL LT" —el nombre exacto de Siigo— era pedirle que hiciera de traductor.
+    //
+    // Ahora las dos cosas juntas encuentran el producto: la etiqueta dice QUÉ es y la
+    // presentación dice DE QUÉ TAMAÑO. Solo se acepta cuando la respuesta es UNA sola; si
+    // hay varias o ninguna, se le muestran para que escoja, que es mejor que adivinar.
+
+    // El tamaño, en un solo idioma. El ingeniero escribe "1 L" o "500 ml"; Siigo dice
+    // "LT", "500cc", "2LT", "GALON" o "PIMPINA". Un galón son 3.800 cc en unos nombres y
+    // 4 L en otros, así que todo lo que ande por ahí cuenta como galón.
+    function tamanoDe(texto) {
+      var t = normalize(texto);
+      if (/pimpina/.test(t)) return 'pimpina';
+      if (/bulto/.test(t)) return 'bulto';
+      // Los sólidos van por peso: bolsa de 500 gr, tarro de 1 kilo, libra. Se guardan con
+      // una 'g' delante para que un "500 gr" nunca se confunda con un "500 ml".
+      var g = t.match(/(\d+(?:[.,]\d+)?)\s*(gramos|gr|g|kilos|kilo|kg|libras|libra|lb)\b/);
+      if (g) {
+        var ng = parseFloat(g[1].replace(',', '.'));
+        return 'g' + (/^(kilos|kilo|kg)$/.test(g[2]) ? ng * 1000 : /^(libras|libra|lb)$/.test(g[2]) ? ng * 500 : ng);
+      }
+      if (/\blibra\b/.test(t)) return 'g500';
+      var ml = 0;
+      var m = t.match(/(\d+(?:[.,]\d+)?)\s*(ml|cc|cm3|lts|lt|litros|litro|l)\b/);
+      if (m) {
+        var n = parseFloat(m[1].replace(',', '.'));
+        ml = /^(ml|cc|cm3)$/.test(m[2]) ? n : n * 1000;
+      } else if (/galon|galón/.test(t)) ml = 4000;
+      else if (/\blt\b|\blitro\b/.test(t)) ml = 1000;
+      if (ml >= 19000) return 'pimpina';
+      if (ml >= 3500 && ml <= 4200) return 'galon';
+      return ml ? String(ml) : '';
+    }
+
+    // Las palabras con las que se busca: se quita "etiqueta", lo que va entre paréntesis y
+    // las palabras de relleno, y se deja lo que de verdad nombra al producto.
+    var RELLENO = ['para', 'con', 'sin', 'del', 'las', 'los', 'una', 'general', 'telas', 'ropa', 'uso'];
+    function palabrasDe(nombre) {
+      return normalize(String(nombre).replace(/etiqueta/gi, '').replace(/[()]/g, ' '))
+        .split(' ')
+        // Los NÚMEROS se guardan aunque sean cortos: el "70" de "Alcohol 70%" es lo único
+        // que lo separa del 96%, del glicerinado y del isopropílico.
+        .filter(function (p) { return (p.length > 3 || /^\d+$/.test(p)) && RELLENO.indexOf(p) < 0; });
+    }
+
+    /**
+     * Busca el producto de Siigo que corresponde a esta etiqueta en este tamaño.
+     * Devuelve { sku, nombre } si hay UNA sola respuesta, o { varios: [...] } si hay más
+     * de una, o null si no hay ninguna.
+     */
+    function buscarEnSiigo(etiqueta, presentacion) {
+      var directo = skuDe(etiqueta);
+      if (directo) return { sku: directo, nombre: etiqueta };
+
+      var palabras = palabrasDe(etiqueta);
+      if (!palabras.length) return null;
+      var tam = tamanoDe(presentacion);
+
+      // Lo que NO sale de empacar: combos, kits, ofertas, muestras y recargas. Un "Combo
+      // Vidrios Limpios con Deterfull Litro" llevaba el nombre y el tamaño, así que
+      // aparecía junto al Deterfull de verdad y obligaba a preguntar por gusto. Si el
+      // ingeniero escribe esa palabra en la etiqueta, entonces sí la está buscando.
+      var ESTORBOS = ['combo', 'kit', 'oferta', 'muestra', 'recarga', 'promo'];
+      var pedidos = ESTORBOS.filter(function (w) { return normalize(etiqueta).indexOf(w) >= 0; });
+      var sirve = function (p) {
+        var n = normalize(p.nombre);
+        for (var j = 0; j < ESTORBOS.length; j++) {
+          if (pedidos.indexOf(ESTORBOS[j]) < 0 && n.indexOf(ESTORBOS[j]) >= 0) return false;
+        }
+        return true;
+      };
+
+      // SE PUNTUA, NO SE EXIGE TODO. Pedir que el producto de Siigo tuviera TODAS las
+      // palabras dejaba fuera los nombres cortos ("Detergente multiusos para ropa" contra
+      // "DETERFULL LT"); pedir solo la primera dejaba empates tontos ("Extermin con aroma a
+      // limon" contra el Extermin sin aroma). Gana el que coincida en MAS palabras, y solo
+      // se resuelve solo cuando hay un unico ganador.
+      var puntuados = [];
+      for (var k = 0; k < siigoProductos.length; k++) {
+        var p = siigoProductos[k];
+        if (!sirve(p)) continue;
+        // Sin tamano en la presentacion no se puede desempatar por ahi: pasa y que el
+        // nombre haga el trabajo.
+        if (tam && tamanoDe(p.nombre) !== tam) continue;
+        var n = normalize(p.nombre);
+        var palabrasN = n.split(' ');
+        var punto = 0;
+        for (var i = 0; i < palabras.length; i++) {
+          var w = palabras[i];
+          // Los numeros tienen que ser palabra entera: si no, el "70" de "Alcohol 70"
+          // coincidiria con cualquier "700 ml".
+          if (/^[0-9]+$/.test(w) ? palabrasN.indexOf(w) >= 0 : n.indexOf(w) >= 0) punto++;
+        }
+        if (punto > 0) puntuados.push({ p: p, punto: punto });
+      }
+      if (!puntuados.length) return null;
+      var mejor = 0;
+      puntuados.forEach(function (x) { if (x.punto > mejor) mejor = x.punto; });
+      var candidatos = puntuados.filter(function (x) { return x.punto === mejor; })
+                                .map(function (x) { return x.p; });
+      if (candidatos.length === 1) return { sku: candidatos[0].sku, nombre: candidatos[0].nombre };
+      return { varios: candidatos.slice(0, 8) };
+    }
+
     function setupSuggest(inputId, boxId, optionsProvider, afterPick, allowCreate) {
       var input = document.getElementById(inputId);
       var box = document.getElementById(boxId);
@@ -2477,7 +2587,11 @@
         r.Presentacion = valueOf('Presentacion');
         r.CantidadPresentacion = valueOf('CantidadPresentacion');
         r.Etiqueta = valueOf('Etiqueta');
-        r.SKU = skuDe(valueOf('Etiqueta'));
+        // Igual que en el empaque de líquidos: la etiqueta dice QUÉ es y la presentación
+        // DE QUÉ TAMAÑO. Aquí los tamaños son en peso (libra, kilo, bulto) y el buscador
+        // devuelve vacío si no cuadra; entonces se guarda sin SKU, como antes.
+        var halladoP = buscarEnSiigo(valueOf('Etiqueta'), valueOf('Presentacion'));
+        r.SKU = (halladoP && halladoP.sku) || '';
         r.Cantidad = '';
         r.Unidad = '';
         if (!r.Item) return { error: 'Debes escribir el polvo/sólido que empacas.' };
@@ -2658,17 +2772,27 @@
       // "Suavizante de telas" en vez de "SUAVIZANTE PIMPINA · 8875" — el registro se
       // guarda igual, pero el producto no entra a existencias y después no se puede
       // facturar. Se avisa ANTES de guardar, con los dos caminos claros.
-      if (!skuDe(etiq) && !/^sin etiqueta/i.test(etiq)) {
-        var parecidos = siigoProductos
-          .filter(function (p) { return normalize(p.nombre).indexOf(normalize(etiq).split(' ')[0]) >= 0; })
-          .slice(0, 6).map(function (p) { return '   · ' + p.nombre; });
+      // Se resuelve con la etiqueta Y la presentación. Si sale una sola respuesta, el SKU
+      // entra solo y al ingeniero no se le pregunta nada: eso es lo normal.
+      var hallado = /^sin etiqueta/i.test(etiq) ? null : buscarEnSiigo(etiq, pres);
+      var skuEmpaque = (hallado && hallado.sku) || '';
+
+      if (!skuEmpaque && !/^sin etiqueta/i.test(etiq)) {
+        var opciones = (hallado && hallado.varios)
+          ? hallado.varios.map(function (p) { return '   · ' + p.nombre; })
+          : siigoProductos
+              .filter(function (p) { return normalize(p.nombre).indexOf((palabrasDe(etiq)[0] || '')) >= 0; })
+              .slice(0, 6).map(function (p) { return '   · ' + p.nombre; });
+        var motivo = (hallado && hallado.varios)
+          ? 'Con la etiqueta “' + etiq + '” y la presentación “' + pres + '” hay VARIOS productos posibles en Siigo, y no puedo escoger por ti.'
+          : 'Con la etiqueta “' + etiq + '” y la presentación “' + pres + '” no encuentro el producto en Siigo, así que lo que empaques NO va a quedar disponible para facturar.';
         if (!window.confirm(
-          '“' + etiq + '” no es un producto de Siigo, así que lo que empaques NO va a quedar disponible para facturar.\n\n' +
-          (parecidos.length ? 'En Siigo existen:\n' + parecidos.join('\n') + '\n\n' : '') +
-          '· CANCELAR = volver y escoger el de la lista (recomendado)\n' +
+          motivo + '\n\n' +
+          (opciones.length ? 'Estos son los que existen:\n' + opciones.join('\n') + '\n\n' : '') +
+          '· CANCELAR = volver y escribir en Etiqueta el nombre del de la lista (recomendado)\n' +
           '· ACEPTAR  = guardar así de todas formas'
         )) {
-          return { error: 'Escoge el producto de la lista: son los que traen el código al lado.' };
+          return { error: 'Escribe en Etiqueta el nombre del producto de la lista, o revisa que la presentación tenga el tamaño correcto.' };
         }
       }
 
@@ -2684,7 +2808,7 @@
           r.Etiqueta = etiq;
           // Si la etiqueta escogida es un producto de Siigo, el SKU se guarda con el
           // movimiento. Es lo que amarra lo que se empaca con lo que se factura.
-          r.SKU = skuDe(etiq);
+          r.SKU = skuEmpaque;
           return [r];
         };
         if (!tamborExiste(tambor)) {
@@ -2713,7 +2837,7 @@
       rm.CantidadPresentacion = nPres;
       rm.Accesorio = acc;
       rm.Etiqueta = etiq;
-      rm.SKU = skuDe(etiq);
+      rm.SKU = skuEmpaque;
       return { records: [rm] };
     }
 
