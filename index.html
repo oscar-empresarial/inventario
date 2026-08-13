@@ -1516,13 +1516,22 @@
       }).then(function () {
         return recuperarOperacionesPendientes();
       }).catch(function () {}).then(function () {
-        loadInitJsonp();
         cargarCatalogoSiigo();
-        // Encadenada, no en paralelo: 'preguntas' sale cuando 'inventario' ya contestó.
-        jsonp({ action: 'inventario' }, function (data) {
-          if (data && !data.error) state.inventario = parseInventario(data);
-          cargarPreguntasPendientes();
-        }, function () { cargarPreguntasPendientes(); });
+        // UNA SOLA LLAMADA PESADA AL ARRANCAR. Antes salían 'init' e 'inventario' a la vez;
+        // como Apps Script atiende de a una por usuario, se hacían cola y cada una volvía a
+        // calcular el inventario entero. Ahora 'init' ya trae los items y solo se pide
+        // 'inventario' aparte si el servidor es viejo y no los manda.
+        loadInitJsonp(function (data) {
+          if (data && data.items && data.items.length) {
+            state.inventario = parseInventario(data);
+            cargarPreguntasPendientes();
+            return;
+          }
+          jsonp({ action: 'inventario' }, function (inv) {
+            if (inv && !inv.error) state.inventario = parseInventario(inv);
+            cargarPreguntasPendientes();
+          }, function () { cargarPreguntasPendientes(); });
+        });
       });
     });
 
@@ -1847,12 +1856,14 @@
       }, 10000);
     }
 
-    function loadInitJsonp() {
+    function loadInitJsonp(despues) {
       jsonp({ action: 'init' }, function (data) {
         mergeDynamicCatalogs(data);
         llenarDatalistMp();
+        if (despues) despues(data);
       }, function () {
         console.log('Catálogos dinámicos no disponibles. Usando catálogos locales.');
+        if (despues) despues(null);
       });
     }
     function mergeDynamicCatalogs(data) {
@@ -3787,7 +3798,7 @@
     // conexión" aunque el servidor estuviera perfecto: el error era de paciencia, no de red.
     //
     // Con 90 días alcanza de sobra para lo que estas pantallas hacen (correcciones y el
-    // detalle de un movimiento), y baja de 3 años de historia a unas semanas.
+    // detalle de un movimiento), y baja de 3 años de historia a unas semanas.
     function cargarRegistrosTodos(callback,forzar) {
       if (state.registrosTodos && !forzar) { callback(state.registrosTodos); return; }
       var desde = new Date(Date.now() - DIAS_HISTORIAL*86400000).toISOString().slice(0,10);

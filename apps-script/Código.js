@@ -257,7 +257,14 @@ function getInit() {
   } catch (ignoreCatalogoLedger) {}
   // tambores disponibles calculados desde los movimientos
   try {
-    out.tambores = getInventario().tambores || [];
+    var inv = getInventario();
+    out.tambores = inv.tambores || [];
+    // Y TAMBIÉN EL INVENTARIO. Ya quedó calculado aquí mismo, así que mandarlo no cuesta
+    // nada — y le ahorra a la app una SEGUNDA llamada que hacía el mismo trabajo desde
+    // cero. Antes el arranque disparaba 'init' e 'inventario' a la vez y, como Apps Script
+    // atiende de a una por usuario, se hacían cola: dos cálculos completos para pintar una
+    // pantalla. Esa era la mitad de la lentitud que reportó el ingeniero.
+    out.items = inv.items || [];
   } catch (err) {
     out.tambores = [];
   }
@@ -265,7 +272,29 @@ function getInit() {
 }
 
 // ================== LECTURA DE REGISTRO_APP ==================
+/**
+ * LA HOJA SE LEE UNA SOLA VEZ POR LLAMADA.
+ *
+ * Oscar, 2026-08-13: "el ingeniero dice que la app está extremadamente lenta". Medido
+ * contra el servidor real: `init` tardaba hasta 31 segundos e `inventario` hasta 33, con
+ * `ping` en 1-2. O sea que la demora no era la red ni Google: era leer la hoja entera.
+ *
+ * Y se leía de más. `getInit()` la lee para el catálogo y ADEMÁS llama a `getInventario()`,
+ * que la vuelve a leer: dos barridas completas en una sola llamada. Como el arranque de la
+ * app pide `init` E `inventario`, la hoja se leía TRES veces para pintar una pantalla.
+ *
+ * Esta memoria dura lo que dura la invocación (Apps Script arranca de cero en cada
+ * request), así que no hay riesgo de servir datos viejos: dentro de una misma llamada la
+ * hoja no cambia.
+ */
+var _cacheRegistros = null;
 function leerRegistros() {
+  if (_cacheRegistros) return _cacheRegistros;
+  _cacheRegistros = leerRegistrosDeLaHoja_();
+  return _cacheRegistros;
+}
+
+function leerRegistrosDeLaHoja_() {
   var hoja = getHoja().getSheetByName(HOJA_REGISTRO);
   if (!hoja) throw new Error('No existe la pestaña ' + HOJA_REGISTRO);
   var valores = hoja.getDataRange().getValues();
@@ -1280,6 +1309,13 @@ function doPost(e) {
 
     hoja.getRange(filaInicio, 1, filas.length, encabezados.length).setValues(filas);
     try { SpreadsheetApp.flush(); } catch (eF2) {}
+
+    // SE BOTA LA MEMORIA DE LA LECTURA. `leerRegistros()` guarda lo que leyó para no barrer
+    // la hoja varias veces en una misma llamada; si alguien lee DESPUÉS de este guardado
+    // —el estado de la operación, el saldo del tanque para validar— tiene que ver la fila
+    // que se acaba de escribir y no la foto de antes. Sin esto, la optimización se vuelve
+    // un bug de datos, que es mucho peor que la lentitud que arregla.
+    _cacheRegistros = null;
 
     // Red de seguridad: si algo quedó como fecha pese a todo, se reescribe como número.
     colsNumericas.forEach(function(c) {
