@@ -2085,7 +2085,22 @@ function aBase(valor, unidad) {
   return { v: v, u: unidad ? String(unidad) : 'und' };
 }
 // Extrae el tamano de una presentacion: "Galon 4 L" -> {v:4,u:'L'}, "Bolsa 1 lb" -> {v:0.5,u:'kg'}
+/** Los litros de verdad que caben en una pimpina. */
+var LITROS_PIMPINA = 19;
+
 function tamanoDe(texto) {
+  // LA PIMPINA SON 19 LITROS, SE LLAME COMO SE LLAME.
+  //
+  // Oscar, 2026-08-13: "necesito que corrijas a que todas las pimpinas salgan de diecinueve
+  // litros". El envase del catálogo dice "Pimpina 20 L" y por ese nombre se le descontaban
+  // 20 L al tanque cada vez — un litro de más por pimpina, en cada empaque, desde siempre.
+  //
+  // Se corrige AQUÍ y no renombrando el envase a propósito: así queda arreglado también
+  // TODO lo ya registrado (los movimientos guardan el texto "Pimpina 20 L" y se recalculan
+  // con esta regla), sin tener que tocar una sola fila de la hoja. Renombrar el envase
+  // habría partido en dos el saldo del envase, que se lleva por nombre.
+  if (/pimpina/i.test(String(texto || ''))) return { v: LITROS_PIMPINA, u: 'L' };
+
   var m = String(texto || '').match(/(\d+(?:[.,]\d+)?)\s*(ml|l|lt|litros?|g|gr|kg|lb|libras?)\b/i);
   if (!m) return null;
   var v = parseFloat(m[1].replace(',', '.'));

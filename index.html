@@ -2788,10 +2788,17 @@
       // facturar. Se avisa ANTES de guardar, con los dos caminos claros.
       // Se resuelve con la etiqueta Y la presentación. Si sale una sola respuesta, el SKU
       // entra solo y al ingeniero no se le pregunta nada: eso es lo normal.
-      var hallado = /^sin etiqueta/i.test(etiq) ? null : buscarEnSiigo(etiq, pres);
+      // LAS RECARGAS SALEN SIN ETIQUETA Y ESO ESTA BIEN. Oscar, 2026-08-13: "las recargas
+      // salen sin etiquetas, guardalo en tu base de conocimiento". El cliente trae su
+      // envase y no se le pega nada, asi que no hay producto de Siigo que buscar ni nada
+      // que avisar. Se mira la PRESENTACION y no solo lo que diga la etiqueta: asi la
+      // regla vale aunque el ingeniero escriba cualquier cosa en ese campo.
+      var esRecarga = /recarga/i.test(pres);
+      var sinEtiqueta = esRecarga || /^sin etiqueta/i.test(etiq);
+      var hallado = sinEtiqueta ? null : buscarEnSiigo(etiq, pres);
       var skuEmpaque = (hallado && hallado.sku) || '';
 
-      if (!skuEmpaque && !/^sin etiqueta/i.test(etiq)) {
+      if (!skuEmpaque && !sinEtiqueta) {
         var opciones = (hallado && hallado.varios)
           ? hallado.varios.map(function (p) { return '   · ' + p.nombre; })
           : siigoProductos
