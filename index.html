@@ -1517,6 +1517,7 @@
         return recuperarOperacionesPendientes();
       }).catch(function () {}).then(function () {
         cargarCatalogoSiigo();
+        cargarAvisosDelAuditor();
         // UNA SOLA LLAMADA PESADA AL ARRANCAR. Antes salían 'init' e 'inventario' a la vez;
         // como Apps Script atiende de a una por usuario, se hacían cola y cada una volvía a
         // calcular el inventario entero. Ahora 'init' ya trae los items y solo se pide
@@ -1671,6 +1672,37 @@
       var d = leerAplazadas();
       d[id] = Date.now() + HORAS_APLAZAR * 3600000;
       lsSet(PREGUNTAS_APLAZADAS_KEY, JSON.stringify(d));
+    }
+
+    /**
+     * LO QUE EL BOT AUDITOR VIO Y ES TRABAJO DEL INGENIERO.
+     *
+     * Oscar, 2026-08-13: que al químico le salga en SU app lo que él puede arreglar, porque
+     * es quien sabe qué pasó. Va como AVISO, no como ventana que bloquea: son cosas para
+     * mirar cuando pueda, no para frenarlo a mitad de un empaque. Las preguntas obligatorias
+     * siguen siendo otra cosa y siguen apareciendo igual.
+     *
+     * Si la consulta falla no se muestra nada: un aviso es un extra, nunca un estorbo.
+     */
+    function cargarAvisosDelAuditor() {
+      fetch('https://full-motor-comercial.fullcompany-oscar.workers.dev/auditor/ingeniero')
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+          var lista = (d && d.pendientes) || [];
+          if (!lista.length) return;
+          var caja = document.createElement('div');
+          caja.className = 'card';
+          caja.style.borderLeft = '4px solid #d68910';
+          caja.innerHTML = '<b>El auditor vio ' + lista.length + ' cosa' + (lista.length > 1 ? 's' : '') + ' para revisar</b>'
+            + '<div style="margin-top:8px">' + lista.map(function (p) {
+                return '<div style="margin-bottom:8px"><div>· ' + esc(p.titulo) + '</div>'
+                  + '<div class="hint" style="margin-left:12px">' + esc(p.detalle || '') + '</div></div>';
+              }).join('') + '</div>'
+            + '<div class="hint">Cuando quede arreglado desaparece solo de esta lista.</div>';
+          var main = document.querySelector('main') || document.body;
+          main.insertBefore(caja, main.firstChild);
+        })
+        .catch(function () { /* sin avisos se sigue igual */ });
     }
 
     function cargarPreguntasPendientes(intento) {
