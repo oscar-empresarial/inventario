@@ -3220,37 +3220,52 @@
             Responsable:records[0].Responsable,Movimientos:hijos,Origen:'GitHub Pages'
           };
         }
-        try {
-          await enviarRegistro(envioPrincipal);
-        } catch (errDup) {
-          // El servidor avisa cuando la preparación se parece a otra reciente del mismo
-          // tanque. No es un bloqueo: se le pregunta y, si confirma, se reenvía marcado.
-          var mensajeServidor = String((errDup && errDup.message) || '');
-          var marcas = {};
-          if (/POSIBLE DUPLICADO/i.test(mensajeServidor)) {
-            if (!window.confirm(mensajeServidor + '\n\n¿Registrarlo de todas formas?')) throw errDup;
-            marcas.ConfirmoNoDuplicado = true;
-          } else if (/RESIDUO EN EL TANQUE/i.test(mensajeServidor)) {
-            // Lo que decide el número final no es qué hizo con el sobrante, sino qué
-            // significan los litros que escribió: total del tanque, o litros nuevos encima.
-            // El mensaje del servidor ya trae los dos totales calculados. Aquí solo se
-            // amarra cada botón a una de esas dos frases, con las mismas palabras.
-            marcas.ResiduoTanque = window.confirm(
-              mensajeServidor.replace(/>>> /g, '\n\n• ') +
-              '\n\n───────────────\nACEPTAR  =  son ADICIONALES (se suman)' +
-              '\nCANCELAR =  son el TOTAL del tanque'
-            ) ? 'adicional' : 'total';
-          } else {
-            throw errDup;
+        // EL SERVIDOR PUEDE PREGUNTAR DOS COSAS SEGUIDAS, Y ANTES SOLO SE ATENDÍA LA PRIMERA.
+        //
+        // Oscar, 2026-08-13: confirmó que no era duplicado y "luego me sale otro letrero
+        // rojo… pero no me aparece ninguna opción ni nada, no me deja guardarlo".
+        //
+        // Tenía razón y era un callejón sin salida de manual: el reintento se mandaba FUERA
+        // del try, así que la segunda pregunta (el residuo del tanque) reventaba como error
+        // pelado, con el texto de una pregunta y ningún botón para responderla. El trabajo
+        // quedaba sin registrar.
+        //
+        // Ahora se pregunta EN CICLO: cada respuesta se acumula y se reintenta, hasta que
+        // el servidor deje de preguntar. El tope de 3 vueltas está para que un servidor que
+        // preguntara siempre lo mismo no deje al operario en un bucle de ventanas.
+        var envio = envioPrincipal;
+        var marcas = {};
+        for (var intento = 0; intento < 3; intento++) {
+          try {
+            await enviarRegistro(envio);
+            break;
+          } catch (errPregunta) {
+            var mensajeServidor = String((errPregunta && errPregunta.message) || '');
+            if (/POSIBLE DUPLICADO/i.test(mensajeServidor)) {
+              if (!window.confirm(mensajeServidor + '\n\n¿Registrarlo de todas formas?')) throw errPregunta;
+              marcas.ConfirmoNoDuplicado = true;
+            } else if (/RESIDUO EN EL TANQUE/i.test(mensajeServidor)) {
+              // Lo que decide el número final no es qué hizo con el sobrante, sino qué
+              // significan los litros que escribió: total del tanque, o litros nuevos
+              // encima. El mensaje del servidor ya trae los dos totales calculados; aquí
+              // solo se amarra cada botón a una de esas dos frases, con sus mismas palabras.
+              marcas.ResiduoTanque = window.confirm(
+                mensajeServidor.replace(/>>> /g, '\n\n• ') +
+                '\n\n───────────────\nACEPTAR  =  son ADICIONALES (se suman)' +
+                '\nCANCELAR =  son el TOTAL del tanque'
+              ) ? 'adicional' : 'total';
+            } else {
+              throw errPregunta;                     // esto sí es un error de verdad
+            }
+            if (intento === 2) throw errPregunta;    // no se pregunta indefinidamente
+            envio = Object.assign({}, envioPrincipal, marcas);
+            envio.RequestId = nuevoRequestId();      // clave nueva: el payload cambió
+            if (Array.isArray(envio.Movimientos)) {
+              envio.Movimientos = envio.Movimientos.map(function (m) {
+                return Object.assign({}, m, marcas);
+              });
+            }
           }
-          var reintento = Object.assign({}, envioPrincipal, marcas);
-          reintento.RequestId = nuevoRequestId();   // clave nueva: el payload cambió
-          if (Array.isArray(reintento.Movimientos)) {
-            reintento.Movimientos = reintento.Movimientos.map(function (m) {
-              return Object.assign({}, m, marcas);
-            });
-          }
-          await enviarRegistro(reintento);
         }
         var resumen = records.map(function (r) {
           return r.TipoRegistro + (r.Item ? ' · ' + r.Item : (r.TamborID ? ' · ' + r.TamborID : ''));
