@@ -2250,6 +2250,24 @@
         var n = normalize(p.nombre);
         var palabrasN = n.split(' ');
         var punto = 0;
+        // LA ETIQUETA MANDA, Y LO QUE **NO** DICE TAMBIEN MANDA.
+        //
+        // Oscar, 2026-08-18: "el Extermin tiene la MISMA etiqueta para galon, botella,
+        // litro y pimpina... el ingeniero elige la etiqueta que quiere poner". Y ahi estaba
+        // el bloqueo: al empacar Extermin normal salian DOS candidatos -con aroma y sin
+        // aroma- porque "Extermin" esta dentro de los dos nombres, y al no poder desempatar
+        // no se guardaba el SKU. La etiqueta que el escogio SI decia cual era: decia
+        // "Extermin", no "Extermin con aroma".
+        //
+        // Por eso las palabras que distinguen una version de otra descuentan cuando el
+        // producto las trae y la etiqueta NO. Asi "Extermin" le gana al "Extermin aroma",
+        // y si el escribe "Extermin con aroma" gana el otro. El tamano lo sigue diciendo la
+        // presentacion, que es lo correcto: la etiqueta nunca dice el tamano.
+        var DISTINGUEN = ['aroma', 'limon', 'bomba', 'fumigadora', 'antibacterial', 'bebe', 'industrial', 'sin color', 'recarga', 'combo'];
+        for (var z = 0; z < DISTINGUEN.length; z++) {
+          var d = DISTINGUEN[z];
+          if (n.indexOf(d) >= 0 && normalize(etiqueta).indexOf(d) < 0) punto -= 2;
+        }
         for (var i = 0; i < palabras.length; i++) {
           var w = palabras[i];
           // Los numeros tienen que ser palabra entera: si no, el "70" de "Alcohol 70"
