@@ -1125,6 +1125,23 @@
     </div>
   </div>
 
+  <div id="modalSku" class="overlay">
+    <div class="tour-caja">
+      <h3>¿Cuál producto de Siigo salió?</h3>
+      <div class="hint" id="skuContexto" style="margin-bottom:10px"></div>
+      <div class="hint" style="margin-bottom:12px">
+        Sin esto el envase y los litros se descuentan pero el producto terminado no entra a
+        ninguna parte. Escoge el de la lista: es lo que amarra lo que empacaste con lo que
+        se factura.
+      </div>
+      <input id="skuBuscar" placeholder="Escribe para buscar (nombre o código)" style="margin-bottom:10px" />
+      <div id="skuLista" style="max-height:46vh;overflow:auto;margin-bottom:12px"></div>
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button type="button" class="clear" id="btnSkuNoEsta" style="padding:10px 14px">No está en la lista</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Decisión controlada del Centro de revisiones -->
   <div id="modalRevision" class="overlay">
     <div class="tour-caja">
@@ -1548,6 +1565,17 @@
         return String(x).trim();
       }).filter(Boolean)));
     }
+    // ESTA FUNCION NO EXISTIA Y YA SE ESTABA LLAMANDO. El panel de avisos del auditor
+    // (cargarAvisosDelAuditor) usa esc() desde el 18-ago; como nunca se definio, en cuanto
+    // el auditor tuviera algo que decir el panel reventaba con "esc is not defined" y no se
+    // veia nada. No se notaba porque ademas la consulta daba 403, asi que nunca llegaba a
+    // pintar. Encontrado el 26-ago-2026. Escapa para meter texto dentro de innerHTML.
+    function esc(t) {
+      return String(t == null ? '' : t)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
     function normalize(str) {
       return String(str || '')
         .trim()
@@ -1684,25 +1712,41 @@
      *
      * Si la consulta falla no se muestra nada: un aviso es un extra, nunca un estorbo.
      */
+    /**
+     * LOS AVISOS LOS TRAE EL MISMO BACKEND DE LA APP, NO EL MOTOR.
+     *
+     * Antes esto llamaba a full-motor-comercial.../auditor/ingeniero. Esa ruta se metio
+     * detras del muro de sesion en la auditoria del 19-ago (estaba abierta a internet y con
+     * razon se cerro), pero esta pagina es publica y no tiene sesion: desde ese dia la
+     * llamada devolvia 403 y el navegador la mataba por CORS. Y fallaba CALLADO — el catch
+     * no hacia nada — asi que el panel llevaba una semana sin mostrar un solo aviso y nadie
+     * se entero. Encontrado el 26-ago-2026.
+     *
+     * Ahora sale de ?action=auditoria del propio Apps Script, que es el que audita ESTA
+     * hoja: los negativos, los consumos sin entrada, las unidades mezcladas. Va por jsonp
+     * como todo lo demas de la app, asi que no hay CORS que valga, no hace falta llave y no
+     * se toca la seguridad del motor.
+     *
+     * Solo se muestran ALTA y MEDIA: lo BAJA es historia vieja ya tapada y solo estorba.
+     */
     function cargarAvisosDelAuditor() {
-      fetch('https://full-motor-comercial.fullcompany-oscar.workers.dev/auditor/ingeniero')
-        .then(function (r) { return r.json(); })
-        .then(function (d) {
-          var lista = (d && d.pendientes) || [];
-          if (!lista.length) return;
-          var caja = document.createElement('div');
-          caja.className = 'card';
-          caja.style.borderLeft = '4px solid #d68910';
-          caja.innerHTML = '<b>El auditor vio ' + lista.length + ' cosa' + (lista.length > 1 ? 's' : '') + ' para revisar</b>'
-            + '<div style="margin-top:8px">' + lista.map(function (p) {
-                return '<div style="margin-bottom:8px"><div>· ' + esc(p.titulo) + '</div>'
-                  + '<div class="hint" style="margin-left:12px">' + esc(p.detalle || '') + '</div></div>';
-              }).join('') + '</div>'
-            + '<div class="hint">Cuando quede arreglado desaparece solo de esta lista.</div>';
-          var main = document.querySelector('main') || document.body;
-          main.insertBefore(caja, main.firstChild);
-        })
-        .catch(function () { /* sin avisos se sigue igual */ });
+      jsonp({ action: 'auditoria' }, function (d) {
+        var lista = ((d && d.hallazgos) || []).filter(function (h) {
+          return h && (h.prioridad === 'ALTA' || h.prioridad === 'MEDIA');
+        }).slice(0, 6);
+        if (!lista.length) return;
+        var caja = document.createElement('div');
+        caja.className = 'card';
+        caja.style.borderLeft = '4px solid #d68910';
+        caja.innerHTML = '<b>El auditor vio ' + lista.length + ' cosa' + (lista.length > 1 ? 's' : '') + ' para revisar</b>'
+          + '<div style="margin-top:8px">' + lista.map(function (p) {
+              return '<div style="margin-bottom:8px"><div>· ' + esc(p.entidad || p.codigo || '') + '</div>'
+                + '<div class="hint" style="margin-left:12px">' + esc(p.detalle || '') + '</div></div>';
+            }).join('') + '</div>'
+          + '<div class="hint">Cuando quede arreglado desaparece solo de esta lista.</div>';
+        var main = document.querySelector('main') || document.body;
+        main.insertBefore(caja, main.firstChild);
+      }, function () { /* sin avisos se sigue igual: es un extra, nunca un estorbo */ }, 30000);
     }
 
     function cargarPreguntasPendientes(intento) {
@@ -2285,6 +2329,73 @@
       return { varios: candidatos.slice(0, 8) };
     }
 
+    /**
+     * Le abre al ingeniero la lista de productos de Siigo para que escoja cual salio.
+     *
+     * POR QUE UNA LISTA Y NO UN "GUARDAR IGUAL". Un empaque sin SKU descuenta el envase,
+     * la tapa y los litros del tambor, pero el producto terminado no entra a ningun lado:
+     * entre el 8 y el 24 de agosto se fueron asi 706 unidades sin que nadie se enterara.
+     * Por eso aqui no hay salida "guardar de todas formas": o se escoge, o no se guarda.
+     *
+     * Resuelve con {sku, nombre}, o con null si dice que no esta en la lista.
+     */
+    function pedirSkuDeSiigo(datos) {
+      return new Promise(function (resolve) {
+        var overlay = document.getElementById('modalSku');
+        var lista = document.getElementById('skuLista');
+        var buscar = document.getElementById('skuBuscar');
+        var noEsta = document.getElementById('btnSkuNoEsta');
+        document.getElementById('skuContexto').textContent =
+          'Etiqueta: “' + (datos.etiqueta || '(sin etiqueta)') + '”  ·  Presentación: “' + (datos.presentacion || '') + '”';
+
+        function cerrar(valor) {
+          overlay.classList.remove('visible');
+          buscar.removeEventListener('input', pintar);
+          noEsta.removeEventListener('click', alNoEsta);
+          resolve(valor);
+        }
+        function alNoEsta() {
+          cerrar(null);
+        }
+        function pintar() {
+          var q = normalize(buscar.value);
+          // Sin nada escrito se muestran primero los candidatos que la app ya sospechaba:
+          // asi el caso normal es un solo toque y no hay que escribir nada.
+          var base = q
+            ? siigoProductos.filter(function (p) {
+                return normalize(p.nombre).indexOf(q) >= 0 || normalize(p.sku).indexOf(q) >= 0;
+              })
+            : (datos.candidatos && datos.candidatos.length ? datos.candidatos : siigoProductos);
+          lista.innerHTML = '';
+          if (!base.length) {
+            lista.innerHTML = '<div class="hint">Nada con eso. Prueba con una palabra sola, o con el código.</div>';
+            return;
+          }
+          base.slice(0, 60).forEach(function (p) {
+            var b = document.createElement('button');
+            b.type = 'button';
+            b.className = 'clear';
+            b.style.cssText = 'display:block;width:100%;text-align:left;margin-bottom:6px;padding:10px 12px';
+            b.innerHTML = '<b>' + esc(p.nombre) + '</b><br><span class="hint">' + esc(p.sku) + '</span>';
+            b.addEventListener('click', function () { cerrar({ sku: p.sku, nombre: p.nombre }); });
+            lista.appendChild(b);
+          });
+          if (base.length > 60) {
+            var mas = document.createElement('div');
+            mas.className = 'hint';
+            mas.textContent = 'Y ' + (base.length - 60) + ' más. Escribe para filtrar.';
+            lista.appendChild(mas);
+          }
+        }
+        buscar.value = '';
+        buscar.addEventListener('input', pintar);
+        noEsta.addEventListener('click', alNoEsta);
+        pintar();
+        overlay.classList.add('visible');
+        setTimeout(function () { buscar.focus(); }, 60);
+      });
+    }
+
     function setupSuggest(inputId, boxId, optionsProvider, afterPick, allowCreate) {
       var input = document.getElementById(inputId);
       var box = document.getElementById(boxId);
@@ -2848,24 +2959,20 @@
       var hallado = sinEtiqueta ? null : buscarEnSiigo(etiq, pres);
       var skuEmpaque = (hallado && hallado.sku) || '';
 
-      if (!skuEmpaque && !sinEtiqueta) {
-        var opciones = (hallado && hallado.varios)
-          ? hallado.varios.map(function (p) { return '   · ' + p.nombre; })
-          : siigoProductos
-              .filter(function (p) { return normalize(p.nombre).indexOf((palabrasDe(etiq)[0] || '')) >= 0; })
-              .slice(0, 6).map(function (p) { return '   · ' + p.nombre; });
-        var motivo = (hallado && hallado.varios)
-          ? 'Con la etiqueta “' + etiq + '” y la presentación “' + pres + '” hay VARIOS productos posibles en Siigo, y no puedo escoger por ti.'
-          : 'Con la etiqueta “' + etiq + '” y la presentación “' + pres + '” no encuentro el producto en Siigo, así que lo que empaques NO va a quedar disponible para facturar.';
-        if (!window.confirm(
-          motivo + '\n\n' +
-          (opciones.length ? 'Estos son los que existen:\n' + opciones.join('\n') + '\n\n' : '') +
-          '· CANCELAR = volver y escribir en Etiqueta el nombre del de la lista (recomendado)\n' +
-          '· ACEPTAR  = guardar así de todas formas'
-        )) {
-          return { error: 'Escribe en Etiqueta el nombre del producto de la lista, o revisa que la presentación tenga el tamaño correcto.' };
-        }
-      }
+      // AQUI HABIA UN "ACEPTAR = guardar asi de todas formas" QUE YA ERA MENTIRA.
+      //
+      // Desde el 26-ago el servidor NO acepta un empaque desde tambor sin SKU: lo rechaza.
+      // El boton seguia prometiendo guardar igual, asi que el ingeniero decia que si y el
+      // guardado se caia con un error rojo. Encontrado el 26-ago-2026 revisando por que
+      // "la app no funciona".
+      //
+      // Ahora quien pregunta es el SERVIDOR, que es el unico que sabe cuales parejas
+      // producto+envase estan verificadas. Si le falta el SKU, responde pidiendolo y aqui
+      // se le abre la lista de Siigo para que escoja (ver el ciclo de preguntas al
+      // guardar). Una sola puerta, y ninguna forma de guardar sin trazabilidad.
+      //
+      // Se deja pasar a proposito: el servidor decide. Asi tambien quedan cubiertas las
+      // recargas, que salen sin etiqueta y su SKU lo resuelve el tanque del que se empaca.
 
       if (sub === 'tambor') {
         var tambor = valueOf('TamborID');
@@ -3253,6 +3360,7 @@
         // preguntara siempre lo mismo no deje al operario en un bucle de ventanas.
         var envio = envioPrincipal;
         var marcas = {};
+        var skuEscogido = '';
         for (var intento = 0; intento < 3; intento++) {
           try {
             await enviarRegistro(envio);
@@ -3272,15 +3380,38 @@
                 '\n\n───────────────\nACEPTAR  =  son ADICIONALES (se suman)' +
                 '\nCANCELAR =  son el TOTAL del tanque'
               ) ? 'adicional' : 'total';
+            } else if (/Falta el producto de Siigo/i.test(mensajeServidor)) {
+              // EL SERVIDOR ES EL QUE SABE. El mapa de parejas producto+envase verificadas
+              // vive alla, no aca, asi que la app no puede adivinar de antemano si le va a
+              // faltar. Cuando el servidor lo pide, se le abre la lista de Siigo y lo que
+              // escoja se manda en el reintento. Si dice que no esta, NO se guarda: un
+              // empaque sin SKU descuenta envase y litros y no mete el producto a ningun
+              // lado. Antes aqui salia un error rojo sin salida y el trabajo se perdia.
+              var elegido = await pedirSkuDeSiigo({
+                etiqueta: records[0].Etiqueta || '',
+                presentacion: records[0].Presentacion || '',
+                candidatos: (typeof buscarEnSiigo === 'function'
+                  ? ((buscarEnSiigo(records[0].Etiqueta || '', records[0].Presentacion || '') || {}).varios || [])
+                  : [])
+              });
+              if (!elegido) throw errPregunta;
+              skuEscogido = elegido.sku;
             } else {
               throw errPregunta;                     // esto sí es un error de verdad
             }
             if (intento === 2) throw errPregunta;    // no se pregunta indefinidamente
             envio = Object.assign({}, envioPrincipal, marcas);
             envio.RequestId = nuevoRequestId();      // clave nueva: el payload cambió
+            // El SKU va SOLO en el renglon de empaque. Ponerlo en todos le colgaria un
+            // producto terminado a la merma, que es una novedad y no empaca nada.
+            var conSku = function (m) {
+              if (skuEscogido && /^empacar/i.test(String(m.TipoRegistro || ''))) m.SKU = skuEscogido;
+              return m;
+            };
+            conSku(envio);
             if (Array.isArray(envio.Movimientos)) {
               envio.Movimientos = envio.Movimientos.map(function (m) {
-                return Object.assign({}, m, marcas);
+                return conSku(Object.assign({}, m, marcas));
               });
             }
           }
