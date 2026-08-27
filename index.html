@@ -828,6 +828,19 @@
               </div>
               <div class="hint">De qué producto es la etiqueta. Si no lleva, escribe “Sin etiqueta”.</div>
             </div>
+            <div class="field hidden" data-field="resultante">
+              <label>¿A qué producto resulta?</label>
+              <input type="hidden" id="SkuResultante" />
+              <div style="display:flex;gap:8px;align-items:center">
+                <div id="resultanteTexto" style="flex:1;min-width:0;padding:10px 12px;border:1px solid var(--linea,#d9dde3);border-radius:8px;background:var(--fondo2,#f7f8fa)"></div>
+                <button type="button" class="clear" id="btnResultante" style="padding:10px 14px;white-space:nowrap">Cambiar</button>
+              </div>
+              <div class="hint">
+                Es el producto de Siigo que ENTRA al inventario y el que después se factura.
+                La app propone uno, pero el que manda eres tú: <b>un tanque puede tener una
+                base</b> que hoy sale como un producto y mañana, con algo más, como otro.
+              </div>
+            </div>
           </div>
           <div class="row">
             <div class="field hidden" data-field="merma">
@@ -870,6 +883,25 @@
                 <div id="itemDestinoSuggestions" class="suggest-box"></div>
               </div>
               <div class="hint">Si dejas la cantidad vacía, se traslada TODO el inventario del ítem al destino. El historial no se borra.</div>
+            </div>
+            <div class="field hidden" data-field="destinodetalle">
+              <label for="UnidadDestino">¿Y en qué sale?</label>
+              <div style="display:grid;grid-template-columns:1fr 120px;gap:8px">
+                <input id="VarianteDestino" placeholder="Variante: aroma, color… (si no tiene, déjalo vacío)" />
+                <select id="UnidadDestino">
+                  <option value="und">unidades</option>
+                  <option value="kg">kg</option>
+                  <option value="g">g</option>
+                  <option value="lb">lb</option>
+                  <option value="L">L</option>
+                  <option value="ml">ml</option>
+                </select>
+              </div>
+              <div class="hint">
+                No todo lo que sale de un paquete se cuenta en unidades: un <b>bulto de 25 kg</b>
+                deja kilos sueltos. Y si lo que sale tiene aroma o color, ponlo en la variante o
+                el saldo entra a otro ítem.
+              </div>
             </div>
           </div>
           <div class="row">
@@ -1391,12 +1423,12 @@
       'Entrada mercancía': ['responsable', 'categoria', 'item', 'variante', 'cantidad', 'unidad', 'observacion'],
       'Preparación': ['responsable', 'destino', 'materias', 'baseusada', 'baselitros', 'estanque', 'observacion'],
       'Empacar producto': ['responsable', 'subempaque', 'observacion'],
-      'Empacar sólido/polvo': ['responsable', 'item', 'variante', 'presentacion', 'cantpres', 'etiqueta', 'merma', 'observacion'],
+      'Empacar sólido/polvo': ['responsable', 'item', 'variante', 'presentacion', 'cantpres', 'etiqueta', 'resultante', 'merma', 'observacion'],
       'Salida directa/Baja': ['responsable', 'categoria', 'item', 'variante', 'cantidad', 'unidad', 'motivo', 'observacion'],
       'Fabricar palos': ['responsable', 'item', 'cantidad', 'observacion'],
       'Novedad/Corrección': ['responsable', 'categoria', 'item', 'variante', 'cantidad', 'unidad', 'motivo', 'referencia', 'observacion'],
       // Abrir un empaque: se rompe 1 bolsa y salen las unidades que traía dentro.
-      'Abrir paquete': ['responsable', 'categoria', 'item', 'variante', 'cantidad', 'itemdestino', 'cantpres', 'observacion']
+      'Abrir paquete': ['responsable', 'categoria', 'item', 'variante', 'cantidad', 'itemdestino', 'destinodetalle', 'cantpres', 'observacion']
     };
     var tiposConCategoria = ['Entrada mercancía', 'Salida directa/Baja', 'Novedad/Corrección', 'Abrir paquete'];
 
@@ -1414,7 +1446,16 @@
       document.getElementById('Categoria').addEventListener('change', onCategoriaChange);
       document.getElementById('CrearNuevoItem').addEventListener('change', validateItemSoft);
       document.getElementById('Destino').addEventListener('change', updateDestino);
-      document.getElementById('Subempaque').addEventListener('change', updateSubempaque);
+      document.getElementById('Subempaque').addEventListener('change', function () {
+        updateSubempaque();
+        limpiarResultante();
+        refrescarResultante();
+      });
+      document.getElementById('btnResultante').addEventListener('click', cambiarResultante);
+      ['Etiqueta', 'Presentacion', 'TamborID', 'Item'].forEach(function (id) {
+        var el = document.getElementById(id);
+        if (el) el.addEventListener('input', refrescarResultante);
+      });
       document.getElementById('btnMpAgregar').addEventListener('click', function () { agregarFilaMp(); });
       document.getElementById('btnOmitirStock').addEventListener('click', function () {
         state.omitirStock = true;
@@ -1534,7 +1575,8 @@
         return recuperarOperacionesPendientes();
       }).catch(function () {}).then(function () {
         cargarCatalogoSiigo();
-        cargarAvisosDelAuditor();
+        cargarMapaSku();
+      cargarAvisosDelAuditor();
         // UNA SOLA LLAMADA PESADA AL ARRANCAR. Antes salían 'init' e 'inventario' a la vez;
         // como Apps Script atiende de a una por usuario, se hacían cola y cada una volvía a
         // calcular el inventario entero. Ahora 'init' ya trae los items y solo se pide
@@ -1969,6 +2011,7 @@
     function selectType(type) {
       state.selectedType = type;
       state.omitirStock = false;
+      state.resultanteFijado = false;
       ocultarStockAviso();
       document.getElementById('formTitle').textContent = type === 'Preparación' ? 'Preparé / usé materia prima' : type;
       document.getElementById('mainForm').classList.add('active');
@@ -2079,18 +2122,112 @@
       }
     }
 
+    // ===================== A QUE PRODUCTO RESULTA =====================
+    //
+    // Oscar, 2026-08-26: "algunas son bases, luego se le agrega algo mas y se transforma en
+    // otro producto, entonces seria bueno que como todo, se elija el tanque y se elija a que
+    // producto resulta".
+    //
+    // Ese es el punto: el tanque NO decide el producto terminado. Un tanque puede tener una
+    // base que hoy sale como un producto y mañana, con algo mas encima, como otro. Adivinarlo
+    // desde el nombre del tanque acierta muchas veces y se equivoca las que importan.
+    //
+    // Por eso el producto que resulta se MUESTRA siempre y se puede cambiar siempre. La app
+    // propone (por etiqueta+presentacion, o por el tanque cuando no hay etiqueta) y el
+    // ingeniero confirma o escoge otro. Si queda vacio, el servidor lo pide antes de guardar:
+    // nunca se empaca a ciegas.
+
+    function productoDelTanqueUI(id) {
+      if (!id) return '';
+      var lista = (state.catalogos && state.catalogos.tambores) || [];
+      for (var i = 0; i < lista.length; i++) {
+        var t = lista[i];
+        if (typeof t === 'string') continue;
+        if (normalize(t.id || '') === normalize(id)) return String(t.producto || '').trim();
+      }
+      return '';
+    }
+
+    /**
+     * Propone el producto de Siigo. Devuelve {sku,nombre} si hay uno solo, {varios:[...]} si
+     * hay empate, o null si no encuentra.
+     */
+    function sugerirResultante() {
+      if (typeof siigoProductos === 'undefined' || !siigoProductos.length) return null;
+      var pres = valueOf('Presentacion');
+      var etiq = valueOf('Etiqueta');
+      var esRecarga = /recarga/i.test(pres);
+      var sinEtiq = esRecarga || /^sin etiqueta/i.test(etiq) || !etiq;
+      var texto = etiq;
+      if (sinEtiq) texto = productoDelTanqueUI(valueOf('TamborID')) || valueOf('Item') || etiq;
+      if (!texto) return null;
+      // LA RECARGA ES OTRO PRODUCTO EN SIIGO, no el mismo en otro tamaño: se llama
+      // "RECARGA LITRO <producto>" y su codigo empieza por RCG-. Al meterle la palabra
+      // "recarga" al texto de busqueda, el buscador deja pasar esos (por defecto los
+      // descarta, junto con combos y kits) y ademas los prefiere sobre el producto normal.
+      // El tamaño va vacio porque "Recarga litros" no dice un tamaño comparable.
+      // Primero el mapa del servidor: es lo que de verdad se va a guardar. Solo si no
+      // dice nada se cae al buscador por nombre, que propone pero puede equivocarse.
+      var delMapa = delMapaSku(texto, pres);
+      if (delMapa) return delMapa;
+      if (esRecarga) return buscarEnSiigo(texto + ' recarga', '');
+      return buscarEnSiigo(texto, pres);
+    }
+
+    function pintarResultante(elegido, varios) {
+      var caja = document.getElementById('resultanteTexto');
+      var oculto = document.getElementById('SkuResultante');
+      if (!caja || !oculto) return;
+      if (elegido && elegido.sku) {
+        oculto.value = elegido.sku;
+        caja.innerHTML = '<b>' + esc(elegido.nombre) + '</b><br><span class="hint">' + esc(elegido.sku) + '</span>';
+      } else {
+        oculto.value = '';
+        caja.innerHTML = '<span class="hint">' + (varios && varios.length
+          ? 'Hay ' + varios.length + ' posibles. Toca “Cambiar” y escoge cuál es.'
+          : 'Sin definir todavía. Toca “Cambiar” para escogerlo.') + '</span>';
+      }
+    }
+
+    // state.resultanteFijado se pone en cuanto el ingeniero escoge a mano: desde ahi la
+    // sugerencia automatica ya no le pisa la decision, ni aunque cambie la etiqueta.
+    function refrescarResultante() {
+      if (state.resultanteFijado) return;
+      var h = sugerirResultante();
+      pintarResultante(h && h.sku ? h : null, (h && h.varios) || []);
+    }
+
+    function limpiarResultante() {
+      state.resultanteFijado = false;
+      var oculto = document.getElementById('SkuResultante');
+      if (oculto) oculto.value = '';
+      pintarResultante(null, []);
+    }
+
+    async function cambiarResultante() {
+      var h = sugerirResultante();
+      var elegido = await pedirSkuDeSiigo({
+        etiqueta: valueOf('Etiqueta') || productoDelTanqueUI(valueOf('TamborID')),
+        presentacion: valueOf('Presentacion'),
+        candidatos: (h && h.varios) || (h && h.sku ? [{ sku: h.sku, nombre: h.nombre }] : [])
+      });
+      if (!elegido) return;                 // dijo "no está en la lista": se deja como estaba
+      state.resultanteFijado = true;
+      pintarResultante(elegido, []);
+    }
+
     function updateSubempaque() {
       if (state.selectedType !== 'Empacar producto') return;
       var s = valueOf('Subempaque');
-      esconderCampos(['tambor', 'item', 'variante', 'presentacion', 'cantpres', 'accesorio', 'etiqueta']);
+      esconderCampos(['tambor', 'item', 'variante', 'presentacion', 'cantpres', 'accesorio', 'etiqueta', 'resultante']);
       var tamborLbl = document.getElementById('tamborLabel');
       var hint = document.getElementById('tamborHint');
       if (s === 'tambor') {
-        mostrarCampos(['tambor', 'presentacion', 'cantpres', 'accesorio', 'etiqueta', 'merma']);
+        mostrarCampos(['tambor', 'presentacion', 'cantpres', 'accesorio', 'etiqueta', 'resultante', 'merma']);
         tamborLbl.textContent = '¿De cuál tanque o balde?';
         hint.textContent = 'Elige el tanque/balde de la lista: muestra qué tiene cada uno. Si no existe, primero registra la preparación.';
       } else {
-        mostrarCampos(['item', 'variante', 'presentacion', 'cantpres', 'accesorio', 'etiqueta']);
+        mostrarCampos(['item', 'variante', 'presentacion', 'cantpres', 'accesorio', 'etiqueta', 'resultante']);
         document.getElementById('itemLabel').textContent = 'Materia prima que empacas';
       }
     }
@@ -2192,6 +2329,49 @@
         })
         .catch(function () { /* sin catálogo se sigue como antes, escribiendo a mano */ });
     }
+    // ============ EL MAPA DE PAREJAS VERIFICADAS LO MANDA EL SERVIDOR ============
+    //
+    // El buscador por nombre (buscarEnSiigo) no alcanza para todo: "Deterfull" + "Galón 4 L"
+    // no pega con "Deterfull Galon 4Lt Desengrasante Industrial" porque el tamaño en el
+    // nombre esta escrito de otra forma. El servidor SI lo resuelve, con un mapa de parejas
+    // producto+envase que salieron del historial y de decisiones de Oscar — ninguna adivinada.
+    //
+    // Se pide ese mismo mapa en vez de copiarlo aqui: copiado, las dos listas se separan el
+    // dia que alguien agregue una pareja, y la app mostraria un producto y el servidor
+    // guardaria otro. Es una sola llamada al abrir, no toca la hoja y pesa unos pocos KB.
+    var mapaSkuServidor = {};
+    function cargarMapaSku() {
+      jsonp({ action: 'mapasku' }, function (d) {
+        mapaSkuServidor = (d && d.mapa) || {};
+      }, function () { /* sin mapa se cae al buscador por nombre, como antes */ }, 20000);
+    }
+
+    // La MISMA normalizacion que arma las llaves del mapa alla (normSku_). Ojo: quita los
+    // signos, asi que "blanqueador con cloro al 6%" queda "blanqueador con cloro al 6".
+    // Si esto se separa de la del servidor, el mapa deja de pegar y no da ningun error:
+    // simplemente no propone nada.
+    function normSkuMapa(t) {
+      return String(t || '').toLowerCase().normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/\(tambor [0-9]+\)/gi, '')
+        .replace(/[^a-z0-9]+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+    }
+
+    function delMapaSku(producto, presentacion) {
+      var sku = mapaSkuServidor[normSkuMapa(producto) + '|' + normSkuMapa(presentacion)];
+      if (!sku) return null;
+      for (var i = 0; i < siigoProductos.length; i++) {
+        if (String(siigoProductos[i].sku).toLowerCase() === String(sku).toLowerCase()) {
+          return { sku: siigoProductos[i].sku, nombre: siigoProductos[i].nombre };
+        }
+      }
+      // El codigo esta en el mapa pero no en el catalogo (producto apagado en Siigo, o el
+      // catalogo quedo viejo). Se devuelve igual: el codigo es lo que amarra con Siigo.
+      return { sku: sku, nombre: sku };
+    }
+
     function opcionesSiigo() {
       return siigoProductos.map(function (p) { return { value: p.nombre, label: p.nombre + '  ·  ' + p.sku }; });
     }
@@ -2689,12 +2869,26 @@
         r.TipoRegistro = 'Abrir paquete';
         r.Producto = suelto;
         r.CantidadPresentacion = porPaq;
-        r.Unidad = 'und';
+        r.Unidad = 'und';                       // el paquete siempre se cuenta por bultos/bolsas
+        // Y ESTO ES LO QUE SALE. Va aparte de r.Unidad/r.Variante, que son del PAQUETE.
+        // Un bulto de 25 kg se cuenta como 1 bulto y deja 25 kg sueltos: son dos unidades
+        // distintas en el mismo movimiento.
+        r.UnidadDestino = valueOf('UnidadDestino') || 'und';
+        r.VarianteDestino = valueOf('VarianteDestino');
         var salen = Number(String(r.Cantidad).replace(',', '.')) * Number(String(porPaq).replace(',', '.'));
+        // EL NOMBRE DEL PAQUETE SUELE DECIR CUANTAS TRAE. Si no cuadra con lo tecleado se
+        // dice en la misma pantalla, con los dos numeros: el mismo paquete SI puede venir
+        // con distinta cantidad, asi que se avisa y se deja seguir.
+        var dice = adivinarPorPaquete(r.Item);
+        var aviso = (dice && Number(dice) !== Number(String(porPaq).replace(',', '.')))
+          ? '\n\n⚠ OJO: el nombre dice que trae ' + dice + ' y pusiste ' + porPaq + '.'
+          : '';
         return {
           records: [r],
-          confirmar: 'Vas a sacar ' + r.Cantidad + ' de "' + r.Item + '" y meter ' +
-            salen + ' de "' + suelto + '".\n\n¿Está bien?',
+          confirmar: 'Vas a sacar ' + r.Cantidad + ' de "' + r.Item + '"\n' +
+            'y meter ' + salen + ' ' + r.UnidadDestino + ' de "' + suelto + '"' +
+            (r.VarianteDestino ? ' (' + r.VarianteDestino + ')' : '') + '.' + aviso +
+            '\n\n¿Está bien?',
           build: function () { return [r]; },
           alCancelar: 'Abrir paquete'
         };
@@ -2766,7 +2960,7 @@
         // DE QUÉ TAMAÑO. Aquí los tamaños son en peso (libra, kilo, bulto) y el buscador
         // devuelve vacío si no cuadra; entonces se guarda sin SKU, como antes.
         var halladoP = buscarEnSiigo(valueOf('Etiqueta'), valueOf('Presentacion'));
-        r.SKU = (halladoP && halladoP.sku) || '';
+        r.SKU = valueOf('SkuResultante') || (halladoP && halladoP.sku) || '';
         r.Cantidad = '';
         r.Unidad = '';
         if (!r.Item) return { error: 'Debes escribir el polvo/sólido que empacas.' };
@@ -2957,7 +3151,10 @@
       var esRecarga = /recarga/i.test(pres);
       var sinEtiqueta = esRecarga || /^sin etiqueta/i.test(etiq);
       var hallado = sinEtiqueta ? null : buscarEnSiigo(etiq, pres);
-      var skuEmpaque = (hallado && hallado.sku) || '';
+      // MANDA LO QUE ESCOGIO EL INGENIERO. El campo "¿A qué producto resulta?" es la
+      // decision; el buscador es solo la propuesta de respaldo. Si los dos quedan vacios,
+      // el servidor lo pide al guardar y se abre la lista.
+      var skuEmpaque = valueOf('SkuResultante') || (hallado && hallado.sku) || '';
 
       // AQUI HABIA UN "ACEPTAR = guardar asi de todas formas" QUE YA ERA MENTIRA.
       //
@@ -3396,6 +3593,15 @@
               });
               if (!elegido) throw errPregunta;
               skuEscogido = elegido.sku;
+            } else if (/SIN EXISTENCIA|REVISA LA CANTIDAD/i.test(mensajeServidor)) {
+              // Las dos preguntas de "Abrir paquete". No son errores: son avisos con un
+              // numero a la vista, y la respuesta la tiene el que estuvo en la planta. Si
+              // dice que si, se guarda igual — lo que paso, paso, y el saldo se cuadra
+              // despues con un conteo. Bloquearlo era dejarlo sin poder registrar.
+              if (!window.confirm(mensajeServidor.replace(/^Error:\s*/i, '') +
+                '\n\n───────────────\nACEPTAR  =  sí, es así, guárdalo' +
+                '\nCANCELAR =  volver y revisar los números')) throw errPregunta;
+              marcas.ConfirmoAbrirPaquete = true;
             } else {
               throw errPregunta;                     // esto sí es un error de verdad
             }
@@ -3460,6 +3666,10 @@
       hideSuggestions();
       setWarning(document.getElementById('itemWarning'), '');
       state.omitirStock = false;
+      // El producto que resulta vuelve a proponerse solo: si el ingeniero lo fijo a mano
+      // para el registro anterior, esa decision NO se arrastra al siguiente.
+      state.resultanteFijado = false;
+      if (typeof pintarResultante === 'function') pintarResultante(null, []);
       if (clearType) {
         state.selectedType = '';
         document.getElementById('formTitle').textContent = 'Registro';
