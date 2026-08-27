@@ -1452,9 +1452,18 @@
         refrescarResultante();
       });
       document.getElementById('btnResultante').addEventListener('click', cambiarResultante);
+      // SI CAMBIA EL TANQUE, LA ETIQUETA O EL ENVASE, LA ELECCION ANTERIOR YA NO VALE.
+      // Dejarla pegada seria peor que no proponer nada: el ingeniero escoge el producto
+      // para un tanque, se da cuenta de que era otro tanque, lo cambia — y la pantalla
+      // seguiria mostrando el producto del primero. Se vuelve a proponer y el vuelve a
+      // decidir, que es justo lo que Oscar pidio: que se elija, no que se herede.
       ['Etiqueta', 'Presentacion', 'TamborID', 'Item'].forEach(function (id) {
         var el = document.getElementById(id);
-        if (el) el.addEventListener('input', refrescarResultante);
+        if (!el) return;
+        el.addEventListener('input', function () {
+          state.resultanteFijado = false;
+          refrescarResultante();
+        });
       });
       document.getElementById('btnMpAgregar').addEventListener('click', function () { agregarFilaMp(); });
       document.getElementById('btnOmitirStock').addEventListener('click', function () {
