@@ -1018,6 +1018,11 @@
             <p>Traslada toda la existencia del nombre equivocado al producto o ítem correcto, sin borrar su historia.</p>
             <button type="button" class="btn-naranja" id="btnTrasladarSaldo">Trasladar saldo</button>
           </div>
+          <div class="corr-card">
+            <h3>Me equivoqué: anular y volver a hacerlo</h3>
+            <p>Ejemplo: registraste 20 tarros de 500 ml y eran de 250 ml. Deja sin efecto la operación completa y devuelve las cantidades como estaban, para que la registres bien. No borra nada.</p>
+            <button type="button" class="btn-naranja" id="btnAnularOperacion">Anular un registro</button>
+          </div>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
           <button type="button" class="btn-azul" id="btnCorreccionesAlertas">Ver casos detectados</button>
@@ -1285,6 +1290,41 @@
     </div>
   </div>
 
+  <!-- Anular una operación completa -->
+  <div id="modalAnular" class="overlay">
+    <div class="tour-caja">
+      <h3>Anular un registro</h3>
+      <div class="status warn" style="display:block;margin:0 0 10px">
+        Anular <b>no borra</b>. La operación se queda en el historial marcada, con quién la anuló y por qué.
+        Lo que hace es devolver las cantidades a como estaban antes, para que la vuelvas a registrar bien.
+      </div>
+      <div style="margin-bottom:10px">
+        <label for="anulOperacion">¿Cuál registro?</label>
+        <select id="anulOperacion"><option value="">Seleccionar…</option></select>
+        <div class="hint">Los últimos movimientos, el más reciente primero.</div>
+      </div>
+      <div id="anulDetalle" class="status" style="display:none;margin:0 0 10px"></div>
+      <div style="margin-bottom:10px">
+        <label for="anulResponsable">Responsable</label>
+        <select id="anulResponsable">
+          <option value="">Seleccionar…</option><option>Carlos</option><option>Neyder</option><option>Leandro</option><option value="Oscar">Oscar (Administrador)</option>
+        </select>
+      </div>
+      <div style="margin-bottom:10px">
+        <label for="anulAprobado">Aprobado por</label>
+        <select id="anulAprobado"><option value="Oscar">Oscar (Administrador)</option></select>
+      </div>
+      <div style="margin-bottom:10px">
+        <label for="anulMotivo">Qué pasó</label>
+        <textarea id="anulMotivo" placeholder="Ej: registré 20 tarros de 500 ml y en realidad eran de 250 ml."></textarea>
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button type="button" class="clear" id="btnAnularCancelar" style="padding:10px 14px">Cancelar</button>
+        <button type="button" class="btn-naranja" id="btnAnularConfirmar" disabled>Anular</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Tour explicativo -->
   <div id="tour" class="overlay">
     <div class="tour-caja">
@@ -1481,6 +1521,10 @@
       document.getElementById('btnCorregirTanque').addEventListener('click', function () { abrirCorregirTanque(); });
       document.getElementById('btnCompletarProduccion').addEventListener('click', function () { abrirCompletarProduccion(); });
       document.getElementById('btnTrasladarSaldo').addEventListener('click', function () { abrirCorreccionMaestro('RELACIONAR'); });
+      document.getElementById('btnAnularOperacion').addEventListener('click', function () { abrirAnular(); });
+      document.getElementById('btnAnularCancelar').addEventListener('click', cerrarAnular);
+      document.getElementById('anulOperacion').addEventListener('change', revisarAnulable);
+      document.getElementById('btnAnularConfirmar').addEventListener('click', confirmarAnular);
       document.getElementById('btnCorreccionesAlertas').addEventListener('click', function () {
         state.revTab='conciliacion'; switchTab('revisar');
       });
@@ -4304,6 +4348,147 @@
 
     function cerrarCorregirTanque() {
       document.getElementById('modalCorregirTanque').classList.remove('visible');
+    }
+
+    /* ===================== ANULAR UNA OPERACIÓN =====================
+     *
+     * Oscar, 2026-09-01: "mejor haz en correcciones un boton de anular... y pues
+     * reestableces cantidades a las que estaban para que vuelva a hacerlo".
+     *
+     * El operario NO escribe el número de la operación: lo escoge de una lista. Un código
+     * como OP-4E6D4059-1AF no se teclea sin equivocarse, y equivocarse aquí es anular el
+     * registro de otro.
+     *
+     * El botón de anular arranca APAGADO y solo se enciende cuando el servidor contesta que
+     * esa operación sí se puede. La revisión la hace el servidor, no esta pantalla: aquí
+     * solo se pinta. Es a propósito — el 26-ago esta misma app le ofrecía al ingeniero un
+     * ACEPTAR que el backend rechazaba, y quedó como que la app le mentía.
+     */
+    var _anulOperaciones = [];
+
+    function abrirAnular() {
+      var estado = document.getElementById('anulDetalle');
+      estado.style.display = 'none';
+      document.getElementById('anulMotivo').value = '';
+      document.getElementById('anulResponsable').value = '';
+      document.getElementById('btnAnularConfirmar').disabled = true;
+      document.getElementById('modalAnular').classList.add('visible');
+      var sel = document.getElementById('anulOperacion');
+      sel.innerHTML = '<option value="">Cargando…</option>';
+      cargarRegistrosTodos(function (registros) {
+        _anulOperaciones = agruparOperaciones(registros);
+        sel.innerHTML = '<option value="">Seleccionar…</option>' +
+          _anulOperaciones.map(function (o, i) {
+            return '<option value="' + i + '">' + escapeHtml(o.etiqueta) + '</option>';
+          }).join('');
+      });
+    }
+
+    function cerrarAnular() {
+      document.getElementById('modalAnular').classList.remove('visible');
+    }
+
+    /* Junta las filas por operación: una preparación y sus consumos son UNA sola cosa para
+     * el que la registró, y anularla debe tumbarlas todas juntas. */
+    function agruparOperaciones(registros) {
+      var mapa = {};
+      var orden = [];
+      (registros || []).forEach(function (r) {
+        var tipo = String(campoReg(r, ['tiporegistro', 'tipo']) || '');
+        if (normalize(tipo).indexOf('anulacion operacion') === 0) return;   // las anulaciones no se anulan
+        if (String(r.Anulada || '').trim()) return;                          // ya anulada: no se ofrece
+        var op = String(campoReg(r, ['operacionid']) || campoReg(r, ['id']) || '').trim();
+        if (!op) return;
+        if (!mapa[op]) { mapa[op] = { op: op, fecha: '', tipo: tipo, quien: '', partes: [] }; orden.push(op); }
+        var g = mapa[op];
+        if (!g.fecha) g.fecha = String(campoReg(r, ['fechaservidor', 'fecha', 'timestamp']) || '');
+        if (!g.quien) g.quien = String(campoReg(r, ['responsable']) || '');
+        var pres = String(campoReg(r, ['presentacion']) || '');
+        var nPres = campoReg(r, ['cantidadpresentacion']);
+        var item = String(campoReg(r, ['item']) || '');
+        var prod = String(campoReg(r, ['producto']) || '');
+        var litros = campoReg(r, ['litrospreparados']);
+        if (pres) g.partes.push(pres + (nPres ? ' x ' + nPres : ''));
+        else if (litros) g.partes.push(prod + ' ' + litros + ' L');
+        else if (item) g.partes.push(item);
+        else if (prod) g.partes.push(prod);
+      });
+      return orden.map(function (op) { return mapa[op]; }).reverse().slice(0, 60).map(function (g) {
+        var f = g.fecha ? new Date(g.fecha) : null;
+        var cuando = (f && !isNaN(f.getTime())) ? f.toLocaleString('es-CO', { dateStyle: 'short', timeStyle: 'short' }) : 'sin fecha';
+        g.etiqueta = cuando + ' · ' + g.tipo + ' · ' + g.partes.slice(0, 2).join(' + ') + ' · ' + g.quien;
+        return g;
+      });
+    }
+
+    function revisarAnulable() {
+      var sel = document.getElementById('anulOperacion');
+      var caja = document.getElementById('anulDetalle');
+      var btn = document.getElementById('btnAnularConfirmar');
+      btn.disabled = true;
+      var g = _anulOperaciones[Number(sel.value)];
+      if (!g) { caja.style.display = 'none'; return; }
+      caja.style.display = 'block';
+      caja.className = 'status';
+      caja.textContent = 'Revisando si se puede anular…';
+      jsonp({ action: 'anulable', op: g.op }, function (d) {
+        if (!d || !d.ok) {
+          caja.className = 'status err';
+          caja.textContent = (d && d.error) || 'No se pudo revisar esa operación.';
+          return;
+        }
+        var lineas = (d.lineas || []).map(function (l) {
+          return '<li>' + escapeHtml(l.tipo + ' · ' + l.detalle + (l.sku ? ' · ' + l.sku : '')) + '</li>';
+        }).join('');
+        if (d.sePuede) {
+          caja.className = 'status ok';
+          caja.innerHTML = '<b>Se puede anular.</b> Va a dejar sin efecto ' + (d.lineas || []).length +
+            ' renglón(es):<ul style="margin:6px 0 0 18px">' + lineas + '</ul>';
+          btn.disabled = false;
+        } else {
+          caja.className = 'status err';
+          caja.innerHTML = '<b>No se puede anular.</b><ul style="margin:6px 0 0 18px">' +
+            (d.bloqueos || []).map(function (b) { return '<li>' + escapeHtml(b) + '</li>'; }).join('') +
+            '</ul><div style="margin-top:6px">Lo que traía:<ul style="margin:4px 0 0 18px">' + lineas + '</ul></div>';
+        }
+      }, function () {
+        caja.className = 'status err';
+        caja.textContent = 'El servidor no contestó a tiempo. Intenta otra vez.';
+      }, 120000);
+    }
+
+    async function confirmarAnular() {
+      var sel = document.getElementById('anulOperacion');
+      var g = _anulOperaciones[Number(sel.value)];
+      var responsable = valueOf('anulResponsable');
+      var aprobado = valueOf('anulAprobado');
+      var motivo = valueOf('anulMotivo');
+      if (!g) { sel.focus(); return; }
+      if (!responsable) { document.getElementById('anulResponsable').focus(); return; }
+      if (motivo.length < 8) { document.getElementById('anulMotivo').focus(); return; }
+      var btn = document.getElementById('btnAnularConfirmar');
+      btn.disabled = true; btn.textContent = 'Anulando…';
+      try {
+        await enviarRegistro({
+          RequestId: nuevoRequestId(), FechaCliente: new Date().toISOString(),
+          TipoRegistro: 'Anulación operación', Responsable: responsable,
+          ReferenciaOriginal: g.op, Motivo: motivo, AprobadoPor: aprobado,
+          Origen: 'GitHub Pages · Anular operación'
+        });
+        cerrarAnular();
+        state.inventario = null; state.registrosTodos = null; state.conciliacion = null;
+        var estado = document.getElementById('corrEstado');
+        estado.className = 'status ok';
+        estado.textContent = 'Listo: la operación quedó anulada y las cantidades volvieron a como estaban. ' +
+          'Ya puedes registrarla bien. El registro anterior sigue en el historial, marcado.';
+        loadCorrecciones(true);
+      } catch (err) {
+        var estadoError = document.getElementById('corrEstado');
+        estadoError.className = 'status err';
+        estadoError.textContent = String(err.message || err);
+      } finally {
+        btn.disabled = false; btn.textContent = 'Anular';
+      }
     }
 
     async function guardarCorreccionTanque() {
