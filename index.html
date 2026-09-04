@@ -778,8 +778,13 @@
                 <div id="itemSuggestions" class="suggest-box"></div>
               </div>
               <div id="itemWarning" class="warning-box"></div>
-              <label class="check-row" id="crearNuevoRow" style="display:none">
-                <input type="checkbox" id="CrearNuevoItem" />
+              <!-- LA CASILLA DE "CREAR COMO NUEVO" SE QUITO (Oscar, 4-sep-2026: "no puedes
+                   dejar que en esa app se creen items, deshabilita todo eso"). El item nace
+                   en Siigo y se ata en /enlaces; aqui solo se escoge lo que ya existe. El
+                   input se deja escondido y siempre apagado porque seis sitios del codigo
+                   le leen o le escriben `.checked`, y quitarlo los reventaria a todos. -->
+              <label class="check-row" id="crearNuevoRow" style="display:none" hidden>
+                <input type="checkbox" id="CrearNuevoItem" disabled />
                 <span>Crear como nuevo en catálogo, pendiente de revisar</span>
               </label>
             </div>
@@ -2815,7 +2820,21 @@
       // dan aire para que salgan las dos listas.
       list = list.slice(0, 18);
       var esModalEnvase = allowCreate === 'envase' || (input.id === 'Item' && valueOf('Categoria') === 'Envase' && allowCreate);
-      var puedeCrear = allowCreate && !hayExacto && (input.value.trim() || esModalEnvase);
+      // 🔴 AQUI SE CORTA LA CREACION DE ITEMS. Oscar, 4-sep-2026: *"no puedes dejar que en
+      // esa app se creen items, deshabilita todo eso porfa"*. Antes, cuando lo escrito no
+      // estaba en la lista, el desplegable ofrecia "+ Crear nuevo" — y el servidor lo
+      // rechazaba desde el 26-ago con un error rojo. La app prometia algo imposible.
+      //
+      // No se quita a secas: se midio POR QUE se creaba. La lista ofrecia 162 nombres y el
+      // inventario tenia 272; el envase "Galon opaco 4 L", con 24 usos en 30 dias y saldo
+      // propio, NO salia. Ahora getInit ofrece TODO lo que ya tiene movimientos (451
+      // nombres) y no hace falta crear nada. Medido: de las 979 filas del ultimo mes solo
+      // 19 usan un nombre que no existe, y 10 de esos 12 nombres son etiquetas, que no se
+      // cuentan y siguen entrando como texto libre.
+      //
+      // Lo que falte de verdad nace en Siigo y se ata en /enlaces, que es donde queda con
+      // su codigo y se puede comprar, costear y facturar.
+      var puedeCrear = false;
       if (!list.length && !puedeCrear) {
         box.innerHTML = '';
         box.style.display = 'none';
@@ -2966,8 +2985,8 @@
       }
       var options = getItemOptions();
       var exact = options.some(function (x) { return normalize(x) === normalize(item); });
-      // El check de "crear nuevo" solo aparece cuando el ítem NO existe
-      document.getElementById('crearNuevoRow').style.display = (item && !exact) ? 'flex' : 'none';
+      // La casilla de "crear nuevo" ya no se muestra nunca: en esta app no se crean ítems.
+      document.getElementById('crearNuevoRow').style.display = 'none';
       if (checked) {
         setWarning(warning, '✓ Se creará como ítem NUEVO, pendiente de revisar/aprobar. Verifica que el nombre esté bien escrito y con tamaño si es envase o bolsa (Ej: Tarro 30 ml, Bolsa 1 lb).');
         return;
@@ -2978,9 +2997,10 @@
             normalize(x).includes(normalize(item)) ||
             normalize(item).includes(normalize(x));
         }).slice(0, 3);
-        var msg = 'Este ítem no existe todavía.';
+        var msg = 'Ese ítem no está en la lista.';
         if (similar.length) msg += ' ¿Será uno de estos?: ' + similar.join(', ') + '.';
-        msg += ' Si de verdad es nuevo, toca “+ Crear nuevo” en la lista desplegable.';
+        msg += ' Escógelo del desplegable. Si de verdad falta, se crea en Siigo y se ata en la'
+          + ' pantalla /enlaces para que quede con su código: avisa cuál es y se crea.';
         setWarning(warning, msg);
         return;
       }
@@ -3013,7 +3033,11 @@
     }
 
     function baseRecord(tipo) {
-      var esNuevo = document.getElementById('CrearNuevoItem').checked;
+      // NINGUN MOVIMIENTO SALE YA MARCADO COMO "ITEM NUEVO". La casilla se quito de la
+      // pantalla (Oscar, 4-sep-2026) y el servidor rechaza esa marca desde el 26-ago. Se
+      // deja clavado en false y no leyendo la casilla, para que ni una pestaña vieja en
+      // cache ni un camino olvidado puedan volver a mandarla.
+      var esNuevo = false;
       return {
         RequestId: nuevoRequestId(),
         FechaCliente: new Date().toISOString(),
@@ -3441,7 +3465,9 @@
       var options = opciones || getItemOptions();
       var existe = options.some(function (x) { return normalize(x) === normalize(item); });
       if (!existe && nuevoItem !== 'Sí') {
-        return 'El ítem "' + item + '" no existe exacto en el catálogo. Selecciónalo de la lista, o toca “+ Crear nuevo” en el desplegable para crearlo.';
+        return 'El ítem "' + item + '" no está en la lista. Escógelo del desplegable tal como aparece.'
+          + ' Si de verdad falta, se crea en Siigo y se ata en /enlaces: avisa cuál es y se crea.'
+          + ' Aquí no se crean ítems.';
       }
       return '';
     }
