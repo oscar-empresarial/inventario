@@ -428,6 +428,18 @@
       font-weight:bold;
       cursor:pointer;
     }
+    /* ===== Casos por corregir (los trae el Worker) ===== */
+    .casos-caja { margin:12px 0 4px; }
+    .caso-card { transition:opacity .45s ease, transform .45s ease; }
+    .caso-card.saliendo { opacity:0; transform:translateY(-6px); }
+    .caso-card h3 { margin:0 0 4px; font-size:15px; color:#9a3412; }
+    .caso-card p { margin:8px 0 10px; font-size:13px; line-height:1.45; color:#334155; }
+    .caso-filas { background:#f8fafc; border:1px solid var(--line); border-radius:10px; padding:8px 10px; font-size:12px; line-height:1.55; color:#334155; margin-bottom:10px; }
+    .caso-form { display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end; margin-bottom:4px; }
+    .caso-form > div { flex:1 1 160px; min-width:0; }
+    .caso-form label { display:block; font-size:12px; color:var(--gray); margin-bottom:3px; }
+    .caso-msg { margin-top:8px; }
+    .caso-msg:empty { display:none; }
     .badge.correccion { background:#ffedd5; color:#9a3412; }
 
     /* ===== Popup bienvenida y tour ===== */
@@ -1002,6 +1014,15 @@
             <li>¿Quién verificó físicamente la corrección y la aprueba?</li>
           </ol>
         </details>
+        <!-- ===== CASOS POR CORREGIR: los detecta el Worker y cada botón los arregla definitivo (etapa A, 4-sep-2026) ===== -->
+        <div id="casosCaja" class="casos-caja">
+          <div class="section-title" style="margin-top:14px">Casos por corregir</div>
+          <div class="hint" style="margin-bottom:8px">Lo que el sistema encontró raro en el registro y se arregla con un botón: unidades mezcladas, cantidades que no cuadran, envases que no corresponden al producto. Cada botón agrega una corrección enlazada con quién decidió; no borra nada.</div>
+          <div id="casosHecho" class="status"></div>
+          <div id="casosEstado" class="status"></div>
+          <div id="casosLista"></div>
+        </div>
+        <div class="section-title" style="margin-top:14px">Otras correcciones</div>
         <div class="corr-grid">
           <div class="corr-card">
             <h3>El tanque tiene otro producto</h3>
@@ -1378,6 +1399,35 @@
     // pedían TODO y Google tardaba hasta 35 segundos: la app se rendía y decía "sin conexión".
     var DIAS_HISTORIAL = 90;
     var APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxAWuJv7dfjjyobgnEc9yIMJN7uqSnOu9vM80G88JCiDV-0oam5DebiEeqG0FLgcN8I/exec';
+    // ============================================================
+    // EL WORKER DE CLOUDFLARE ATIENDE LAS LECTURAS (etapa A, 4-sep-2026).
+    //
+    // Que paso: cada lectura de esta app hacia que Google releyera la hoja entera y
+    // recalculara el inventario; tardaba entre 3 y 39 s y a ratos contestaba una pagina
+    // HTML de error 404. El ingeniero veia "sin conexion" con el servidor perfecto.
+    // Oscar, 2-sep-2026: que NUNCA falle.
+    //
+    // Como queda: el Worker (full-motor-comercial, ruta /lab/api) guarda un espejo de la
+    // hoja en D1 y contesta init, inventario, registros, conciliacion, revision, preguntas,
+    // mapasku, auditoria y anulable en milisegundos, con la MISMA forma de respuesta.
+    // leerBackend() lo intenta primero y, si no contesta en 8 s o contesta con error,
+    // cae al Apps Script como siempre. Al reves nunca: el Worker no bloquea nada.
+    //
+    // Las ESCRITURAS (guardar un registro, anular, corregir) siguen yendo al Apps Script:
+    // la hoja sigue siendo la fuente de la verdad en esta etapa. Lo unico que se escribe
+    // por el Worker son los "Casos por corregir" de la pestana Correcciones (action=aplicar),
+    // que el propio Worker manda a la hoja y a D1.
+    //
+    // La llave solo abre esta ruta del Worker; no da acceso a nada mas del negocio.
+    // ============================================================
+    var LAB_API = 'https://full-motor-comercial.fullcompany-oscar.workers.dev/lab/api';
+    var LAB_LLAVE = 'gCw0PqcIlSGWDnmBvz-JF720';
+    // Las acciones que el Worker sabe contestar desde el espejo. ping, operacion y todos
+    // los POST NO estan aqui a proposito: siguen contra el Apps Script.
+    var ACCIONES_WORKER = ['init', 'inventario', 'registros', 'conciliacion', 'revision', 'preguntas', 'mapasku', 'auditoria', 'anulable'];
+    // Si el Worker no contesta en este tiempo, se pasa a Google sin esperar mas. Es corto
+    // porque el Worker contesta en milisegundos: si tarda mas, algo le pasa.
+    var TIMEOUT_WORKER_MS = 8000;
     // LA VERSION MINIMA, NO LA EXACTA. El 1-sep el backend subio a 2.3.2-anular y esta
     // constante seguia pidiendo 2.2.0 con igualdad estricta: cada vez que el ping SI
     // contestaba, la app se auto-bloqueaba ("Envios bloqueados... se requiere
@@ -1534,7 +1584,7 @@
       document.getElementById('btnCorreccionesAlertas').addEventListener('click', function () {
         state.revTab='conciliacion'; switchTab('revisar');
       });
-      document.getElementById('btnCorreccionesActualizar').addEventListener('click', function () { loadCorrecciones(true); });
+      document.getElementById('btnCorreccionesActualizar').addEventListener('click', function () { loadCorrecciones(true); loadCasos(true); });
       document.getElementById('corrTanque').addEventListener('change', actualizarTanqueCorreccion);
       document.getElementById('btnCorrTanqueCancelar').addEventListener('click', cerrarCorregirTanque);
       document.getElementById('btnCorrTanqueGuardar').addEventListener('click', guardarCorreccionTanque);
@@ -1646,7 +1696,7 @@
             cargarPreguntasPendientes();
             return;
           }
-          jsonp({ action: 'inventario' }, function (inv) {
+          leerBackend({ action: 'inventario' }, function (inv) {
             if (inv && !inv.error) state.inventario = parseInventario(inv);
             cargarPreguntasPendientes();
           }, function () { cargarPreguntasPendientes(); });
@@ -1699,37 +1749,126 @@
     }
 
     // ================== JSONP ==================
-    function jsonp(params, onOk, onFail, timeoutMs) {
-      var callbackName = '__fc_' + Math.random().toString(36).slice(2) + Date.now();
-      var done = false;
-      window[callbackName] = function (data) {
-        if (done) return;
-        done = true;
-        cleanupJsonp(callbackName);
-        try { onOk(data || {}); } catch (err) { console.log('Error procesando respuesta:', err); }
-      };
+    // CON DOS REINTENTOS (1,5 s y 3 s) ANTES DE RENDIRSE.
+    //
+    // Que paso: Google contesta de vez en cuando una pagina HTML 404 en vez del script; el
+    // navegador dispara onerror en el acto y la app decia "sin conexion" por un tropiezo
+    // que al segundo siguiente ya no existia. Ahora, si el script no carga, se espera y se
+    // vuelve a pedir; solo si falla tres veces seguidas se le avisa a quien llamo.
+    //
+    // Ojo: el reintento es SOLO cuando el script no carga (onerror). Si se vence el tiempo
+    // de espera no se reintenta: el Apps Script atiende de a una y volver a pedir lo mismo
+    // encima de una peticion lenta solo lo atasca mas (y triplicaria la espera del
+    // ingeniero). Un tiempo vencido es una respuesta: el servidor esta lento.
+    //
+    // El quinto parametro (url) existe para que leerBackend() pida lo mismo al Worker; si
+    // no viene, va al Apps Script como toda la vida.
+    var JSONP_ESPERAS_REINTENTO = [1500, 3000];
+    function jsonp(params, onOk, onFail, timeoutMs, url) {
+      var base = url || APPS_SCRIPT_URL;
       var qs = Object.keys(params).map(function (k) {
         return encodeURIComponent(k) + '=' + encodeURIComponent(params[k]);
       }).join('&');
-      var script = document.createElement('script');
-      script.src = APPS_SCRIPT_URL + '?' + qs + '&callback=' + encodeURIComponent(callbackName) + '&v=' + Date.now();
-      script.onerror = function () {
-        if (done) return;
-        done = true;
-        cleanupJsonp(callbackName);
-        if (typeof onFail === 'function') onFail();
-      };
-      document.body.appendChild(script);
-      setTimeout(function () {
-        if (done) return;
-        done = true;
-        cleanupJsonp(callbackName);
-        if (typeof onFail === 'function') onFail();
-      }, timeoutMs || 15000);
+      function intentar(numero) {
+        var callbackName = '__fc_' + Math.random().toString(36).slice(2) + Date.now();
+        var done = false;
+        window[callbackName] = function (data) {
+          if (done) return;
+          done = true;
+          cleanupJsonp(callbackName);
+          try { onOk(data || {}); } catch (err) { console.log('Error procesando respuesta:', err); }
+        };
+        var script = document.createElement('script');
+        script.src = base + '?' + qs + '&callback=' + encodeURIComponent(callbackName) + '&v=' + Date.now();
+        script.onerror = function () {
+          if (done) return;
+          done = true;
+          cleanupJsonp(callbackName);
+          if (numero < JSONP_ESPERAS_REINTENTO.length) {
+            console.log('jsonp: no cargo ' + (params.action || '') + ' (intento ' + (numero + 1) + '), se reintenta en ' + JSONP_ESPERAS_REINTENTO[numero] + ' ms');
+            setTimeout(function () { intentar(numero + 1); }, JSONP_ESPERAS_REINTENTO[numero]);
+            return;
+          }
+          if (typeof onFail === 'function') onFail();
+        };
+        document.body.appendChild(script);
+        setTimeout(function () {
+          if (done) return;
+          done = true;
+          cleanupJsonp(callbackName);
+          if (typeof onFail === 'function') onFail();
+        }, timeoutMs || 15000);
+      }
+      intentar(0);
     }
     function cleanupJsonp(callbackName) {
       try { delete window[callbackName]; } catch (err) { window[callbackName] = undefined; }
       document.querySelectorAll('script[src*="' + callbackName + '"]').forEach(function (el) { el.remove(); });
+    }
+
+    // ================== LECTURAS: PRIMERO EL WORKER, SI NO, GOOGLE ==================
+    // Misma firma que jsonp() para que las pantallas cambien de fuente sin notarlo.
+    //
+    // Reglas:
+    // 1. Solo las acciones de ACCIONES_WORKER van al Worker; el resto (ping, operacion)
+    //    sigue directo al Apps Script.
+    // 2. Al Worker se le dan 8 s y la llave. Si no carga, no contesta a tiempo o contesta
+    //    un error de negocio (ok:false), se pide lo mismo al Apps Script con la paciencia
+    //    que pidio la pantalla (timeoutMs). Un ok:false del Worker tambien cae a Google
+    //    porque en esta etapa la hoja manda: el espejo puede ir un minuto atras y decir
+    //    "esa operacion no existe" de algo que se acaba de guardar.
+    // 3. El Worker nunca bloquea: lo peor que pasa es esperar 8 s de mas antes de ir a
+    //    Google. Un error del servidor del Worker sale con HTTP 503, el navegador no
+    //    ejecuta ese script y se dispara onerror: cae a Google sin que nadie lo note.
+    // 4. Si falla tambien Google, se llama el fail de la pantalla, como antes.
+    var fuenteUltimaLectura = '';
+    function leerBackend(params, onOk, onFail, timeoutMs) {
+      var accion = String((params && params.action) || '');
+      var vaAlWorker = !!LAB_API && !!LAB_LLAVE && LAB_LLAVE.indexOf('__') !== 0 && ACCIONES_WORKER.indexOf(accion) >= 0;
+      function irAGoogle(porQue) {
+        if (porQue) console.log('leerBackend: ' + accion + ' cae al Apps Script (' + porQue + ')');
+        jsonp(params, function (data) {
+          fuenteUltimaLectura = 'apps-script';
+          onOk(data);
+        }, onFail, timeoutMs);
+      }
+      if (!vaAlWorker) { irAGoogle(''); return; }
+      var conLlave = {};
+      Object.keys(params).forEach(function (k) { conLlave[k] = params[k]; });
+      conLlave.llave = LAB_LLAVE;
+      var inicio = Date.now();
+      jsonp(conLlave, function (data) {
+        if (!data || typeof data !== 'object' || data.ok === false) {
+          irAGoogle('el Worker contesto ' + ((data && data.error) || 'sin datos'));
+          return;
+        }
+        fuenteUltimaLectura = 'worker';
+        console.log('leerBackend: ' + accion + ' desde el Worker en ' + (Date.now() - inicio) + ' ms');
+        onOk(data);
+      }, function () {
+        irAGoogle('sin respuesta del Worker en ' + (Date.now() - inicio) + ' ms');
+      }, TIMEOUT_WORKER_MS, LAB_API);
+    }
+
+    // AVISARLE AL ESPEJO QUE HAY UNA FILA NUEVA. Se dispara despues de cada guardado
+    // confirmado, sin esperar la respuesta (keepalive: sale aunque se cierre la pestana).
+    // Sin esto, la siguiente lectura podia salir del espejo con la fila de hace un
+    // minuto y el ingeniero veia el inventario sin lo que acababa de guardar. Si el aviso
+    // no llega, el espejo igual se actualiza solo al minuto: por eso no frena nada, pero
+    // se deja constancia en la consola en vez de tragarse el error.
+    function avisarEspejoLab(motivo) {
+      if (!LAB_API || !LAB_LLAVE || LAB_LLAVE.indexOf('__') === 0 || typeof fetch !== 'function') return;
+      try {
+        fetch(LAB_API + '?action=refrescar&llave=' + encodeURIComponent(LAB_LLAVE), { keepalive: true })
+          .then(function (r) {
+            if (!r.ok) console.warn('avisarEspejoLab (' + (motivo || '') + '): el Worker contesto HTTP ' + r.status + '; el espejo se pone al dia solo en un minuto.');
+          })
+          .catch(function (err) {
+            console.warn('avisarEspejoLab (' + (motivo || '') + '): no se pudo avisar al Worker: ' + (err && err.message ? err.message : err) + '. El espejo se pone al dia solo en un minuto.');
+          });
+      } catch (err) {
+        console.warn('avisarEspejoLab: ' + (err && err.message ? err.message : err));
+      }
     }
 
     function versionNumerica(v) {
@@ -1835,7 +1974,7 @@
      * Solo se muestran ALTA y MEDIA: lo BAJA es historia vieja ya tapada y solo estorba.
      */
     function cargarAvisosDelAuditor() {
-      jsonp({ action: 'auditoria' }, function (d) {
+      leerBackend({ action: 'auditoria' }, function (d) {
         var lista = ((d && d.hallazgos) || []).filter(function (h) {
           return h && (h.prioridad === 'ALTA' || h.prioridad === 'MEDIA');
         }).slice(0, 6);
@@ -1856,7 +1995,7 @@
 
     function cargarPreguntasPendientes(intento) {
       intento = intento || 1;
-      jsonp({ action: 'preguntas' }, function (data) {
+      leerBackend({ action: 'preguntas' }, function (data) {
         var lista = (data && data.preguntas) || [];
         pregPendientes = lista.filter(function (p) { return p && p.id && !estaAplazada(p.id); });
         mostrarSiguientePregunta();
@@ -2038,7 +2177,7 @@
     }
 
     function loadInitJsonp(despues) {
-      jsonp({ action: 'init' }, function (data) {
+      leerBackend({ action: 'init' }, function (data) {
         mergeDynamicCatalogs(data);
         llenarDatalistMp();
         if (despues) despues(data);
@@ -2404,7 +2543,7 @@
     // guardaria otro. Es una sola llamada al abrir, no toca la hoja y pesa unos pocos KB.
     var mapaSkuServidor = {};
     function cargarMapaSku() {
-      jsonp({ action: 'mapasku' }, function (d) {
+      leerBackend({ action: 'mapasku' }, function (d) {
         mapaSkuServidor = (d && d.mapa) || {};
       }, function () { /* sin mapa se cae al buscador por nombre, como antes */ }, 20000);
     }
@@ -3539,6 +3678,10 @@
         if (estado && estado.encontrada) {
           quitarOperacionPendiente(record.RequestId);
           if (!estado.ok) throw new Error(String(estado.error || 'El servidor rechazó el movimiento.').replace(/^Error:\s*/i, ''));
+          // Ya esta confirmado en la hoja: que el espejo del Worker la traiga ahora y no
+          // en un minuto, para que la proxima lectura (inventario, registros) ya la tenga.
+          // Cubre TODO lo que se guarda por aqui: registros, anulaciones y correcciones.
+          avisarEspejoLab(record.TipoRegistro || 'registro');
           return estado;
         }
       }
@@ -3707,7 +3850,7 @@
         document.getElementById('Responsable').value = keepResp;
         state.registros = null;
         state.omitirStock = false;
-        jsonp({ action: 'inventario' }, function (data) {
+        leerBackend({ action: 'inventario' }, function (data) {
           if (data && !data.error) state.inventario = parseInventario(data);
         }, function () {});
       } catch (err) {
@@ -3788,7 +3931,7 @@
       });
       if (tab === 'inventario') loadInventario(); // siempre se actualiza al abrir
       if (tab === 'movimientos' && !state.registros) loadMovimientos();
-      if (tab === 'correcciones') loadCorrecciones(false);
+      if (tab === 'correcciones') { loadCorrecciones(false); loadCasos(false); }
       if (tab === 'revisar') loadRevision(false);
     }
 
@@ -3799,7 +3942,7 @@
       estado.textContent = 'Calculando inventario con todos los movimientos...';
       document.getElementById('invLista').innerHTML = '';
       document.getElementById('invResumen').style.display = 'none';
-      jsonp({ action: 'inventario' }, function (data) {
+      leerBackend({ action: 'inventario' }, function (data) {
         if (data && data.error) {
           estado.className = 'status err';
           estado.textContent = 'El script respondió con un error: ' + data.error + '. Ejecuta "probarConfiguracion" en el editor de Apps Script para ver el detalle.';
@@ -3822,7 +3965,7 @@
 
     function loadConciliacion() {
       var aviso = document.getElementById('conciliacionEstado');
-      jsonp({ action: 'conciliacion' }, function (data) {
+      leerBackend({ action: 'conciliacion' }, function (data) {
         if (!data || data.error || data.ok === false) return;
         state.conciliacion = data;
         var total = data.resumen ? Number(data.resumen.total || 0) : 0;
@@ -4010,7 +4153,7 @@
       // ingeniero ve "sin conexión" cuando Google simplemente está lento.
       if (state.registrosTodos) { pinta(state.registrosTodos); return; }
       var desdeDet = new Date(Date.now() - DIAS_HISTORIAL*86400000).toISOString().slice(0,10);
-      jsonp({ action: 'registros', desde: desdeDet }, function (data) {
+      leerBackend({ action: 'registros', desde: desdeDet }, function (data) {
         state.registrosTodos = (data && data.registros) || [];
         pinta(state.registrosTodos);
       }, function () { pinta(state.registros || []); }, 45000);
@@ -4087,7 +4230,7 @@
       var params = { action: 'registros' };
       if (valueOf('movDesde')) params.desde = valueOf('movDesde');
       if (valueOf('movHasta')) params.hasta = valueOf('movHasta');
-      jsonp(params, function (data) {
+      leerBackend(params, function (data) {
         if (data && data.error) {
           estado.className = 'status err';
           estado.textContent = 'El script respondió con un error: ' + data.error;
@@ -4167,7 +4310,7 @@
       estado.className = 'status warn';
       estado.textContent = 'Cargando todas las solicitudes de revisión…';
       document.getElementById('pendItems').innerHTML = '';
-      jsonp({ action:'revision' }, function(data) {
+      leerBackend({ action:'revision' }, function(data) {
         if (!data || data.error || data.ok === false || !data.resumen || !Array.isArray(data.pendientes)) {
           estado.className = 'status err';
           estado.textContent = 'Revisiones necesita la versión nueva del Apps Script. Copia Código.gs, guarda y publica una nueva versión de la implementación.' + (data && data.error ? ' Detalle: '+data.error : '');
@@ -4278,7 +4421,7 @@
     function cargarRegistrosTodos(callback,forzar) {
       if (state.registrosTodos && !forzar) { callback(state.registrosTodos); return; }
       var desde = new Date(Date.now() - DIAS_HISTORIAL*86400000).toISOString().slice(0,10);
-      jsonp({action:'registros', desde: desde},function(data) {
+      leerBackend({action:'registros', desde: desde},function(data) {
         state.registrosTodos=(data&&data.registros)||[];
         callback(state.registrosTodos);
       },function(){callback(state.registros||[]);},45000);
@@ -4306,7 +4449,7 @@
       estado.className='status warn';
       estado.textContent='Actualizando tanques, producciones y hallazgos…';
       if (forzar) { state.registrosTodos=null; state.conciliacion=null; }
-      jsonp({action:'inventario'},function(data) {
+      leerBackend({action:'inventario'},function(data) {
         if (data&&!data.error) state.inventario=parseInventario(data);
         cargarRegistrosTodos(function() {
           prepararListaCorrecciones();
@@ -4320,6 +4463,231 @@
       },function() {
         diagnosticarConexion(estado);
       },20000);
+    }
+
+    /* ===================== CASOS POR CORREGIR (los trae el Worker) =====================
+     *
+     * Que es: el Worker (action=casos) revisa el registro entero y devuelve lo que un boton
+     * puede arreglar definitivo: un item con unidades mezcladas (kg y "L" en el mismo
+     * nombre), una cantidad 20 veces mas grande que lo normal (400 kg de CMC donde siempre
+     * van 400 g), un empaque cuyo envase no corresponde al tamano del SKU de Siigo.
+     *
+     * Regla "candado sin app": las opciones de cada caso vienen YA filtradas por el
+     * servidor. Si el saldo vivo no deja anular una linea, esa opcion no viene y aqui no
+     * se pinta. Esta pantalla no decide nada: solo muestra lo que el servidor acepta.
+     *
+     * SOLO del Worker, sin caer al Apps Script: Google no sabe calcular casos. Si el
+     * Worker no contesta se dice tal cual y se ofrece Reintentar; no se pinta una lista
+     * vacia como si no hubiera nada.
+     *
+     * Al pulsar una opcion: confirm() con el efecto en palabras, POST action=aplicar al
+     * Worker (que escribe en la hoja y en D1 con RequestId fijo por caso y opcion, asi que
+     * repetir no duplica), y segun conteste: la tarjeta se va y sale en verde lo que se
+     * escribio, o la tarjeta se queda y el error sale en rojo. Nada callado.
+     */
+    var casosCargados = null;      // la ultima lista que contesto el Worker
+    var casosCargadosEn = 0;       // cuando, para no pedirla otra vez a cada cambio de pestana
+    var casoQuienUltimo = '';      // el responsable que se escogio la ultima vez, para no repetirlo en cada tarjeta
+    var CASOS_VIGENCIA_MS = 5 * 60 * 1000;
+
+    function labDisponible() {
+      return !!LAB_API && !!LAB_LLAVE && LAB_LLAVE.indexOf('__') !== 0;
+    }
+
+    function loadCasos(forzar) {
+      var estado = document.getElementById('casosEstado');
+      var lista = document.getElementById('casosLista');
+      if (!labDisponible()) {
+        estado.className = 'status warn';
+        estado.textContent = 'Esta copia de la app no tiene la llave del Worker, asi que los casos no se pueden traer. Avisale a Oscar.';
+        return;
+      }
+      if (!forzar && casosCargados && (Date.now() - casosCargadosEn) < CASOS_VIGENCIA_MS) { renderCasos(); return; }
+      estado.className = 'status warn';
+      estado.textContent = 'Buscando casos en el registro…';
+      lista.innerHTML = '';
+      jsonp({ action: 'casos', llave: LAB_LLAVE }, function (d) {
+        if (!d || d.ok === false || !Array.isArray(d.casos)) {
+          mostrarErrorCasos('No se pudieron traer los casos ahora' + (d && d.error ? ': ' + d.error : '.'));
+          return;
+        }
+        casosCargados = d.casos;
+        casosCargadosEn = Date.now();
+        renderCasos();
+      }, function () {
+        mostrarErrorCasos('No se pudieron traer los casos ahora: el Worker no contestó.');
+      }, 30000, LAB_API);
+    }
+
+    function mostrarErrorCasos(texto) {
+      var estado = document.getElementById('casosEstado');
+      estado.className = 'status err';
+      estado.innerHTML = '<span>' + escapeHtml(texto) + '</span> ' +
+        '<button type="button" class="btn-azul" id="btnCasosReintentar" style="padding:6px 12px;font-size:12px;margin-left:8px">Reintentar</button>';
+      document.getElementById('btnCasosReintentar').addEventListener('click', function () { loadCasos(true); });
+    }
+
+    // El mismo selector de responsable que usan las demas correcciones (corrTanqueResponsable):
+    // si un dia se agrega un nombre alla, aqui aparece solo.
+    function opcionesResponsableHtml() {
+      var origen = document.getElementById('corrTanqueResponsable');
+      return origen ? origen.innerHTML : '<option value="">Seleccionar…</option>';
+    }
+
+    function pintarEstadoCasos() {
+      var estado = document.getElementById('casosEstado');
+      var n = (casosCargados || []).length;
+      if (!n) {
+        estado.className = 'status ok';
+        estado.textContent = 'No hay casos por corregir. Cuando el sistema encuentre algo raro aparece aquí con su botón.';
+        return;
+      }
+      estado.className = 'status warn';
+      estado.textContent = n + ' caso' + (n > 1 ? 's' : '') + ' por corregir. Revisa cada uno y toca la opción que corresponde a lo que pasó de verdad.';
+    }
+
+    function renderCasos() {
+      var lista = document.getElementById('casosLista');
+      var casos = casosCargados || [];
+      pintarEstadoCasos();
+      if (!casos.length) { lista.innerHTML = ''; return; }
+      var quienPredeterminado = casoQuienUltimo || valueOf('Responsable') || '';
+      lista.innerHTML = casos.map(function (c, idx) {
+        var prioridad = String(c.prioridad || 'Media');
+        var alta = normalize(prioridad) === 'alta';
+        var nombre = String(c.item || '') + (c.variante ? ' · ' + c.variante : '');
+        var filas = (c.filas || []).map(function (f) {
+          var partes = [fechaRevision(f.fecha)];
+          if (f.tipo) partes.push(f.tipo);
+          if (f.cantidad !== undefined && f.cantidad !== null && f.cantidad !== '') partes.push(String(f.cantidad) + (f.unidad ? ' ' + f.unidad : ''));
+          if (f.producto) partes.push(f.producto);
+          return '<div>· ' + escapeHtml(partes.join(' · ')) +
+            (f.fila ? ' <span style="color:var(--gray)">(fila ' + escapeHtml(String(f.fila)) + ')</span>' : '') + '</div>';
+        }).join('');
+        var factores = (c.opciones || []).filter(function (o) { return o && o.necesitaFactor; }).map(function (o) {
+          var nf = o.necesitaFactor;
+          return '<div><label>' + escapeHtml(nf.etiqueta || 'Factor') + '</label>' +
+            '<input type="number" step="any" min="0" inputmode="decimal" class="caso-factor" data-opcion="' + escapeHtml(o.clave) + '" value="' +
+            escapeHtml(nf.porDefecto === undefined || nf.porDefecto === null ? '' : String(nf.porDefecto)) + '"></div>';
+        }).join('');
+        var botones = (c.opciones || []).map(function (o, j) {
+          return '<button type="button" class="' + (j === 0 ? 'btn-naranja' : 'btn-azul') + '" data-caso-idx="' + idx + '" data-opcion="' + escapeHtml(o.clave) + '">' +
+            escapeHtml(o.texto || o.clave) + '</button>';
+        }).join('');
+        return '<div class="rev-card caso-card ' + (alta ? 'alta' : 'media') + '" data-caso-id="' + escapeHtml(c.id) + '">' +
+          '<div class="rev-head"><div><h3>' + escapeHtml(c.titulo || c.tipo || 'Caso') + '</h3>' +
+          (nombre ? '<div class="rev-meta">' + escapeHtml(nombre) + '</div>' : '') + '</div>' +
+          '<span class="badge ' + (alta ? 'out' : 'low') + '">' + escapeHtml(prioridad) + '</span></div>' +
+          '<p>' + escapeHtml(c.detalle || '') + '</p>' +
+          (filas ? '<div class="caso-filas">' + filas + '</div>' : '') +
+          '<div class="caso-form"><div><label>Quién decide</label><select class="caso-quien">' + opcionesResponsableHtml() + '</select></div>' + factores + '</div>' +
+          (botones
+            ? '<div class="rev-actions">' + botones + '</div>'
+            : '<div class="rev-meta">Este caso no trae ninguna opción que el servidor acepte ahora mismo; se queda para revisarlo a mano.</div>') +
+          '<div class="status caso-msg"></div>' +
+          '</div>';
+      }).join('');
+      lista.querySelectorAll('.caso-quien').forEach(function (sel) {
+        sel.value = quienPredeterminado;
+        if (sel.value !== quienPredeterminado) sel.value = '';
+      });
+      lista.querySelectorAll('[data-caso-idx]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          aplicarCasoDesdeTarjeta(casos[Number(btn.dataset.casoIdx)], btn.dataset.opcion, btn.closest('.caso-card'));
+        });
+      });
+    }
+
+    function resumenEscrito(x) {
+      if (x === undefined || x === null || x === '') return '';
+      if (typeof x !== 'object') return String(x);
+      if (Array.isArray(x)) return x.length + ' renglón(es)';
+      return Object.keys(x).map(function (k) {
+        var v = x[k];
+        return k + ': ' + (v && typeof v === 'object' ? JSON.stringify(v) : String(v));
+      }).join(', ');
+    }
+
+    async function aplicarCasoDesdeTarjeta(caso, clave, tarjeta) {
+      if (!caso || !tarjeta) return;
+      var msg = tarjeta.querySelector('.caso-msg');
+      function avisar(texto, tipo) { msg.className = 'status caso-msg ' + tipo; msg.textContent = texto; }
+      var opcion = (caso.opciones || []).find(function (o) { return o && o.clave === clave; });
+      if (!opcion) { avisar('Esa opción ya no está en el caso. Toca "Actualizar datos" para traer los casos de nuevo.', 'err'); return; }
+      var selQuien = tarjeta.querySelector('.caso-quien');
+      var quien = selQuien ? String(selQuien.value || '').trim() : '';
+      if (!quien) { avisar('Elige quién decide antes de tocar el botón.', 'err'); if (selQuien) selQuien.focus(); return; }
+      var factor = null;
+      if (opcion.necesitaFactor) {
+        var inp = null;
+        tarjeta.querySelectorAll('.caso-factor').forEach(function (i) { if (i.dataset.opcion === clave) inp = i; });
+        factor = inp ? Number(String(inp.value || '').trim().replace(',', '.')) : NaN;
+        if (!(factor > 0)) {
+          avisar('Escribe el factor (' + (opcion.necesitaFactor.etiqueta || '1 unidad = ? en la unidad oficial') + '). Tiene que ser un número mayor que cero.', 'err');
+          if (inp) inp.focus();
+          return;
+        }
+      }
+      var texto = String(opcion.efecto || opcion.texto || '') +
+        (factor !== null ? '\nFactor: 1 unidad = ' + factor + '.' : '') +
+        '\nDecide: ' + quien + '.' +
+        '\n\nEsto escribe en la hoja del laboratorio y en el saldo vivo. ¿Seguro?';
+      if (!window.confirm(texto)) return;
+      casoQuienUltimo = quien;
+      var botones = tarjeta.querySelectorAll('button');
+      botones.forEach(function (b) { b.disabled = true; });
+      avisar('Escribiendo la corrección… puede tardar hasta un minuto porque la hoja de Google confirma cada fila.', 'warn');
+      var cuerpo = { action: 'aplicar', llave: LAB_LLAVE, caso: caso.id, opcion: clave, quien: quien };
+      if (factor !== null) cuerpo.factor = factor;
+      // text/plain a proposito: con application/json el navegador manda un preflight
+      // OPTIONS antes, y asi la peticion sale de una. El Worker lee el cuerpo como JSON igual.
+      var controlador = (typeof AbortController === 'function') ? new AbortController() : null;
+      var reloj = controlador ? setTimeout(function () { controlador.abort(); }, 90000) : null;
+      var respuesta = null;
+      try {
+        var r = await fetch(LAB_API, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify(cuerpo),
+          signal: controlador ? controlador.signal : undefined
+        });
+        var textoResp = await r.text();
+        try { respuesta = JSON.parse(textoResp); } catch (errJson) {
+          throw new Error('El Worker contestó HTTP ' + r.status + ' con algo que no es JSON: ' + String(textoResp || '').slice(0, 160));
+        }
+        if (!r.ok && !(respuesta && respuesta.error)) throw new Error('El Worker contestó HTTP ' + r.status + '.');
+      } catch (err) {
+        if (reloj) clearTimeout(reloj);
+        botones.forEach(function (b) { b.disabled = false; });
+        var esTiempo = err && err.name === 'AbortError';
+        avisar(esTiempo
+          ? 'El Worker no contestó en 90 s. No vuelvas a tocar el botón todavía: toca "Actualizar datos" y mira si el caso ya desapareció. Si sigue, inténtalo otra vez (repetirlo no duplica).'
+          : 'No se pudo aplicar: ' + (err && err.message ? err.message : String(err)), 'err');
+        return;
+      }
+      if (reloj) clearTimeout(reloj);
+      if (!respuesta || respuesta.ok !== true) {
+        botones.forEach(function (b) { b.disabled = false; });
+        avisar('El servidor no aceptó la corrección: ' + ((respuesta && respuesta.error) || 'sin detalle') + '.', 'err');
+        return;
+      }
+      // Quedo escrito: la tarjeta se va y el mensaje verde dice que se escribio.
+      var hecho = document.getElementById('casosHecho');
+      var escrito = respuesta.escrito || {};
+      hecho.className = 'status ok';
+      hecho.textContent = 'Listo (' + (caso.titulo || caso.id) + '): ' + (respuesta.mensaje || 'la corrección quedó escrita.') +
+        (escrito.hoja ? ' Hoja: ' + resumenEscrito(escrito.hoja) + '.' : '') +
+        (escrito.d1 ? ' Saldo vivo: ' + resumenEscrito(escrito.d1) + '.' : '');
+      hecho.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      tarjeta.classList.add('saliendo');
+      setTimeout(function () {
+        tarjeta.remove();
+        casosCargados = (casosCargados || []).filter(function (c) { return c.id !== caso.id; });
+        pintarEstadoCasos();
+      }, 500);
+      // Lo que esta pantalla y las demas tenian en memoria ya no vale: el inventario cambio.
+      state.inventario = null; state.registrosTodos = null; state.conciliacion = null; state.revision = null; state.registros = null;
+      loadCorrecciones(true);
     }
 
     function abrirCorregirTanque(prefill) {
@@ -4441,7 +4809,7 @@
       caja.style.display = 'block';
       caja.className = 'status';
       caja.textContent = 'Revisando si se puede anular…';
-      jsonp({ action: 'anulable', op: g.op }, function (d) {
+      leerBackend({ action: 'anulable', op: g.op }, function (d) {
         if (!d || !d.ok) {
           caja.className = 'status err';
           caja.textContent = (d && d.error) || 'No se pudo revisar esa operación.';
@@ -4935,7 +5303,7 @@
       var params = { action: 'registros' };
       if (valueOf('expDesde')) params.desde = valueOf('expDesde');
       if (valueOf('expHasta')) params.hasta = valueOf('expHasta');
-      jsonp(params, function (data) {
+      leerBackend(params, function (data) {
         var regs = (data && data.registros) || [];
         var respFiltro = valueOf('expResponsable');
         if (respFiltro) {
