@@ -940,7 +940,7 @@
           <!-- Panel: ítems sin existencia registrada -->
           <div id="stockAviso" class="stock-aviso">
             <h4>⚠ Esto no tiene existencia registrada en el inventario</h4>
-            <p>Ve, revisa físicamente cuánto hay de cada cosa y regístralo aquí mismo (quedará marcado como CONTEO en la trazabilidad). Si es porque acaba de llegar, mejor regístralo en “Llegó mercancía”. Después vuelve a presionar Guardar.</p>
+            <p>Ve, revisa físicamente cuánto hay de cada cosa y regístralo aquí mismo (quedará marcado como CONTEO en la trazabilidad). Si es porque acaba de llegar, eso entra por la app de compras cuando se marca la orden como recibida, no aquí. Después vuelve a presionar Guardar.</p>
             <div id="stockFilas"></div>
             <button type="button" class="btn-azul" id="btnOmitirStock" style="margin-top:6px">Guardar de todas formas sin registrar existencias</button>
           </div>
@@ -1673,6 +1673,7 @@
 
       llenarDatalistMp();
       agregarFilaMp();
+      vigilarComaDecimal();
       document.getElementById('pregGuardar').addEventListener('click', responderPregunta);
       document.getElementById('pregNoSe').addEventListener('click', aplazarActual);
       document.getElementById('pregCantidad').addEventListener('keydown', function (ev) {
@@ -1756,6 +1757,32 @@
     function valueOf(id) {
       var el = document.getElementById(id);
       return el ? String(el.value || '').trim() : '';
+    }
+
+    // ================== LA COMA DECIMAL, DE UNA VEZ EN EL CAMPO ==================
+    //
+    // En Colombia se teclea "165,5". El teclado del celular ni siquiera ofrece el punto.
+    // Antes los campos eran type="number" y el navegador BORRABA el valor entero: el campo
+    // quedaba vacio, la app decia "pon los litros" y no se mandaba nada — ni fila en la
+    // hoja, ni rastro en _API_ERRORES, ni forma de saber que habia pasado.
+    //
+    // Ya son de texto, asi que la coma se conserva. Pero conservarla no basta: por el camino
+    // hay cuentas con parseFloat(), y parseFloat("0,004") da 0 sin quejarse. Por eso la coma
+    // se cambia por punto EN EL CAMPO, apenas el operario sale de el. Un solo lugar: asi no
+    // hay que acordarse de hacerlo en cada cuenta nueva que alguien escriba mañana.
+    function conPunto(v) {
+      var t = String(v == null ? '' : v).trim();
+      return /^-?\d+,\d+$/.test(t) ? t.replace(',', '.') : t;
+    }
+    function vigilarComaDecimal() {
+      var arreglar = function (ev) {
+        var el = ev.target;
+        if (!el || !el.matches || !el.matches('input[inputmode="decimal"]')) return;
+        var puesto = conPunto(el.value);
+        if (puesto !== el.value) el.value = puesto;
+      };
+      document.addEventListener('change', arreglar, true);
+      document.addEventListener('blur', arreglar, true);
     }
 
     // ================== JSONP ==================
@@ -3312,7 +3339,7 @@
             produccion.LitrosPreparados = litros;
             produccion.Observacion = ('Adición de litros al tanque. ' + valueOf('Observacion')).trim();
             records.push(produccion);
-          } else if (!_confirmoSoloConsumo && mps.filter(function (m) { return m.item; }).length) {
+          } else if (!_confirmoSoloConsumo && (mps.filter(function (m) { return m.item; }).length || valueOf('BaseLitros'))) {
             // AQUI SE PERDIA UN LLENADO ENTERO Y LA APP DECIA "GUARDADO".
             //
             // Si el tanque ya tenia contenido y el campo de litros quedaba vacio —y la propia
@@ -3325,7 +3352,7 @@
             // volumen— asi que no se bloquea: se PREGUNTA con los numeros a la vista, igual
             // que la pregunta del residuo del tanque. Nadie descuenta materia prima creyendo
             // que registro un llenado.
-            var _mpN = mps.filter(function (m) { return m.item; }).length;
+            var _mpN = mps.filter(function (m) { return m.item; }).length + (valueOf('BaseLitros') ? 1 : 0);
             var _tq = ((state.catalogos && state.catalogos.tambores) || []).filter(function (x) {
               return x && normalize(x.id || '') === normalize(tambor);
             })[0];
@@ -3407,7 +3434,14 @@
         var m = mpsValidas[i];
         if (!esNumero(m.cantidad, false)) return { error: 'Ponle cantidad a "' + m.item + '".' };
         var existe = catalogoMp.some(function (x) { return normalize(x) === normalize(m.item); });
-        if (!existe) return { error: 'La materia prima "' + m.item + '" no está en el catálogo. Regístrala primero en “Llegó mercancía” o selecciónala de la lista.' };
+        // NO MANDAR A UNA PANTALLA QUE YA NO EXISTE. "Llegó mercancía" salió de esta app el
+        // 10-ago-2026 (lo que entra a la bodega se registra en /compras) y en esta ya no se
+        // crean ítems desde el 4-sep. Decirle "regístrala primero en Llegó mercancía" lo
+        // dejaba dando vueltas buscando un botón que no está, con la producción sin guardar.
+        if (!existe) return { error: 'La materia prima "' + m.item + '" no aparece en la lista. ' +
+          'Escógela del desplegable (la lista trae todo lo que ya tiene movimientos). ' +
+          'Si de verdad es nueva, primero se crea en Siigo y se ata en la pantalla /enlaces; ' +
+          'esta app ya no crea ítems. Mientras tanto, quita ese renglón y guarda el resto para no perder la producción.' };
         var claveMp = normalize(m.item) + '|' + normalize(m.variante);
         if (vistos[claveMp]) return { error: 'La materia prima "' + m.item + '" está repetida. Déjala en una sola fila con la cantidad total.' };
         vistos[claveMp] = true;
@@ -3432,14 +3466,14 @@
         var totalComponentes = componentes.length + (baseLitros ? 1 : 0);
         if (totalComponentes < 2) return { error: 'Producción incompleta: registra al menos dos componentes, incluida el agua o una base.' };
         if (!document.getElementById('FormulaCompleta').checked) return { error: 'Confirma que registraste la fórmula completa, incluida el agua y las bases.' };
-        var volumenExplicado = parseFloat(baseLitros || 0);
+        var volumenExplicado = parseFloat(conPunto(baseLitros) || 0);
         componentes.forEach(function (c) {
           var q = parseFloat(String(c.Cantidad).replace(',', '.'));
           var u = normalize(c.Unidad);
           if (u === 'l' || u === 'lt' || u === 'litro' || u === 'litros') volumenExplicado += q;
           if (u === 'ml' || u === 'mililitro' || u === 'mililitros') volumenExplicado += q / 1000;
         });
-        var cobertura = volumenExplicado / parseFloat(litros);
+        var cobertura = volumenExplicado / parseFloat(conPunto(litros));
         if (cobertura < 0.80) return { error: 'La fórmula parece incompleta: solo explica ' + volumenExplicado.toFixed(3) + ' L de ' + litros + ' L. Revisa agua, bases y cantidades.' };
         if (cobertura > 1.05) return { error: 'La fórmula declara más volumen que la producción. Revisa cantidades y unidades.' };
         produccion.FormulaCompleta = true;
@@ -3731,7 +3765,7 @@
             var n = normalize(f.item);
             var nv = normalize(f.variante);
             var ex = state.inventario.find(function (r) { return normalize(r.item) === n && normalize(r.variante || '') === nv; });
-            var conv = parseFloat(cant);
+            var conv = parseFloat(conPunto(cant));
             if (ex) { ex.stock = conv; } else {
               state.inventario.push({ item: f.item, variante: f.variante, categoria: f.categoria, stock: conv, unidad: uniSel.value, minimo: NaN });
             }
@@ -3929,11 +3963,19 @@
         var envio = envioPrincipal;
         var marcas = {};
         var skuEscogido = '';
-        for (var intento = 0; intento < 3; intento++) {
+        // CUATRO VUELTAS, NO TRES, Y EL CORTE VA ANTES DE PREGUNTAR.
+        //
+        // Antes eran tres y el corte estaba DESPUES de atender la pregunta: en la tercera
+        // vuelta se le mostraba la ventana al ingeniero, el contestaba... y la respuesta se
+        // botaba con un error rojo. Contestar y que no sirva de nada es peor que no
+        // preguntar. Ahora se pregunta hasta tres veces y SIEMPRE queda un envio para usar
+        // la ultima respuesta.
+        for (var intento = 0; intento < 4; intento++) {
           try {
             await enviarRegistro(envio);
             break;
           } catch (errPregunta) {
+            if (intento === 3) throw errPregunta;   // ya se preguntaron las tres
             var mensajeServidor = String((errPregunta && errPregunta.message) || '');
             if (/POSIBLE DUPLICADO/i.test(mensajeServidor)) {
               if (!window.confirm(mensajeServidor + '\n\n¿Registrarlo de todas formas?')) throw errPregunta;
@@ -3976,7 +4018,6 @@
             } else {
               throw errPregunta;                     // esto sí es un error de verdad
             }
-            if (intento === 2) throw errPregunta;    // no se pregunta indefinidamente
             envio = Object.assign({}, envioPrincipal, marcas);
             envio.RequestId = nuevoRequestId();      // clave nueva: el payload cambió
             // El SKU va SOLO en el renglon de empaque. Ponerlo en todos le colgaria un

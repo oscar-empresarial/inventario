@@ -396,6 +396,26 @@ test('un pendiente que sigue sin entrar NO se borra: se queda para el proximo in
   assert.equal(Object.keys(quedan).length, 1, 'lo que no se pudo confirmar NO se pierde');
 });
 
+test('la coma decimal se vuelve punto y NO se pierde por el camino', () => {
+  // 8-sep-2026: los campos de cantidad eran type="number" y el navegador BORRA "165,5".
+  // El campo quedaba vacio, la app decia "pon los litros" y no mandaba nada: ni fila en la
+  // hoja, ni rastro en _API_ERRORES. Y aun conservando la coma, parseFloat("0,004") da 0
+  // sin quejarse, asi que la cuenta de cobertura tumbaba la produccion igual.
+  const { context } = makeFrontend([]);
+  assert.equal(context.conPunto('165,5'), '165.5');
+  assert.equal(context.conPunto('0,004'), '0.004');
+  assert.equal(context.conPunto('20'), '20');
+  assert.equal(context.conPunto('20.5'), '20.5');
+  assert.equal(context.conPunto('Balde, el grande'), 'Balde, el grande', 'un texto con coma no se toca');
+  assert.equal(parseFloat(context.conPunto('0,004')), 0.004);
+  assert.equal(context.esNumero('165,5'), true);
+});
+
+test('ningun campo de cantidad quedo con type="number"', () => {
+  const malos = [...html.matchAll(/<input[^>]*type="number"[^>]*>/gi)].map(m => m[0]);
+  assert.equal(malos.length, 0, 'type="number" borra la coma decimal: ' + malos.join(' | '));
+});
+
 test('frontend bloquea el POST si la versión del backend no coincide', async () => {
   const { context, calls, storage } = makeFrontend([]);
   context.verificarBackendCompatible = async () => {
