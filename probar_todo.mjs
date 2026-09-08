@@ -477,6 +477,24 @@ async function seccionRechazos() {
     }
     return deHoy.length + ' rechazos hoy · ' + d.total + ' en total';
   });
+
+  await probar('la app deja escrito lo que ella misma freno', async () => {
+    // El agujero del 8-sep: la pantalla frenaba el registro y ese letrero solo existia en el
+    // celular del ingeniero. Ahora cada freno va al Worker (tabla lab_rechazos).
+    exigir(/function reportarFreno/.test(HTML), 'la app dejo de reportar los frenos');
+    exigir(/reportarFreno\(res\.error/.test(HTML), 'el freno de la validacion ya no se reporta');
+    const d = await worker({ action: 'rechazos', limite: 50, dias: 1 });
+    exigir(d.ok === true, 'el Worker no sabe contestar action=rechazos: ' + (d.error || ''));
+    const reales = (d.rechazos || []).filter(r => !/^prueba/i.test(String(r.responsable || '')));
+    if (reales.length) {
+      console.log('\n  \x1b[33mLa app freno ' + reales.length + ' registro(s) en las ultimas 24 h:\x1b[0m');
+      for (const r of reales.slice(0, 12)) {
+        console.log('    ' + r.cuando.slice(0, 16).replace('T', ' ') + '  ' + (r.responsable || '?') + '  ' + (r.tipo || '?'));
+        console.log('      \x1b[2m' + String(r.motivo).slice(0, 150) + '\x1b[0m');
+      }
+    }
+    return reales.length + ' frenos reales en 24 h';
+  });
 }
 
 // ================== CORRER ==================
@@ -499,7 +517,8 @@ await seccionRechazos();
 const fallas = resultados.filter(r => !r.ok);
 console.log('\n' + '─'.repeat(70));
 console.log('\x1b[1m' + (resultados.length - fallas.length) + ' de ' + resultados.length + ' pruebas bien\x1b[0m' +
-  '  \x1b[2m(' + ((Date.now() - t0) / 1000).toFixed(1) + ' s)\x1b[0m');
+  '  \x1b[2m(' + ((Date.now() - t0) / 1000).toFixed(1) + ' s)\x1b[0m' +
+  (reintentosGoogle ? '  \x1b[33m· Google fallo y hubo que reintentar ' + reintentosGoogle + ' vez(ces)\x1b[0m' : ''));
 if (fallas.length) {
   console.log('\n\x1b[31m\x1b[1mLO QUE ESTA MAL:\x1b[0m');
   for (const f of fallas) console.log('  · [' + f.seccion.split('.')[0] + '] ' + f.nombre + '\n    ' + f.error.split('\n')[0]);

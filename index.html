@@ -1893,6 +1893,52 @@
     // minuto y el ingeniero veia el inventario sin lo que acababa de guardar. Si el aviso
     // no llega, el espejo igual se actualiza solo al minuto: por eso no frena nada, pero
     // se deja constancia en la consola en vez de tragarse el error.
+    // ================== UN FRENO NO PUEDE VIVIR SOLO EN LA PANTALLA ==================
+    //
+    // 8-sep-2026: el ingeniero lleno un tanque y "no se guardo". Al ir a mirar no habia
+    // NADA: ni fila en la hoja, ni linea en _API_ERRORES (donde el servidor anota SUS
+    // rechazos). Logico: esta pantalla revisa muchas cosas ANTES de mandar y, cuando alguna
+    // falla, pinta un letrero rojo y no manda nada. Ese letrero se lo lleva el viento.
+    //
+    // Desde hoy cada freno se anota en el Worker (tabla lab_rechazos) y sale en /salud el
+    // mismo dia. No molesta al ingeniero, no lo detiene y si falla, falla en silencio a
+    // proposito: es un apunte, no puede estorbarle el trabajo.
+    function reportarFreno(motivo, extra) {
+      try {
+        if (!LAB_API || !LAB_LLAVE || typeof fetch !== 'function') return;
+        var texto = String(motivo || '').trim();
+        if (!texto) return;
+        var cuerpo = {
+          action: 'rechazo', llave: LAB_LLAVE,
+          origen: (extra && extra.origen) || 'app',
+          responsable: valueOf('Responsable') || (extra && extra.responsable) || '',
+          tipo: (extra && extra.tipo) || state.selectedType || '',
+          motivo: texto,
+          requestId: (extra && extra.requestId) || '',
+          detalle: (extra && extra.detalle) || {}
+        };
+        fetch(LAB_API, {
+          method: 'POST', keepalive: true,
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify(cuerpo)
+        }).catch(function () {});
+      } catch (e) {}
+    }
+
+    /** Lo que el ingeniero tenia escrito cuando la app lo freno. Sirve para reproducirlo. */
+    function loQueHabiaEscrito() {
+      try {
+        return {
+          destino: valueOf('Destino'), tanque: valueOf('TamborID'), producto: valueOf('Producto'),
+          litros: valueOf('LitrosPreparados'), item: valueOf('Item'), cantidad: valueOf('Cantidad'),
+          unidad: valueOf('Unidad'), presentacion: valueOf('Presentacion'),
+          cantidadPresentacion: valueOf('CantidadPresentacion'), etiqueta: valueOf('Etiqueta'),
+          baseTanque: valueOf('BaseTanque'), baseLitros: valueOf('BaseLitros'),
+          materias: (typeof leerFilasMp === 'function' ? leerFilasMp() : [])
+        };
+      } catch (e) { return {}; }
+    }
+
     function avisarEspejoLab(motivo) {
       if (!LAB_API || !LAB_LLAVE || LAB_LLAVE.indexOf('__') === 0 || typeof fetch !== 'function') return;
       try {
@@ -3880,6 +3926,9 @@
       var res = buildRecords();
       if (res.error) {
         showStatus(res.error, 'err');
+        // Queda escrito FUERA de esta pantalla: si no, mañana nadie puede saber por que la
+        // planta no registro lo que hizo.
+        reportarFreno(res.error, { origen: 'app', detalle: loQueHabiaEscrito() });
         enfocarCampoError(res.error);
         return;
       }
@@ -4062,6 +4111,11 @@
       } catch (err) {
         var prefijo = err.backendIncompatible ? 'Envío bloqueado: ' : (err.resultadoDesconocido ? 'Estado pendiente de confirmar: ' : 'No se guardó: ');
         showStatus(prefijo + (err.message || String(err)), 'err');
+        reportarFreno(prefijo + (err.message || String(err)), {
+          origen: err.resultadoDesconocido ? 'sin_confirmar' : 'servidor',
+          requestId: (envioPrincipal && envioPrincipal.RequestId) || '',
+          detalle: loQueHabiaEscrito()
+        });
       } finally {
         btn.disabled = false;
         btn.textContent = 'Guardar registro';
