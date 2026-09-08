@@ -69,14 +69,27 @@ const exigir = (cond, mensaje) => { if (!cond) throw new Error(mensaje); };
 // ================== HABLAR CON LOS DOS SERVIDORES ==================
 const nuevaClave = p => p + '-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
 
-async function google(params, { timeout = 120000 } = {}) {
+// CON REINTENTOS, IGUAL QUE LA APP. Apps Script contesta paginas HTML de error 404 al azar
+// (medido el 2-sep: 2 de cada 8 llamadas) y tarda de 3 a 39 s. Sin reintentar, esta prueba
+// daria falsas alarmas todo el tiempo y en dos dias nadie le creeria — que es peor que no
+// tenerla. El jsonp() de la app reintenta dos veces; aqui igual, y al final se dice cuantas
+// veces hubo que hacerlo, porque eso mismo es un dato de salud.
+let reintentosGoogle = 0;
+async function google(params, { timeout = 120000, intentos = 3 } = {}) {
   const url = new URL(APPS_SCRIPT_URL);
   for (const [k, v] of Object.entries(params)) if (v !== undefined && v !== null) url.searchParams.set(k, v);
-  const r = await fetch(url, { redirect: 'follow', signal: AbortSignal.timeout(timeout) });
-  const txt = await r.text();
-  if (!r.ok) throw new Error('Google contesto HTTP ' + r.status + ': ' + txt.slice(0, 160));
-  try { return JSON.parse(txt); }
-  catch { throw new Error('Google contesto algo que no es JSON (' + r.status + '): ' + txt.slice(0, 160)); }
+  let ultimo = null;
+  for (let i = 0; i < intentos; i++) {
+    if (i) { reintentosGoogle++; await new Promise(r => setTimeout(r, 1500 * i)); }
+    try {
+      const r = await fetch(url, { redirect: 'follow', signal: AbortSignal.timeout(timeout) });
+      const txt = await r.text();
+      if (!r.ok) { ultimo = new Error('Google contesto HTTP ' + r.status + ' (pagina de error, no JSON)'); continue; }
+      try { return JSON.parse(txt); }
+      catch { ultimo = new Error('Google contesto algo que no es JSON (' + r.status + '): ' + txt.slice(0, 120)); }
+    } catch (e) { ultimo = e; }
+  }
+  throw new Error('Google fallo ' + intentos + ' veces seguidas. Ultimo: ' + (ultimo && ultimo.message || ultimo));
 }
 
 /**

@@ -2,6 +2,8 @@
   "name": "full-company-inventario",
   "private": true,
   "scripts": {
-    "test": "node --test tests/*.test.js"
+    "test": "node --test tests/*.test.js",
+    "probar": "node probar_todo.mjs",
+    "probar:escribir": "node probar_todo.mjs --escribir"
   }
 }
