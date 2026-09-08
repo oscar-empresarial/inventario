@@ -148,7 +148,10 @@ test('conciliación agrupa auditoría legacy y conserva los litros preparados', 
   const result = context.getConciliacion();
   const saldo = result.hallazgos.find(h => h.codigo === 'SALDO-TAMBOR-NEGATIVO');
   assert.equal(saldo.esperado, 18);
-  assert.equal(saldo.real, 20);
+  // 19, no 20: la pimpina son 19 LITROS aunque el envase se llame "Pimpina 20 L"
+  // (regla de Oscar del 13-ago-2026, en tamanoDe()). Esta prueba pedia 20 y llevaba
+  // semanas en rojo sin que nadie la mirara.
+  assert.equal(saldo.real, 19);
   assert.equal(result.hallazgos.filter(h => h.codigo === 'AUDITORIA-LEGACY').length, 1);
   assert.equal(result.resumen.filasLegacy, 2);
 });

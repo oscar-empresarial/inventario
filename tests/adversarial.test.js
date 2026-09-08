@@ -298,14 +298,22 @@ test('tanque 1 y tanque 12 usan coincidencia exacta para una base', () => {
 });
 
 function makeFrontend(operationStates) {
-  const calls = { fetch: [], status: [] };
+  const calls = { fetch: [], status: [], espejo: [] };
   const storage = {};
   const context = {
     console,
     setTimeout: fn => { fn(); return 1; }, clearTimeout() {},
-    document: { addEventListener() {}, querySelectorAll() { return []; } },
+    document: { addEventListener() {}, querySelectorAll() { return []; }, getElementById() { return null; } },
     window: { crypto: { randomUUID: () => 'FRONTEND-UUID-0001' } },
-    fetch: async (...args) => { calls.fetch.push(args); return { ok: true }; },
+    // avisarEspejoLab tambien usa fetch (un GET al Worker). Se separan: `calls.fetch`
+    // son SOLO los envios del registro; `calls.espejo`, los avisos al espejo. Antes se
+    // mezclaban y por eso esta prueba llevaba dias en rojo culpando a quien no era.
+    fetch: async (...args) => {
+      const opts = args[1] || {};
+      if (String(opts.method || 'GET').toUpperCase() === 'POST') calls.fetch.push(args);
+      else calls.espejo.push(args);
+      return { ok: true };
+    },
     Blob: function () {}, URL: { createObjectURL() { return ''; }, revokeObjectURL() {} },
     localStorage: {
       getItem(key) { return Object.hasOwn(storage, key) ? storage[key] : null; },
@@ -342,13 +350,50 @@ test('frontend conserva RequestId mientras espera confirmación y acepta confirm
   assert.deepEqual(JSON.parse(storage[context.OPERACIONES_PENDIENTES_KEY]), {}, 'la bandeja se limpia solo después de confirmar');
 });
 
-test('frontend no declara éxito si nunca puede confirmar el guardado', async () => {
-  const { context, calls, storage } = makeFrontend(Array.from({ length: 12 }, () => ({ encontrada: false, ok: false })));
-  await assert.rejects(() => context.enviarRegistro(validProduction({ RequestId: 'REQ-TIMEOUT-01' })), /no fue posible confirmar/i);
-  assert.equal(calls.fetch.length, 1);
-  assert.equal(calls.status.length, 12);
+test('frontend no declara éxito si nunca puede confirmar el guardado, y REENVIA', async () => {
+  // 8-sep-2026: un llenado de tanque se perdio sin dejar rastro (ni fila en la hoja, ni
+  // fila en _API_ERRORES). O sea: el POST nunca llego. La app solo PREGUNTABA doce veces
+  // y despues le decia al ingeniero "no lo repitas". Tenia la clave de idempotencia en la
+  // mano y no la usaba. Ahora manda el MISMO RequestId hasta tres veces.
+  const { context, calls, storage } = makeFrontend(Array.from({ length: 40 }, () => ({ encontrada: false, ok: false })));
+  await assert.rejects(() => context.enviarRegistro(validProduction({ RequestId: 'REQ-TIMEOUT-01' })), /no lo escribas otra vez/i);
+  assert.equal(calls.fetch.length, 3, 'se reenvia el mismo registro, no se manda una sola vez');
+  calls.fetch.forEach(f => assert.equal(JSON.parse(f[1].body).RequestId, 'REQ-TIMEOUT-01',
+    'todos los reenvios llevan la MISMA clave: por eso no duplican'));
+  assert.equal(calls.status.length, 24);
   const pendientes = JSON.parse(storage[context.OPERACIONES_PENDIENTES_KEY]);
   assert.equal(pendientes['REQ-TIMEOUT-01'].payload.RequestId, 'REQ-TIMEOUT-01', 'el payload ambiguo queda recuperable');
+});
+
+test('un pendiente que el servidor no tiene se REENVIA solo, no se queda esperando', async () => {
+  // Preguntar y volver a preguntar nunca salvo un registro. Si el servidor no lo tiene,
+  // hay que volver a mandarlo; la clave de idempotencia hace que sea seguro.
+  const { context, calls, storage } = makeFrontend([
+    { encontrada: false, ok: false },                      // la consulta inicial: no esta
+    { encontrada: true, ok: true, operacionId: 'OP-9', movimientos: 3 }  // tras el reenvio: si
+  ]);
+  storage[context.OPERACIONES_PENDIENTES_KEY] = JSON.stringify({
+    'REQ-PERDIDO-1': { requestId: 'REQ-PERDIDO-1', fecha: '2026-09-08T10:00:00.000Z',
+                       payload: validProduction({ RequestId: 'REQ-PERDIDO-1' }) }
+  });
+  await context.recuperarOperacionesPendientes();
+  assert.equal(calls.fetch.length, 1, 'el pendiente se vuelve a MANDAR');
+  assert.equal(JSON.parse(calls.fetch[0][1].body).RequestId, 'REQ-PERDIDO-1');
+  assert.deepEqual(JSON.parse(storage[context.OPERACIONES_PENDIENTES_KEY]), {},
+    'una vez confirmado, sale de la bandeja');
+});
+
+test('un pendiente que sigue sin entrar NO se borra: se queda para el proximo intento', async () => {
+  const { context, calls, storage } = makeFrontend([
+    { encontrada: false, ok: false }, { encontrada: false, ok: false }
+  ]);
+  storage[context.OPERACIONES_PENDIENTES_KEY] = JSON.stringify({
+    'REQ-PERDIDO-2': { requestId: 'REQ-PERDIDO-2', fecha: '2026-09-08T10:00:00.000Z',
+                       payload: validProduction({ RequestId: 'REQ-PERDIDO-2' }) }
+  });
+  await context.recuperarOperacionesPendientes();
+  const quedan = JSON.parse(storage[context.OPERACIONES_PENDIENTES_KEY]);
+  assert.equal(Object.keys(quedan).length, 1, 'lo que no se pudo confirmar NO se pierde');
 });
 
 test('frontend bloquea el POST si la versión del backend no coincide', async () => {

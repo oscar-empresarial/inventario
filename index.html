@@ -600,6 +600,10 @@
     </div>
   </header>
   <main>
+    <!-- LO QUE NO ENTRO SE VE. Un registro sin confirmar no puede vivir escondido en el
+         localStorage: mientras exista, esta franja lo dice, en todas las pestañas, aunque
+         el mensaje de estado ya lo haya pisado otro aviso. -->
+    <div id="avisoPendientes" style="display:none;margin:0 0 14px;padding:12px 14px;border-radius:12px;background:#fff4d6;border:2px solid #e0a800;color:#5c4500;font-weight:600;line-height:1.4"></div>
     <!-- ================= VISTA REGISTRO ================= -->
     <section id="view-registro" class="view">
       <div class="card">
@@ -726,7 +730,7 @@
             </div>
             <div class="field hidden" data-field="litros">
               <label for="LitrosPreparados" id="litrosLabel">Litros preparados</label>
-              <input id="LitrosPreparados" type="number" step="0.001" min="0" placeholder="Ej: 120" />
+              <input id="LitrosPreparados" type="text" inputmode="decimal" placeholder="Ej: 120" />
             </div>
           </div>
 
@@ -741,7 +745,7 @@
             </div>
             <div class="field hidden" data-field="baselitros">
               <label for="BaseLitros">Litros de base que sacaste</label>
-              <input id="BaseLitros" type="number" step="0.001" min="0" placeholder="Ej: 20" />
+              <input id="BaseLitros" type="text" inputmode="decimal" placeholder="Ej: 20" />
             </div>
           </div>
           <div class="row">
@@ -800,7 +804,7 @@
           <div class="row">
             <div class="field hidden" data-field="cantidad">
               <label for="Cantidad">Cantidad</label>
-              <input id="Cantidad" type="number" step="0.001" min="0" placeholder="Ej: 200" />
+              <input id="Cantidad" type="text" inputmode="decimal" placeholder="Ej: 200" />
             </div>
             <div class="field hidden" data-field="unidad">
               <label for="Unidad">Unidad</label>
@@ -825,7 +829,7 @@
             </div>
             <div class="field hidden" data-field="cantpres">
               <label for="CantidadPresentacion">Cantidad de presentaciones</label>
-              <input id="CantidadPresentacion" type="number" step="0.001" min="0" placeholder="Ej: 20" />
+              <input id="CantidadPresentacion" type="text" inputmode="decimal" placeholder="Ej: 20" />
             </div>
           </div>
           <div class="row">
@@ -868,7 +872,7 @@
                   <option value="Sobró">Sobró</option>
                   <option value="Faltó">Faltó / merma</option>
                 </select>
-                <input id="MermaCantidad" type="number" step="0.001" min="0" placeholder="¿Cuánto?" />
+                <input id="MermaCantidad" type="text" inputmode="decimal" placeholder="¿Cuánto?" />
               </div>
               <div class="hint">Ej: el bulto de 20 kg rindió 20.1 kg → “Sobró 0.1”. Queda registrado y el inventario se ajusta solo.</div>
             </div>
@@ -1167,7 +1171,7 @@
       <div class="row" style="margin-bottom:14px">
         <div>
           <label for="envCapacidad">Capacidad</label>
-          <input id="envCapacidad" type="number" step="0.001" min="0" placeholder="Ej: 4" />
+          <input id="envCapacidad" type="text" inputmode="decimal" placeholder="Ej: 4" />
         </div>
         <div>
           <label for="envMedida">Medida</label>
@@ -1686,6 +1690,7 @@
         // clave de idempotencia y se confirma después contra el servidor.
         showStatus('El servidor está lento. Puedes registrar igual: cada movimiento se confirma después de guardarlo.', 'warn');
       }).then(function () {
+        arrancarReintentoPendientes();
         return recuperarOperacionesPendientes();
       }).catch(function () {}).then(function () {
         cargarCatalogoSiigo();
@@ -2114,6 +2119,7 @@
         payload: record
       };
       lsSet(OPERACIONES_PENDIENTES_KEY, JSON.stringify(pendientes));
+      if (typeof pintarPendientes === 'function') pintarPendientes();
     }
 
     function quitarOperacionPendiente(requestId) {
@@ -2121,6 +2127,7 @@
       if (!pendientes[requestId]) return;
       delete pendientes[requestId];
       lsSet(OPERACIONES_PENDIENTES_KEY, JSON.stringify(pendientes));
+      if (typeof pintarPendientes === 'function') pintarPendientes();
     }
 
     async function recuperarOperacionesPendientes() {
@@ -2139,11 +2146,37 @@
       var confirmadas = 0;
       var rechazadas = [];
       var sinResolver = [];
+      var reenviadas = 0;
       for (var i = 0; i < ids.length; i++) {
         try {
           var estado = await consultarOperacion(ids[i]);
           validarVersionBackend(estado);
           if (!estado || !estado.encontrada) {
+            // NO ESTA EN EL SERVIDOR: SE REENVIA. Preguntar y volver a preguntar nunca
+            // salvo un registro; el POST que se perdio hay que volverlo a mandar. La clave
+            // de idempotencia es la misma, asi que si en realidad si habia entrado, el
+            // servidor contesta "duplicado" y no escribe dos veces.
+            var guardado = leerOperacionesPendientes()[ids[i]];
+            var payload = guardado && guardado.payload;
+            if (payload) {
+              try {
+                await fetch(APPS_SCRIPT_URL, {
+                  method: 'POST',
+                  mode: 'no-cors',
+                  headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                  body: JSON.stringify(payload)
+                });
+              } catch (errReenvio) {}
+              await esperar(2500);
+              var estado2 = null;
+              try { estado2 = await consultarOperacion(ids[i]); } catch (err2) {}
+              if (estado2 && estado2.encontrada) {
+                quitarOperacionPendiente(ids[i]);
+                if (estado2.ok) { confirmadas++; reenviadas++; }
+                else rechazadas.push(String(estado2.error || 'Movimiento rechazado.').replace(/^Error:\s*/i, ''));
+                continue;
+              }
+            }
             sinResolver.push(ids[i]);
           } else {
             quitarOperacionPendiente(ids[i]);
@@ -2154,15 +2187,50 @@
           sinResolver.push(ids[i]);
         }
       }
-      if (sinResolver.length) {
-        showStatus('Hay ' + sinResolver.length + ' operación(es) cuyo resultado aún no se pudo confirmar. No las repitas. Identificador: ' + sinResolver.join(', '), 'warn');
-      } else if (rechazadas.length) {
+      pintarPendientes();
+      if (rechazadas.length) {
         showStatus('Una operación anterior fue rechazada y no se guardó: ' + rechazadas[0], 'err');
+      } else if (sinResolver.length) {
+        showStatus('Hay ' + sinResolver.length + ' registro(s) que todavía no entraron. La app los sigue reenviando sola; NO los escribas otra vez. Clave: ' + sinResolver.join(', '), 'warn');
       } else if (confirmadas) {
-        showStatus('Se confirmó después de reconectar que ' + confirmadas + ' operación(es) anterior(es) sí quedaron guardadas. No las repitas.', 'ok');
+        showStatus('Se confirmó que ' + confirmadas + ' registro(s) anterior(es) sí quedaron guardados' + (reenviadas ? ' (' + reenviadas + ' hubo que reenviarlos)' : '') + '. No los repitas.', 'ok');
         state.inventario = null;
         state.registros = null;
       }
+    }
+
+    // ================== LOS PENDIENTES SE VEN, SIEMPRE ==================
+    //
+    // Un registro que no entro no puede vivir escondido en el localStorage. La franja de
+    // arriba lo dice mientras exista, aunque el mensaje de estado ya lo haya pisado otro
+    // aviso, y aunque el operario cierre la pestaña y vuelva mañana.
+    function pintarPendientes() {
+      if (typeof document === 'undefined' || typeof document.getElementById !== 'function') return;
+      var caja = document.getElementById('avisoPendientes');
+      if (!caja) return;
+      var pend = leerOperacionesPendientes();
+      var ids = Object.keys(pend);
+      if (!ids.length) { caja.style.display = 'none'; caja.textContent = ''; return; }
+      var detalle = ids.map(function (id) {
+        var p = pend[id] && pend[id].payload || {};
+        var cuando = pend[id] && pend[id].fecha ? String(pend[id].fecha).slice(0, 16).replace('T', ' ') : '';
+        return (p.TipoRegistro || 'Registro') + (p.TamborID ? ' · tanque ' + p.TamborID : (p.Item ? ' · ' + p.Item : '')) + (cuando ? ' · ' + cuando : '');
+      }).join(' | ');
+      caja.style.display = 'block';
+      caja.textContent = '⏳ ' + ids.length + ' registro(s) SIN CONFIRMAR todavía: ' + detalle +
+        '. La app los reenvía sola. NO los vuelvas a escribir a mano.';
+    }
+
+    // Se reintenta solo: al volver el internet y cada 2 minutos mientras haya pendientes.
+    function arrancarReintentoPendientes() {
+      pintarPendientes();
+      try {
+        window.addEventListener('online', function () { recuperarOperacionesPendientes().catch(function () {}); });
+      } catch (e) {}
+      setInterval(function () {
+        if (!Object.keys(leerOperacionesPendientes()).length) return;
+        recuperarOperacionesPendientes().catch(function () {});
+      }, 120000);
     }
     var MSG_SCRIPT = 'No se pudo conectar con el Apps Script. Lo más probable: la URL de la implementación cambió. ' +
       'En Apps Script abre "Implementar → Administrar implementaciones", copia la URL que termina en /exec ' +
@@ -2487,7 +2555,7 @@
       fila.innerHTML =
         '<input class="mp-item" list="dlMp" placeholder="Materia prima / fragancia" />' +
         '<input class="mp-var" placeholder="Variante (aroma/color)" />' +
-        '<input class="mp-cant" type="number" step="0.001" min="0" placeholder="Cant." />' +
+        '<input class="mp-cant" type="text" inputmode="decimal" placeholder="Cant." />' +
         '<select class="mp-uni"><option>L</option><option>ml</option><option>kg</option><option>g</option><option>und</option></select>' +
         '<button type="button" class="mp-quitar" title="Quitar">✕</button>';
       fila.querySelector('.mp-quitar').addEventListener('click', function () {
@@ -3216,6 +3284,10 @@
       return { error: 'Tipo de registro no reconocido.' };
     }
 
+    // Se pone en true SOLO mientras se rearma la preparacion despues de que el operario
+    // contesto la pregunta de "no pusiste litros". Asi la pregunta no se repite en bucle.
+    var _confirmoSoloConsumo = false;
+
     function buildPreparacion() {
       var destino = valueOf('Destino');
       var tambor = valueOf('TamborID');
@@ -3240,6 +3312,37 @@
             produccion.LitrosPreparados = litros;
             produccion.Observacion = ('Adición de litros al tanque. ' + valueOf('Observacion')).trim();
             records.push(produccion);
+          } else if (!_confirmoSoloConsumo && mps.filter(function (m) { return m.item; }).length) {
+            // AQUI SE PERDIA UN LLENADO ENTERO Y LA APP DECIA "GUARDADO".
+            //
+            // Si el tanque ya tenia contenido y el campo de litros quedaba vacio —y la propia
+            // etiqueta invita a dejarlo vacio— NO se creaba la fila 'Preparar tambor': las
+            // materias primas se descontaban igual, sueltas, y el tanque no recibia nada.
+            // Ademas esa rama se salta los tres candados de la produccion (minimo dos
+            // componentes, casilla de formula completa, y cobertura de volumen 80-105%).
+            //
+            // Hay un caso legitimo —echarle algo a un lote que ya existe sin subir el
+            // volumen— asi que no se bloquea: se PREGUNTA con los numeros a la vista, igual
+            // que la pregunta del residuo del tanque. Nadie descuenta materia prima creyendo
+            // que registro un llenado.
+            var _mpN = mps.filter(function (m) { return m.item; }).length;
+            var _tq = ((state.catalogos && state.catalogos.tambores) || []).filter(function (x) {
+              return x && normalize(x.id || '') === normalize(tambor);
+            })[0];
+            var _disp = _tq ? (Number(_tq.disponible) || 0) : 0;
+            return {
+              confirmar: 'No escribiste LITROS y el tanque ' + tambor + ' ya tiene ' + _disp + ' L.\n\n' +
+                'Se van a descontar ' + _mpN + ' materia(s) prima(s) y el tanque VA A QUEDAR IGUAL (' + _disp + ' L). ' +
+                'No queda registrado ningun llenado.\n\n' +
+                '· Aceptar = asi fue: solo gaste materia prima, no le subi el nivel al tanque\n' +
+                '· Cancelar = volver y escribir cuantos litros le puse',
+              alCancelar: 'Preparación',
+              build: function () {
+                _confirmoSoloConsumo = true;
+                try { var r = buildPreparacion(); return r.records || []; }
+                finally { _confirmoSoloConsumo = false; }
+              }
+            };
           }
         } else {
           if (!producto) return { error: 'Escribe qué producto se prepara en el tanque.' };
@@ -3563,7 +3666,7 @@
         var nombre = f.item + (f.variante ? ' · ' + f.variante : '');
         fila.innerHTML =
           '<div class="nombre">' + escapeHtml(nombre) + '</div>' +
-          '<input type="number" step="0.001" min="0" placeholder="¿Cuánto hay?" />' +
+          '<input type="text" inputmode="decimal" placeholder="¿Cuánto hay?" />' +
           '<select><option value="">Elegir unidad…</option><option>und</option><option>L</option><option>ml</option><option>kg</option><option>g</option><option>lb</option></select>' +
           '<button type="button">Registrar</button>' +
           '<button type="button" class="clear btn-empezado" style="padding:8px 10px;font-size:13px">Está empezado, no lo puedo pesar</button>';
@@ -3675,43 +3778,64 @@
       }
       guardarOperacionPendiente(record);
       var errorTransporte = null;
-      try {
-        await fetch(APPS_SCRIPT_URL, {
-          method: 'POST',
-          mode: 'no-cors',
-          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-          body: JSON.stringify(record)
-        });
-      } catch (err) {
-        // Un fallo de red al recibir la respuesta no demuestra que el POST no
-        // llegara. Apps Script pudo haber confirmado la escritura, por eso se
-        // consulta siempre el mismo RequestId antes de informar el resultado.
-        errorTransporte = err;
-      }
-      // El backend puede esperar hasta 30 s por LockService. Si el navegador
-      // perdió la respuesta del POST, la confirmación debe cubrir esa ventana.
-      for (var intento = 0; intento < 12; intento++) {
-        await esperar(Math.min(500 + intento * 500, 4000));
-        var estado;
+
+      // SE REENVIA, NO SOLO SE PREGUNTA. Aqui es donde se perdia el trabajo.
+      //
+      // 8-sep-2026: el ingeniero lleno un tanque y "no se guardo". En la hoja no quedo la
+      // fila, y en _API_ERRORES (donde doPost anota TODO rechazo) tampoco quedo nada. O sea:
+      // el POST nunca llego a Google. Y la app, ante eso, solo PREGUNTABA doce veces si se
+      // habia guardado; al no encontrarlo le decia al operario "no lo repitas" y ahi moria
+      // el registro. Tenia la clave de idempotencia en la mano — que existe justamente para
+      // poder reenviar sin duplicar — y no la usaba nunca.
+      //
+      // Ahora son hasta TRES envios del MISMO RequestId. doPost reconoce la clave y, si ya
+      // habia entrado, contesta "duplicado" sin escribir dos veces. Reenviar es seguro por
+      // construccion; no reenviar es perder el trabajo del dia.
+      var ENVIOS = 3;
+      for (var envioN = 0; envioN < ENVIOS; envioN++) {
+        if (envioN > 0) showStatus('El servidor no confirmo todavia. Reenviando el mismo registro (intento ' + (envioN + 1) + ' de ' + ENVIOS + '). NO lo escribas otra vez.', 'warn');
         try {
-          estado = await consultarOperacion(record.RequestId);
-        } catch (errConsulta) {
-          // La confirmación también puede fallar transitoriamente. Se agotan
-          // los intentos antes de declarar el resultado como desconocido.
-          errorTransporte = errorTransporte || errConsulta;
-          continue;
+          await fetch(APPS_SCRIPT_URL, {
+            method: 'POST',
+            mode: 'no-cors',
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+            body: JSON.stringify(record)
+          });
+        } catch (err) {
+          // Un fallo de red al recibir la respuesta no demuestra que el POST no
+          // llegara. Apps Script pudo haber confirmado la escritura, por eso se
+          // consulta siempre el mismo RequestId antes de informar el resultado.
+          errorTransporte = err;
         }
-        if (estado && estado.encontrada) {
-          quitarOperacionPendiente(record.RequestId);
-          if (!estado.ok) throw new Error(String(estado.error || 'El servidor rechazó el movimiento.').replace(/^Error:\s*/i, ''));
-          // Ya esta confirmado en la hoja: que el espejo del Worker la traiga ahora y no
-          // en un minuto, para que la proxima lectura (inventario, registros) ya la tenga.
-          // Cubre TODO lo que se guarda por aqui: registros, anulaciones y correcciones.
-          avisarEspejoLab(record.TipoRegistro || 'registro');
-          return estado;
+        // El backend puede esperar hasta 30 s por LockService. Si el navegador
+        // perdió la respuesta del POST, la confirmación debe cubrir esa ventana.
+        var vueltas = envioN === ENVIOS - 1 ? 12 : 6;
+        for (var intento = 0; intento < vueltas; intento++) {
+          await esperar(Math.min(500 + intento * 500, 4000));
+          var estado;
+          try {
+            estado = await consultarOperacion(record.RequestId);
+          } catch (errConsulta) {
+            // La confirmación también puede fallar transitoriamente. Se agotan
+            // los intentos antes de declarar el resultado como desconocido.
+            errorTransporte = errorTransporte || errConsulta;
+            continue;
+          }
+          if (estado && estado.encontrada) {
+            quitarOperacionPendiente(record.RequestId);
+            if (!estado.ok) throw new Error(String(estado.error || 'El servidor rechazó el movimiento.').replace(/^Error:\s*/i, ''));
+            // Ya esta confirmado en la hoja: que el espejo del Worker la traiga ahora y no
+            // en un minuto, para que la proxima lectura (inventario, registros) ya la tenga.
+            // Cubre TODO lo que se guarda por aqui: registros, anulaciones y correcciones.
+            avisarEspejoLab(record.TipoRegistro || 'registro');
+            return estado;
+          }
         }
       }
-      var errorConfirmacion = new Error('No fue posible confirmar si el servidor guardó el movimiento. No lo repitas: conserva esta pantalla y revisa la trazabilidad con el identificador ' + record.RequestId + '.');
+      // NO SE BORRA EL PENDIENTE. Queda en esta pantalla y la app lo vuelve a mandar sola
+      // (al abrir, al recuperar internet y cada 2 minutos). El operario NO tiene que
+      // teclearlo otra vez, y tampoco se queda sin saber.
+      var errorConfirmacion = new Error('El servidor no contesto. El registro quedo GUARDADO EN ESTA APP y se reenvia solo hasta que entre; deja esta pestaña abierta. NO lo escribas otra vez a mano (clave ' + record.RequestId + ').');
       errorConfirmacion.resultadoDesconocido = true;
       throw errorConfirmacion;
     }
@@ -3734,6 +3858,21 @@
           return;
         }
       }
+      // LA COMA DECIMAL SE CONVIERTE A PUNTO ANTES DE SALIR. En la pantalla el ingeniero
+      // escribe "1,5" (es lo normal aqui) y eso esta bien; lo que no puede es llegar asi a
+      // la hoja, donde la celda es numerica. Se hace en un solo lugar, al final, para que no
+      // se escape por ningun camino.
+      var CAMPOS_NUMERICOS = ['Cantidad', 'LitrosPreparados', 'CantidadPresentacion', 'BaseLitros', 'CantidadFragancia'];
+      var puntoDecimal = function (v) {
+        var t = String(v == null ? '' : v).trim();
+        return /^-?\d+,\d+$/.test(t) ? t.replace(',', '.') : v;
+      };
+      records.forEach(function (r) {
+        CAMPOS_NUMERICOS.forEach(function (k) { if (r[k] !== undefined && r[k] !== '') r[k] = puntoDecimal(r[k]); });
+        if (Array.isArray(r.Componentes)) {
+          r.Componentes.forEach(function (c) { if (c && c.Cantidad !== undefined) c.Cantidad = puntoDecimal(c.Cantidad); });
+        }
+      });
       // Primera letra en mayúscula en todos los nombres
       records.forEach(function (r) {
         ['Item', 'Variante', 'Producto', 'TamborID', 'Presentacion', 'Accesorio', 'Etiqueta'].forEach(function (k) {
@@ -3942,9 +4081,17 @@
       status.textContent = '';
     }
     function showStatus(message, type) {
-      var status = document.getElementById('status');
-      status.className = 'status ' + type;
-      status.textContent = message;
+      // UN AVISO NO PUEDE TUMBAR UN GUARDADO. Si la caja de estado no esta (todavia no se
+      // pinto, o la pantalla cambio), esto reventaba con "Cannot set properties of null" en
+      // mitad de enviarRegistro y el registro se caia por no poder MOSTRAR un texto. Es el
+      // mismo error del correo del 1-sep: nada opcional puede impedir que se guarde.
+      try {
+        if (typeof document === 'undefined' || typeof document.getElementById !== 'function') return;
+        var status = document.getElementById('status');
+        if (!status) return;
+        status.className = 'status ' + type;
+        status.textContent = message;
+      } catch (e) {}
     }
 
     // ================== PESTAÑAS ==================
@@ -4593,7 +4740,7 @@
         var factores = (c.opciones || []).filter(function (o) { return o && o.necesitaFactor; }).map(function (o) {
           var nf = o.necesitaFactor;
           return '<div><label>' + escapeHtml(nf.etiqueta || 'Factor') + '</label>' +
-            '<input type="number" step="any" min="0" inputmode="decimal" class="caso-factor" data-opcion="' + escapeHtml(o.clave) + '" value="' +
+            '<input type="text" inputmode="decimal" class="caso-factor" data-opcion="' + escapeHtml(o.clave) + '" value="' +
             escapeHtml(nf.porDefecto === undefined || nf.porDefecto === null ? '' : String(nf.porDefecto)) + '"></div>';
         }).join('');
         var botones = (c.opciones || []).map(function (o, j) {
@@ -4938,7 +5085,7 @@
       fila.className='mp-fila corr-mp-fila';
       fila.innerHTML='<input class="corr-mp-item" list="dlMp" placeholder="Materia prima" value="'+escapeHtml(datos.item||'')+'" />'+
         '<input class="corr-mp-var mp-var" placeholder="Variante" value="'+escapeHtml(datos.variante||'')+'" />'+
-        '<input class="corr-mp-cant" type="number" min="0" step="0.001" placeholder="Cantidad" value="'+escapeHtml(datos.cantidad||'')+'" />'+
+        '<input class="corr-mp-cant" type="text" inputmode="decimal" placeholder="Cantidad" value="'+escapeHtml(datos.cantidad||'')+'" />'+
         '<select class="corr-mp-uni"><option value="">Unidad</option><option>L</option><option>ml</option><option>kg</option><option>g</option><option>und</option></select>'+
         '<button type="button" class="mp-quitar">×</button>';
       fila.querySelector('.corr-mp-uni').value=datos.unidad||'';
