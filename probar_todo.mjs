@@ -182,6 +182,55 @@ async function seccionEstatica() {
     return 'franja + repintado';
   });
 
+  await probar('el comprobante se pinta DESPUES del reset y no lo borra nadie', () => {
+    // El '✔ Guardado y confirmado' se pintaba y, en el mismo tick, resetForm() y
+    // selectType() llamaban a clearStatus() y lo borraban. Un guardado bueno y un "no paso
+    // nada" se veian igual, y la propia pantalla decia que ese mensaje era la unica prueba.
+    exigir(/id="comprobante"/.test(HTML), 'falta el recuadro #comprobante');
+    exigir(/function mostrarComprobante/.test(HTML), 'falta mostrarComprobante()');
+    const mReset = /resetForm\(false\);\s*selectType\(keepType\);/.exec(HTML);
+    const iReset = mReset ? mReset.index : -1;
+    const iComp = HTML.indexOf("mostrarComprobante(textoOk, 'ok')");
+    exigir(iReset > 0 && iComp > iReset,
+      'el comprobante se pinta ANTES del reset: clearStatus() lo va a borrar otra vez');
+    return 'se pinta al final';
+  });
+
+  await probar('la app recuerda quien esta trabajando', () => {
+    // De los 5 frenos reales del primer dia del registro, LOS 5 fueron "Selecciona
+    // responsable" con el formulario ya lleno.
+    exigir(/RESPONSABLE_KEY/.test(HTML), 'ya no se guarda el ultimo responsable');
+    exigir(/function recordarResponsable/.test(HTML), 'falta recordarResponsable()');
+    return 'se guarda y se repone';
+  });
+
+  await probar('el puente a Siigo aplica la fila COMPLETA o no aplica nada', () => {
+    // Una fila da varias lineas (envase, tapa, producto terminado) y todas comparten la
+    // misma ref. Si una se apartaba y las otras se escribian, la fila quedaba marcada como
+    // hecha y la linea que falto NO se reintentaba jamas: se gastaba el envase y el
+    // producto terminado nunca entraba.
+    const src = readFileSync(join(AQUI, '..', '..', '_cloudflare', 'full', 'src', 'fabrica_sync.js'), 'utf8');
+    exigir(/const faltan = lineas\.filter\(l => !conocidas\.has\(l\.clave\)\)/.test(src),
+      'fabrica_sync volvio a aplicar las lineas una por una');
+    exigir(/filasEnEspera\+\+/.test(src), 'ya no se cuenta cuantas filas quedaron esperando');
+    return 'todo o nada';
+  });
+
+  await probar('el catalogo del conteo no se borra por lo que no llego', () => {
+    const src = readFileSync(join(AQUI, '..', '..', '_cloudflare', 'full', 'src', 'conteo.js'), 'utf8');
+    exigir(!/DELETE FROM conteo_items WHERE origen IN \('siigo','app'\)/.test(src),
+      'volvio el DELETE incondicional: si Siigo no contesta, se borra su catalogo entero');
+    exigir(/reemplazar\.push\(origen\)/.test(src), 'ya no se reemplaza por origen');
+    return 'solo el origen que llego, y con minimo del 70%';
+  });
+
+  await probar('un espejo atrasado no se contesta como si fuera bueno', () => {
+    const src = readFileSync(join(AQUI, '..', '..', '_cloudflare', 'full', 'src', 'lab_api.js'), 'utf8');
+    exigir(/function exigirEspejoFresco/.test(src), 'falta el candado de frescura del espejo');
+    exigir(/MINUTOS_ESPEJO_VIEJO/.test(src), 'falta el tope de minutos');
+    return 'pasa a Google si lleva mas de 15 min';
+  });
+
   await probar('la regla de la pimpina (19 L) esta en los DOS motores', () => {
     const apps = readFileSync(join(AQUI, '..', '..', '3-INVENTARIO', 'app-ingeniero', 'Código.js'), 'utf8');
     const motor = readFileSync(join(AQUI, '..', '..', '_cloudflare', 'full', 'src', 'lab_motor.js'), 'utf8');
