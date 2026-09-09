@@ -604,6 +604,16 @@
          localStorage: mientras exista, esta franja lo dice, en todas las pestañas, aunque
          el mensaje de estado ya lo haya pisado otro aviso. -->
     <div id="avisoPendientes" style="display:none;margin:0 0 14px;padding:12px 14px;border-radius:12px;background:#fff4d6;border:2px solid #e0a800;color:#5c4500;font-weight:600;line-height:1.4"></div>
+    <!-- EL COMPROBANTE. El "✔ Guardado y confirmado" se pintaba en #status y catorce lineas
+         despues, en el MISMO tick, resetForm() y selectType() llamaban a clearStatus() y lo
+         borraban antes de que el navegador alcanzara a dibujarlo. Encima selectType hace
+         scroll al inicio del formulario y #status esta al final. O sea: el ingeniero NUNCA
+         veia el mensaje que la propia pantalla le decia que buscara. Un guardado bueno y un
+         "no paso nada" se veian igual — y asi es como uno reporta "no se guarda" y vuelve a
+         teclear el movimiento entero.
+         Este recuadro vive ARRIBA, fuera del formulario, y no lo borra nadie mas que el
+         siguiente Guardar. -->
+    <div id="comprobante" style="display:none;margin:0 0 14px;padding:12px 14px;border-radius:12px;font-weight:600;line-height:1.4"></div>
     <!-- ================= VISTA REGISTRO ================= -->
     <section id="view-registro" class="view">
       <div class="card">
@@ -950,7 +960,7 @@
             <button type="submit" class="submit" id="btnSubmit">Guardar registro</button>
           </div>
           <div id="status" class="status"></div>
-          <div class="small-note">Solo cuando el mensaje diga “Guardado y confirmado”, el movimiento quedó registrado.</div>
+          <div class="small-note">Solo cuando salga el recuadro VERDE de arriba con “Guardado y confirmado” y su número de operación, el movimiento quedó registrado. Si sale amarillo, la app lo está reenviando sola: no lo vuelvas a escribir.</div>
         </form>
       </div>
     </section>
@@ -1445,6 +1455,17 @@
     // esta version, y un backend mas nuevo es compatible por definicion.
     var BACKEND_VERSION_REQUERIDA = '2.2.0-revisiones';
     var OPERACIONES_PENDIENTES_KEY = 'fullcompany_operaciones_pendientes_v1';
+    // LA APP SE ACUERDA DE QUIEN ESTA TRABAJANDO.
+    //
+    // El registro de frenos lo dijo con numeros el primer dia que existio: de 5 bloqueos
+    // reales, LOS 5 fueron "Selecciona responsable", con el formulario YA lleno — tanque,
+    // producto, litros, presentacion, etiqueta. Uno de ellos, el 9-sep a las 8:18 a.m., era
+    // una preparacion del tanque 27 con Deterfull.
+    //
+    // No es que al ingeniero se le olvide: es que el campo se vacia en cada recarga y esta
+    // arriba del todo, lejos del boton. Se guarda el ultimo que uso y se vuelve a poner. Es
+    // un dato de comodidad, no de seguridad: quien hizo el trabajo queda igual en la fila.
+    var RESPONSABLE_KEY = 'fullcompany_responsable_v1';
 
     var state = {
       selectedType: '',
@@ -1674,6 +1695,7 @@
       llenarDatalistMp();
       agregarFilaMp();
       vigilarComaDecimal();
+      recordarResponsable();
       document.getElementById('pregGuardar').addEventListener('click', responderPregunta);
       document.getElementById('pregNoSe').addEventListener('click', aplazarActual);
       document.getElementById('pregCantidad').addEventListener('keydown', function (ev) {
@@ -2277,6 +2299,23 @@
     // Un registro que no entro no puede vivir escondido en el localStorage. La franja de
     // arriba lo dice mientras exista, aunque el mensaje de estado ya lo haya pisado otro
     // aviso, y aunque el operario cierre la pestaña y vuelva mañana.
+    function recordarResponsable() {
+      try {
+        var sel = document.getElementById('Responsable');
+        if (!sel) return;
+        var guardado = lsGet(RESPONSABLE_KEY);
+        if (guardado) {
+          sel.value = guardado;
+          // Si el nombre ya no esta en la lista (se fue de la empresa), el select queda en
+          // vacio solo. No se fuerza nada.
+          if (sel.value !== guardado) sel.value = '';
+        }
+        sel.addEventListener('change', function () {
+          if (sel.value) lsSet(RESPONSABLE_KEY, sel.value);
+        });
+      } catch (e) {}
+    }
+
     function pintarPendientes() {
       if (typeof document === 'undefined' || typeof document.getElementById !== 'function') return;
       var caja = document.getElementById('avisoPendientes');
@@ -3210,7 +3249,7 @@
     function buildRecords() {
       var type = state.selectedType;
       if (!type) return { error: 'Selecciona qué vas a registrar (toca uno de los botones de arriba).' };
-      if (!valueOf('Responsable')) return { error: 'Selecciona responsable.' };
+      if (!valueOf('Responsable')) return { error: 'Falta decir QUIÉN lo hizo: escoge tu nombre en “Responsable”, arriba del formulario. Lo demás que escribiste NO se pierde.' };
 
       if (type === 'Preparación') return buildPreparacion();
       if (type === 'Empacar producto') return buildEmpaque();
@@ -3583,6 +3622,14 @@
       if (sub === 'tambor') {
         var tambor = valueOf('TamborID');
         if (!tambor) return { error: 'Escribe de cuál tanque o balde empacaste.' };
+        // LA MERMA VA DENTRO DE build(), NO AFUERA.
+        //
+        // Estaba afuera: el camino normal hacia `build()` y despues le pegaba la merma. Pero
+        // cuando el tanque no aparece en la lista, submitForm usa `res.build()` — que solo
+        // devolvia el empaque. El sobrante o faltante que el ingeniero acababa de teclear se
+        // botaba sin decirle una palabra, y justo ese es el caso en que mas probable es que
+        // haya merma (el tanque ni siquiera esta cuadrado). Los dos caminos tienen que
+        // devolver lo MISMO.
         var build = function () {
           var r = baseRecord('Empacar desde tambor');
           r.TamborID = tambor;
@@ -3593,7 +3640,10 @@
           // Si la etiqueta escogida es un producto de Siigo, el SKU se guarda con el
           // movimiento. Es lo que amarra lo que se empaca con lo que se factura.
           r.SKU = skuEmpaque;
-          return [r];
+          var lista = [r];
+          var m = recordMerma('', '', tambor, 'L');
+          if (m) lista.push(m);
+          return lista;
         };
         if (!tamborExiste(tambor)) {
           return {
@@ -3602,10 +3652,7 @@
             build: build
           };
         }
-        var listaE = build();
-        var rME = recordMerma('', '', tambor, 'L');
-        if (rME) listaE.push(rME);
-        return { records: listaE };
+        return { records: build() };
       }
 
       // materia prima directa
@@ -3818,11 +3865,20 @@
             fila.remove();
             if (!document.querySelectorAll('.stock-fila').length) {
               ocultarStockAviso();
-              showStatus('Existencias registradas. Ahora presiona “Guardar registro” de nuevo para guardar tu movimiento.', 'warn');
+              // ANTES DECIA "presiona Guardar registro de nuevo" Y ESO ERA UNA INVITACION A
+              // DUPLICAR. Desde el 11-ago el movimiento SE GUARDA IGUAL aunque falten
+              // existencias; este aviso sale DESPUES de guardar. Volver a presionar Guardar
+              // mete el mismo trabajo otra vez, y con un RequestId nuevo, asi que la
+              // idempotencia del servidor no lo detiene.
+              showStatus('Existencias registradas. Tu movimiento YA estaba guardado: no lo repitas.', 'ok');
             }
-          }).catch(function () {
+          }).catch(function (errStock) {
             btn.disabled = false;
             btn.textContent = 'Registrar';
+            // Fallar callado esta prohibido: si el conteo no entro, el boton volvia a la
+            // normalidad y el ingeniero creia que habia quedado.
+            showStatus('No se pudo anotar la existencia de "' + f.item + '": ' +
+              ((errStock && errStock.message) || String(errStock)) + '. Vuelve a intentarlo.', 'err');
           });
         });
         cont.appendChild(fila);
@@ -3923,6 +3979,7 @@
     async function submitForm(e) {
       e.preventDefault();
       clearStatus();
+      mostrarComprobante('');   // el comprobante del movimiento anterior ya no aplica
       var res = buildRecords();
       if (res.error) {
         showStatus(res.error, 'err');
@@ -3937,7 +3994,14 @@
         if (window.confirm(res.confirmar)) {
           records = res.build();
         } else {
+          // Se cambia de pantalla y se pierde de vista lo tecleado. Antes pasaba sin decir
+          // una palabra: el ingeniero veia el formulario vacio y otro titulo, y no sabia si
+          // habia guardado algo. Ahora se dice, y el aviso se pinta DESPUES de selectType
+          // porque selectType llama a clearStatus().
           selectType(res.alCancelar);
+          mostrarComprobante('No se guardó nada. Cancelaste, y la pantalla cambió a "' +
+            res.alCancelar + '". Lo que habías escrito hay que volver a ponerlo.', 'err');
+          showStatus('No se guardó nada: cancelaste la confirmación.', 'warn');
           return;
         }
       }
@@ -4012,6 +4076,7 @@
         var envio = envioPrincipal;
         var marcas = {};
         var skuEscogido = '';
+        var resultadoEnvio = null;
         // CUATRO VUELTAS, NO TRES, Y EL CORTE VA ANTES DE PREGUNTAR.
         //
         // Antes eran tres y el corte estaba DESPUES de atender la pregunta: en la tercera
@@ -4021,7 +4086,7 @@
         // la ultima respuesta.
         for (var intento = 0; intento < 4; intento++) {
           try {
-            await enviarRegistro(envio);
+            resultadoEnvio = await enviarRegistro(envio);
             break;
           } catch (errPregunta) {
             if (intento === 3) throw errPregunta;   // ya se preguntaron las tres
@@ -4086,7 +4151,9 @@
         var resumen = records.map(function (r) {
           return r.TipoRegistro + (r.Item ? ' · ' + r.Item : (r.TamborID ? ' · ' + r.TamborID : ''));
         }).join(' | ');
-        showStatus('✔ Guardado y confirmado (' + records.length + (records.length === 1 ? ' operación' : ' operaciones') + '): ' + resumen, 'ok');
+        var textoOk = '✔ Guardado y confirmado (' + records.length + (records.length === 1 ? ' operación' : ' operaciones') + '): ' + resumen +
+          (resultadoEnvio && resultadoEnvio.operacionId ? ' · ' + resultadoEnvio.operacionId : '');
+        showStatus(textoOk, 'ok');
         explosionBurbujas();
         // El aviso de existencias va DESPUÉS de guardar, nunca antes: primero se asegura
         // que el trabajo quedó registrado, y solo entonces se le pide que cuente lo que
@@ -4102,6 +4169,11 @@
         var keepResp = valueOf('Responsable');
         resetForm(false);
         selectType(keepType);
+        // AQUI, DESPUES del reset: resetForm y selectType llaman a clearStatus() y borraban
+        // el mensaje antes de que se alcanzara a ver. El comprobante se pinta al final y
+        // arriba, que es adonde selectType deja la pantalla.
+        mostrarComprobante(textoOk, 'ok');
+        showStatus(textoOk, 'ok');
         document.getElementById('Responsable').value = keepResp;
         state.registros = null;
         state.omitirStock = false;
@@ -4111,6 +4183,7 @@
       } catch (err) {
         var prefijo = err.backendIncompatible ? 'Envío bloqueado: ' : (err.resultadoDesconocido ? 'Estado pendiente de confirmar: ' : 'No se guardó: ');
         showStatus(prefijo + (err.message || String(err)), 'err');
+        mostrarComprobante(prefijo + (err.message || String(err)), 'err');
         reportarFreno(prefijo + (err.message || String(err)), {
           origen: err.resultadoDesconocido ? 'sin_confirmar' : 'servidor',
           requestId: (envioPrincipal && envioPrincipal.RequestId) || '',
@@ -4171,9 +4244,35 @@
       }
     }
     function clearStatus() {
-      var status = document.getElementById('status');
-      status.className = 'status';
-      status.textContent = '';
+      // Igual que showStatus: si la caja no esta, no puede reventar nada.
+      try {
+        if (typeof document === 'undefined' || typeof document.getElementById !== 'function') return;
+        var status = document.getElementById('status');
+        if (!status) return;
+        status.className = 'status';
+        status.textContent = '';
+      } catch (e) {}
+    }
+
+    // ================== EL COMPROBANTE, QUE NO LO BORRA NADIE ==================
+    //
+    // Se pinta DESPUES de resetForm/selectType (que limpian #status) y arriba del todo,
+    // que es adonde selectType deja la pantalla. Se queda hasta el siguiente Guardar.
+    // Verde = quedo escrito, con el numero de operacion para poder buscarlo. Rojo = no.
+    function mostrarComprobante(texto, tipo) {
+      try {
+        if (typeof document === 'undefined' || typeof document.getElementById !== 'function') return;
+        var caja = document.getElementById('comprobante');
+        if (!caja) return;
+        if (!texto) { caja.style.display = 'none'; caja.textContent = ''; return; }
+        var ok = tipo !== 'err';
+        caja.style.background = ok ? '#e7f7ec' : '#fdecea';
+        caja.style.border = '2px solid ' + (ok ? '#1e9e52' : '#c62828');
+        caja.style.color = ok ? '#14532d' : '#7f1d1d';
+        caja.style.display = 'block';
+        caja.textContent = texto;
+        try { caja.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); } catch (e) {}
+      } catch (e) {}
     }
     function showStatus(message, type) {
       // UN AVISO NO PUEDE TUMBAR UN GUARDADO. Si la caja de estado no esta (todavia no se
