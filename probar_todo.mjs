@@ -239,6 +239,33 @@ async function seccionEstatica() {
     return 'Apps Script y Worker';
   });
 
+  await probar('una fila SIN FECHA no cuenta como empaque posterior (los DOS motores)', () => {
+    // 10-sep-2026: el candado de anular hacia `if (fechaOp && f && f < fechaOp) return;`.
+    // Con la fila sin fecha, `f` es '' y ese `f &&` volvia la condicion FALSA: la fila NO se
+    // saltaba y contaba como empaque POSTERIOR. Las primeras 80 filas de la hoja son de
+    // cuando se llevaba a mano y no tienen fecha, asi que dejaban 12 tanques imposibles de
+    // anular PARA SIEMPRE, con un aviso que ni decia cuales eran.
+    const apps = readFileSync(join(AQUI, '..', '..', '3-INVENTARIO', 'app-ingeniero', 'Código.js'), 'utf8');
+    const extra = readFileSync(join(AQUI, '..', '..', '_cloudflare', 'full', 'src', 'lab_motor_extra.js'), 'utf8');
+    const malos = [];
+    for (const [nombre, src, arranque] of [
+      ['Código.js', apps, 'function empaquesQueDependenDe_('],
+      ['lab_motor_extra.js', extra, 'export function empaquesQueDependenDe('],
+    ]) {
+      // DENTRO de la funcion, no la primera fecha que aparezca en todo el archivo.
+      const desde = src.indexOf(arranque);
+      if (desde < 0) { malos.push(nombre + ': no se encontro empaquesQueDependenDe'); continue; }
+      // SIN LOS COMENTARIOS: el comentario que explica este mismo bug CITA el codigo viejo,
+      // y sin quitarlo la prueba se acusa a si misma de haberlo devuelto.
+      const cuerpo = src.slice(desde, desde + 3500)
+        .split('\n').filter((l) => !l.trim().startsWith('//')).join('\n');
+      if (!/if \(!f\) return;/.test(cuerpo)) malos.push(nombre + ': la fila sin fecha vuelve a contar como posterior');
+      if (/if \(fechaOp && f && f < fechaOp\)/.test(cuerpo)) malos.push(nombre + ': volvio el `f &&` que causaba el bloqueo');
+    }
+    exigir(!malos.length, malos.join(' · '));
+    return 'Apps Script y Worker';
+  });
+
   await probar('la regla de unidad esta en los DOS motores', () => {
     const apps = readFileSync(join(AQUI, '..', '..', '3-INVENTARIO', 'app-ingeniero', 'Código.js'), 'utf8');
     const motor = readFileSync(join(AQUI, '..', '..', '_cloudflare', 'full', 'src', 'lab_motor.js'), 'utf8');
@@ -339,6 +366,31 @@ async function seccionIgualdad() {
     }
     exigir(dif.length === 0, dif.length + ' diferencia(s):\n  ' + dif.join('\n  '));
     return tW.length + ' tanques iguales';
+  });
+
+  await probar('ningun tanque queda imposible de anular por filas viejas', async () => {
+    // Se le pregunta al motor DE VERDAD (action=anulable) por la ultima preparacion de cada
+    // tanque: si algun "empaque posterior" viene SIN FECHA, es una fila vieja de la hoja
+    // haciendo de fantasma y ese tanque no se podria anular nunca.
+    const d = await worker({ action: 'registros', limite: 99999 }, { timeout: 60000 });
+    const filas = d.registros || [];
+    const ultima = new Map();
+    for (const r of filas) {
+      if (!/^preparar tambor/i.test(String(r.TipoRegistro || ''))) continue;
+      const t = String(r.TamborID || '').trim();
+      const op = String(r.OperacionID || '').trim();
+      if (t && op) ultima.set(t, op);
+    }
+    const fantasmas = [];
+    // No se preguntan los 38: con una muestra amplia basta y la prueba no se vuelve eterna.
+    const aMirar = [...ultima.entries()].slice(-14);
+    for (const [tanque, op] of aMirar) {
+      const a = await worker({ action: 'anulable', op }, { timeout: 60000 });
+      const sinFecha = ((a && a.dependen) || []).filter((x) => !x.fecha);
+      if (sinFecha.length) fantasmas.push('tanque ' + tanque + ' (' + op + '): ' + sinFecha.length);
+    }
+    exigir(!fantasmas.length, 'bloqueados por filas sin fecha: ' + fantasmas.join(' · '));
+    return aMirar.length + ' tanques mirados, ninguno con fantasmas';
   });
 
   await probar('las listas de la pantalla (init) traen lo mismo', async () => {
