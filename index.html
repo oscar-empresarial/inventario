@@ -1961,19 +1961,61 @@
       } catch (e) { return {}; }
     }
 
+    /**
+     * Le pide al Worker que traiga de la hoja lo que se acaba de guardar, y DEVUELVE lo que
+     * conteste. Siempre resuelve: nunca lanza.
+     *
+     * POR QUE DEVUELVE ALGO (2026-09-12). Antes esto se disparaba y se olvidaba, y catorce
+     * lineas despues submitForm pedia el inventario por su cuenta. Las dos cosas salian en el
+     * MISMO instante: el refresco tiene que ir hasta Google y volver (medido: 2,4 s en
+     * caliente, hasta 47 s en frio), y la lectura del inventario la contesta el Worker en
+     * milisegundos con la copia de ANTES. O sea que el ingeniero, despues de guardar un
+     * tanque, releia un inventario SIN su tanque — y la lista de "Empacar desde tambor" sale
+     * justo de ahi. Veia que no estaba, creia que no se habia guardado, y volvia a
+     * registrarlo: ese es el doble registro.
+     *
+     * La respuesta de `refrescar` YA trae el inventario recalculado (391 items y 38 tanques,
+     * comprobado contra el Worker publicado el 12-sep), asi que esperarla no solo quita la
+     * carrera: ahorra la segunda lectura entera.
+     *
+     * OJO CON EL `ok` DEL CUERPO: si el espejo falla, el Worker contesta HTTP **200** con
+     * `{ok:false}`. Mirar solo `r.ok` era darlo por bueno — la misma trampa de Whatsfy y
+     * Telegram, aqui otra vez.
+     */
     function avisarEspejoLab(motivo) {
-      if (!LAB_API || !LAB_LLAVE || LAB_LLAVE.indexOf('__') === 0 || typeof fetch !== 'function') return;
+      if (!LAB_API || !LAB_LLAVE || LAB_LLAVE.indexOf('__') === 0 || typeof fetch !== 'function') {
+        return Promise.resolve({ ok: false, error: 'sin Worker configurado' });
+      }
+      var quien = 'avisarEspejoLab (' + (motivo || '') + '): ';
       try {
-        fetch(LAB_API + '?action=refrescar&llave=' + encodeURIComponent(LAB_LLAVE), { keepalive: true })
+        return fetch(LAB_API + '?action=refrescar&llave=' + encodeURIComponent(LAB_LLAVE), { keepalive: true })
           .then(function (r) {
-            if (!r.ok) console.warn('avisarEspejoLab (' + (motivo || '') + '): el Worker contesto HTTP ' + r.status + '; el espejo se pone al dia solo en un minuto.');
+            if (!r.ok) throw new Error('el Worker contesto HTTP ' + r.status);
+            return r.json();
+          })
+          .then(function (j) {
+            if (!j || j.ok !== true) throw new Error((j && j.error) || 'el Worker contesto ok:false');
+            return j;
           })
           .catch(function (err) {
-            console.warn('avisarEspejoLab (' + (motivo || '') + '): no se pudo avisar al Worker: ' + (err && err.message ? err.message : err) + '. El espejo se pone al dia solo en un minuto.');
+            var motivoFallo = (err && err.message ? err.message : String(err));
+            console.warn(quien + motivoFallo + '. El espejo se pone al dia solo en un minuto.');
+            return { ok: false, error: motivoFallo };
           });
       } catch (err) {
-        console.warn('avisarEspejoLab: ' + (err && err.message ? err.message : err));
+        var m = (err && err.message ? err.message : String(err));
+        console.warn(quien + m);
+        return Promise.resolve({ ok: false, error: m });
       }
+    }
+
+    /** La promesa de arriba, pero que no deje esperando mas de `ms`. Nunca lanza. */
+    function esperarEspejo(promesa, ms) {
+      if (!promesa || typeof promesa.then !== 'function') return Promise.resolve({ ok: false, error: 'sin refresco' });
+      return Promise.race([
+        promesa,
+        new Promise(function (res) { setTimeout(function () { res({ ok: false, error: 'el refresco tardo mas de ' + Math.round(ms / 1000) + ' s' }); }, ms); })
+      ]);
     }
 
     function versionNumerica(v) {
@@ -3963,7 +4005,9 @@
             // Ya esta confirmado en la hoja: que el espejo del Worker la traiga ahora y no
             // en un minuto, para que la proxima lectura (inventario, registros) ya la tenga.
             // Cubre TODO lo que se guarda por aqui: registros, anulaciones y correcciones.
-            avisarEspejoLab(record.TipoRegistro || 'registro');
+            // Se ARRANCA aqui (para que el Worker empiece ya) pero se ESPERA en submitForm:
+            // si no, la relectura del inventario le gana y trae la copia de antes.
+            estado.espejo = avisarEspejoLab(record.TipoRegistro || 'registro');
             return estado;
           }
         }
@@ -4177,9 +4221,27 @@
         document.getElementById('Responsable').value = keepResp;
         state.registros = null;
         state.omitirStock = false;
-        leerBackend({ action: 'inventario' }, function (data) {
-          if (data && !data.error) state.inventario = parseInventario(data);
-        }, function () {});
+        // EL INVENTARIO NUEVO, ESPERANDO AL REFRESCO. `parseInventario` no solo llena
+        // state.inventario: tambien repuebla state.catalogos.tambores, que es de donde sale la
+        // lista de "Empacar desde tambor". Alimentarlo con una copia vieja es lo que hacia
+        // desaparecer el tanque recien preparado.
+        var refresco = await esperarEspejo(resultadoEnvio && resultadoEnvio.espejo, 15000);
+        if (refresco && refresco.ok && refresco.inventario) {
+          state.inventario = parseInventario(refresco.inventario);   // ya venia calculado
+        } else {
+          // El refresco no llego a tiempo o fallo. Se pide igual —puede que el cron ya lo
+          // haya traido—, pero si tampoco se puede, se DICE: antes este camino tenia un
+          // `function () {}` vacio y el ingeniero se quedaba con el inventario de antes sin
+          // enterarse, que es justo como se ve "no se guardo" habiendo guardado.
+          leerBackend({ action: 'inventario' }, function (data) {
+            if (data && !data.error) state.inventario = parseInventario(data);
+          }, function () {
+            mostrarComprobante(textoOk + ' — OJO: no se pudo actualizar la lista. Si el tanque no aparece, recarga la pagina; el registro YA quedo guardado.', 'warn');
+          });
+          if (refresco && refresco.error) {
+            console.warn('inventario tras guardar: ' + refresco.error);
+          }
+        }
       } catch (err) {
         var prefijo = err.backendIncompatible ? 'Envío bloqueado: ' : (err.resultadoDesconocido ? 'Estado pendiente de confirmar: ' : 'No se guardó: ');
         showStatus(prefijo + (err.message || String(err)), 'err');
