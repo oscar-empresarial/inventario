@@ -128,6 +128,16 @@ test('cuando hay varios candidatos se PREGUNTA con la lista, nunca se escoge por
   assert.equal(resolverEnCatalogo('', CATALOGO_REAL).estado, 'vacio');
 });
 
+test('una tilde no mueve el consumo de la fragancia al saldo de la materia prima', () => {
+  const { resolverEnCatalogo } = cargarResolvedor();
+  // En el catalogo conviven "Limón" (materia prima) y "Limon" (fragancia): sin tildes son
+  // la MISMA palabra. Lo escrito letra por letra manda; si no, se pregunta.
+  const conTilde = ['Limón', 'Limon', 'Varsol'];
+  assert.equal(resolverEnCatalogo('Limon', conTilde).nombre, 'Limon');
+  assert.equal(resolverEnCatalogo('Limón', conTilde).nombre, 'Limón');
+  assert.equal(resolverEnCatalogo('limon', conTilde).estado, 'varios');
+});
+
 test('lo que se guarda es el nombre del catalogo, no el tecleado (si no, el saldo se parte en dos)', () => {
   assert.match(source, /if \(resuelto\.estado === 'ok'\) m\.item = resuelto\.nombre;/);
   assert.match(source, /function validarItemCatalogo\(item, nuevoItem, opciones, aplicar\)/);

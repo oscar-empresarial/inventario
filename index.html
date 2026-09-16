@@ -3287,8 +3287,16 @@
       var n = normalize(texto);
       if (!n) return { estado: 'vacio' };
       var lista = unique(catalogo || []);
+      // TAL CUAL LO ESCRIBIO, LETRA POR LETRA: eso no se discute ni se corrige.
+      // En el catálogo conviven "Limón" (materia prima) y "Limon" (fragancia), que sin
+      // tildes son la MISMA palabra. Si escribió una de las dos exacta, es esa; si escribió
+      // "limon" a secas, son dos cosas distintas y hay que preguntar — nunca mover el
+      // consumo de la fragancia al saldo de la materia prima por una tilde.
+      var literal = lista.filter(function (x) { return String(x).trim() === String(texto).trim(); });
+      if (literal.length) return { estado: 'ok', nombre: literal[0] };
       var exacto = lista.filter(function (x) { return normalize(x) === n; });
-      if (exacto.length) return { estado: 'ok', nombre: exacto[0] };
+      if (exacto.length === 1) return { estado: 'ok', nombre: exacto[0] };
+      if (exacto.length > 1) return { estado: 'varios', opciones: exacto.slice(0, 6) };
       var pedazo = lista.filter(function (x) {
         var nx = normalize(x);
         return nx.indexOf(n) >= 0 || n.indexOf(nx) >= 0;
