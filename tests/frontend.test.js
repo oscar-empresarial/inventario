@@ -75,3 +75,65 @@ test('inventario y selectores de tanque usan orden natural', () => {
   assert.match(source, /function compararNatural/);
   assert.match(source, /sort\(function\(a,b\)[\s\S]*compararNatural/);
 });
+
+// ================== EL INSUMO QUE SI EXISTE Y LA APP DECIA QUE NO ==================
+//
+// No se comprueba con un regex sobre el texto: se CORRE la funcion de verdad contra los
+// nombres reales del catalogo del laboratorio (16-sep-2026). El freno quedo grabado el
+// 12-sep: 'La materia prima "peroxido" no aparece en la lista', con "Peróxido 50%" en el
+// catalogo y 155,93 L de saldo.
+const vm = require('node:vm');
+function cargarResolvedor() {
+  const ctx = { console };
+  vm.createContext(ctx);
+  // Solo los tres ayudantes que necesita la decision; no hay DOM en la prueba.
+  const trozos = ['function normalize', 'function unique', 'function similarityScore',
+    'function resolverEnCatalogo', 'function textoVariosCatalogo'];
+  const codigo = trozos.map(firma => {
+    const i = source.indexOf(firma);
+    assert.ok(i > 0, 'no se encontro ' + firma);
+    // hasta la llave de cierre de la funcion, que va a 4 espacios de sangria
+    const fin = source.indexOf('\n    }', i);
+    return source.slice(i, fin + 6);
+  }).join('\n');
+  vm.runInContext(codigo, ctx);
+  return ctx;
+}
+const CATALOGO_REAL = ['Acido Bórico', 'Acido Cítrico', 'Acido Nítrico 55%', 'Acido Sulfónico',
+  'Alcohol 96%', 'Alcohol Puro', 'Peróxido 50%', 'Soda CAustica', 'Soda Líquida', 'Varsol', 'Limón'];
+
+test('lo que el ingeniero teclea se resuelve contra el catalogo, no se rechaza', () => {
+  const { resolverEnCatalogo } = cargarResolvedor();
+  // Los dos casos reales: uno grabado en lab_rechazos, el otro dicho por Oscar.
+  // (los objetos nacen dentro del vm, con otro prototipo: se comparan los campos)
+  const perox = resolverEnCatalogo('peroxido', CATALOGO_REAL);
+  assert.equal(perox.estado, 'ok');
+  assert.equal(perox.nombre, 'Peróxido 50%');
+  const sulf = resolverEnCatalogo('sulfonico', CATALOGO_REAL);
+  assert.equal(sulf.estado, 'ok');
+  assert.equal(sulf.nombre, 'Acido Sulfónico');
+  // El nombre exacto sigue entrando igual, con tilde o sin ella.
+  assert.equal(resolverEnCatalogo('Acido Sulfónico', CATALOGO_REAL).nombre, 'Acido Sulfónico');
+  assert.equal(resolverEnCatalogo('acido sulfonico', CATALOGO_REAL).nombre, 'Acido Sulfónico');
+});
+
+test('cuando hay varios candidatos se PREGUNTA con la lista, nunca se escoge por el operario', () => {
+  const { resolverEnCatalogo } = cargarResolvedor();
+  const soda = resolverEnCatalogo('soda', CATALOGO_REAL);
+  assert.equal(soda.estado, 'varios');
+  assert.equal(Array.from(soda.opciones).sort().join('|'), 'Soda CAustica|Soda Líquida');
+  assert.equal(resolverEnCatalogo('alcohol', CATALOGO_REAL).estado, 'varios');
+  // y lo que de verdad no existe sigue sin existir
+  assert.equal(resolverEnCatalogo('kriptonita', CATALOGO_REAL).estado, 'nada');
+  assert.equal(resolverEnCatalogo('', CATALOGO_REAL).estado, 'vacio');
+});
+
+test('lo que se guarda es el nombre del catalogo, no el tecleado (si no, el saldo se parte en dos)', () => {
+  assert.match(source, /if \(resuelto\.estado === 'ok'\) m\.item = resuelto\.nombre;/);
+  assert.match(source, /function validarItemCatalogo\(item, nuevoItem, opciones, aplicar\)/);
+  assert.match(source, /aplicar\(resuelto\.nombre\)/);
+});
+
+test('el datalist de materias primas ofrece lo mismo que la validacion acepta', () => {
+  assert.match(source, /function llenarDatalistMp\(\)[\s\S]*invItems\('Materia prima'\)/);
+});

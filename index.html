@@ -2432,7 +2432,12 @@
     }
     function llenarDatalistMp() {
       var dl = document.getElementById('dlMp');
-      var lista = unique(getCatalog('materiasPrimas').concat(getCatalog('fragancias')).concat(getCatalog('colores')));
+      // LA LISTA QUE SE OFRECE Y LA QUE SE ACEPTA TIENEN QUE SER LA MISMA. Antes el
+      // datalist salía solo de los catálogos y la validación aceptaba además lo que ya
+      // tiene movimientos: la pantalla no ofrecía nombres que el guardado sí admitía.
+      var lista = unique(getCatalog('materiasPrimas').concat(invItems('Materia prima'))
+        .concat(getCatalog('fragancias')).concat(invItems('Fragancia'))
+        .concat(getCatalog('colores')).concat(invItems('Color')));
       dl.innerHTML = lista.map(function (x) { return '<option value="' + escapeHtml(x) + '">'; }).join('');
     }
 
@@ -3248,6 +3253,59 @@
       return hits / Math.max(wordsA.length, wordsB.length);
     }
 
+    /**
+     * ================== EL NOMBRE QUE ESCRIBE EL INGENIERO NO ES EL DEL CATALOGO ==================
+     *
+     * EL CASO (Oscar, 16-sep-2026): *"le dice que falta un insumo —sulfonico— y ese insumo
+     * YA esta creado; es como si lo botara por maña, por deporte"*. Y no era una impresion:
+     * el 12-sep quedo grabado en la tabla de frenos, con nombre y hora,
+     *
+     *     La materia prima "peroxido" no aparece en la lista
+     *
+     * mientras el catalogo tenia "Peróxido 50%" con 155,93 L de saldo. Lo mismo con
+     * "sulfonico", que en la hoja se llama "Acido Sulfónico" (y esta en -86 L).
+     *
+     * POR QUE PASABA. El renglon de materia prima es un <input list="dlMp">, y un datalist
+     * SUGIERE: no obliga, y en el celular casi ni se despliega. Lo normal es que el
+     * ingeniero teclee el nombre corto de planta. La validacion, en cambio, exigia igualdad
+     * EXACTA contra el catalogo, asi que "peroxido" != "peroxido 50%" y se perdia la
+     * preparacion ENTERA por el nombre de un insumo que si existe, con saldo y con
+     * movimientos. Un freno que solo se puede pasar adivinando el nombre completo no es un
+     * candado: es una puerta trancada.
+     *
+     * LA REGLA DE AHORA — resolver, no rechazar:
+     *   - UNA sola coincidencia (lo escrito es un pedazo del nombre real, o al reves) ->
+     *     se usa EL NOMBRE DEL CATALOGO. Se reescribe A PROPOSITO: mandar "peroxido" tal
+     *     cual crearia un item fantasma y partiria en dos el saldo de "Peróxido 50%",
+     *     que es exactamente el error caro de este sistema.
+     *   - VARIAS -> se PREGUNTA con los candidatos a la vista ("Soda" son dos sodas). El
+     *     que sabe la respuesta muestra la lista; nunca se rechaza a secas ni se escoge
+     *     por el operario.
+     *   - NINGUNA -> ahi si no esta, y se dice como siempre.
+     */
+    function resolverEnCatalogo(texto, catalogo) {
+      var n = normalize(texto);
+      if (!n) return { estado: 'vacio' };
+      var lista = unique(catalogo || []);
+      var exacto = lista.filter(function (x) { return normalize(x) === n; });
+      if (exacto.length) return { estado: 'ok', nombre: exacto[0] };
+      var pedazo = lista.filter(function (x) {
+        var nx = normalize(x);
+        return nx.indexOf(n) >= 0 || n.indexOf(nx) >= 0;
+      });
+      if (pedazo.length === 1) return { estado: 'ok', nombre: pedazo[0] };
+      if (pedazo.length > 1) return { estado: 'varios', opciones: pedazo.slice(0, 6) };
+      var parecidos = lista.filter(function (x) { return similarityScore(texto, x) >= 0.5; });
+      if (parecidos.length === 1) return { estado: 'ok', nombre: parecidos[0] };
+      if (parecidos.length > 1) return { estado: 'varios', opciones: parecidos.slice(0, 6) };
+      return { estado: 'nada' };
+    }
+    /** El aviso de "hay varios": se ven los nombres, no hay que adivinarlos. */
+    function textoVariosCatalogo(texto, opciones) {
+      return 'Hay varios que se llaman parecido a "' + texto + '": ' + opciones.join('  ·  ') +
+        '. Escribe cuál de esos es (copia el nombre tal cual) y lo demás que escribiste NO se pierde.';
+    }
+
     // ================== CONSTRUIR REGISTROS A GUARDAR ==================
     function nuevoRequestId() {
       if (window.crypto && typeof window.crypto.randomUUID === 'function') return window.crypto.randomUUID();
@@ -3360,7 +3418,7 @@
           if (!r.Motivo) return { error: 'Selecciona el motivo de la corrección.' };
           if (!r.ReferenciaOriginal) return { error: 'Escribe la referencia del movimiento que estás corrigiendo.' };
         }
-        var e1 = validarItemCatalogo(r.Item, r.NuevoItem);
+        var e1 = validarItemCatalogo(r.Item, r.NuevoItem, null, function (bueno) { r.Item = bueno; });
         if (e1) return { error: e1 };
         var e2 = validarReglas(r.Categoria, r.Item, r.Variante);
         if (e2) return { error: e2 };
@@ -3415,7 +3473,7 @@
         if (!r.Presentacion) return { error: 'Debes poner presentación (bolsa o tarro con tamaño).' };
         if (!esNumero(r.CantidadPresentacion, false)) return { error: 'Debes poner cuántas presentaciones empacaste.' };
         if (!r.Etiqueta) return { error: 'Indica la etiqueta usada. Si no lleva, escribe “Sin etiqueta”.' };
-        var e3 = validarItemCatalogo(r.Item, r.NuevoItem);
+        var e3 = validarItemCatalogo(r.Item, r.NuevoItem, null, function (bueno) { r.Item = bueno; });
         if (e3) return { error: e3 };
         var e4 = validarPresentacion(r.Presentacion);
         if (e4) return { error: e4 };
@@ -3430,7 +3488,7 @@
         if (!esNumero(r.Cantidad, false)) return { error: 'Debes poner cantidad de palos.' };
         r.Unidad = 'und';
         r.Categoria = 'Producto terminado';
-        var e5 = validarItemCatalogo(r.Item, r.NuevoItem);
+        var e5 = validarItemCatalogo(r.Item, r.NuevoItem, null, function (bueno) { r.Item = bueno; });
         if (e5) return { error: e5 };
         return { records: [r] };
       }
@@ -3560,12 +3618,17 @@
       for (var i = 0; i < mpsValidas.length; i++) {
         var m = mpsValidas[i];
         if (!esNumero(m.cantidad, false)) return { error: 'Ponle cantidad a "' + m.item + '".' };
-        var existe = catalogoMp.some(function (x) { return normalize(x) === normalize(m.item); });
+        // "peroxido" ES "Peróxido 50%", y "sulfonico" ES "Acido Sulfónico". Se resuelve
+        // contra el catálogo y se guarda con el NOMBRE DEL CATÁLOGO, no con el que se
+        // tecleó: si no, el saldo del ítem se parte en dos nombres. Ver resolverEnCatalogo.
+        var resuelto = resolverEnCatalogo(m.item, catalogoMp);
+        if (resuelto.estado === 'varios') return { error: textoVariosCatalogo(m.item, resuelto.opciones) };
+        if (resuelto.estado === 'ok') m.item = resuelto.nombre;
         // NO MANDAR A UNA PANTALLA QUE YA NO EXISTE. "Llegó mercancía" salió de esta app el
         // 10-ago-2026 (lo que entra a la bodega se registra en /compras) y en esta ya no se
         // crean ítems desde el 4-sep. Decirle "regístrala primero en Llegó mercancía" lo
         // dejaba dando vueltas buscando un botón que no está, con la producción sin guardar.
-        if (!existe) return { error: 'La materia prima "' + m.item + '" no aparece en la lista. ' +
+        if (resuelto.estado !== 'ok') return { error: 'La materia prima "' + m.item + '" no aparece en la lista. ' +
           'Escógela del desplegable (la lista trae todo lo que ya tiene movimientos). ' +
           'Si de verdad es nueva, primero se crea en Siigo y se ata en la pantalla /enlaces; ' +
           'esta app ya no crea ítems. Mientras tanto, quita ese renglón y guarda el resto para no perder la producción.' };
@@ -3700,7 +3763,8 @@
       // materia prima directa
       var item = valueOf('Item');
       if (!item) return { error: 'Escribe cuál materia prima empacaste.' };
-      var e1 = validarItemCatalogo(item, document.getElementById('CrearNuevoItem').checked ? 'Sí' : 'No', unique(getCatalog('materiasPrimas')));
+      var e1 = validarItemCatalogo(item, document.getElementById('CrearNuevoItem').checked ? 'Sí' : 'No',
+        unique(getCatalog('materiasPrimas').concat(invItems('Materia prima'))), function (bueno) { item = bueno; });
       if (e1) return { error: e1 };
       var rm = baseRecord('Empacar materia prima');
       rm.Categoria = 'Materia prima';
@@ -3733,15 +3797,24 @@
       rM.Observacion = ('Detectado durante el empaque. ' + valueOf('Observacion')).trim();
       return rM;
     }
-    function validarItemCatalogo(item, nuevoItem, opciones) {
+    /**
+     * `aplicar` recibe el nombre BUENO cuando lo escrito se pudo resolver contra el
+     * catálogo (ver resolverEnCatalogo). El que llama lo usa para reescribir el registro:
+     * lo que viaja a la hoja tiene que ser el nombre del catálogo, nunca el tecleado, o el
+     * saldo del ítem termina repartido entre "peroxido" y "Peróxido 50%".
+     */
+    function validarItemCatalogo(item, nuevoItem, opciones, aplicar) {
       var options = opciones || getItemOptions();
-      var existe = options.some(function (x) { return normalize(x) === normalize(item); });
-      if (!existe && nuevoItem !== 'Sí') {
-        return 'El ítem "' + item + '" no está en la lista. Escógelo del desplegable tal como aparece.'
-          + ' Si de verdad falta, se crea en Siigo y se ata en /enlaces: avisa cuál es y se crea.'
-          + ' Aquí no se crean ítems.';
+      if (nuevoItem === 'Sí') return '';
+      var resuelto = resolverEnCatalogo(item, options);
+      if (resuelto.estado === 'ok') {
+        if (typeof aplicar === 'function' && resuelto.nombre !== item) aplicar(resuelto.nombre);
+        return '';
       }
-      return '';
+      if (resuelto.estado === 'varios') return textoVariosCatalogo(item, resuelto.opciones);
+      return 'El ítem "' + item + '" no está en la lista. Escógelo del desplegable tal como aparece.'
+        + ' Si de verdad falta, se crea en Siigo y se ata en /enlaces: avisa cuál es y se crea.'
+        + ' Aquí no se crean ítems.';
     }
     function validarReglas(categoria, item, variante) {
       if (categoria === 'Envase' && item && !hasSize(item)) {
