@@ -275,3 +275,11 @@ test('el tamaño NUNCA trae el producto de otra familia', () => {
   // Y el galon del desincrustante, que SI es suyo, se sigue resolviendo solo.
   assert.equal(buscarEnSiigo('Full desincrustante', 'Galón 4 L').sku, 'LIM076');
 });
+
+test('el nombre del rollo nace del mismo sitio: no se crean etiquetas por tamaño', () => {
+  // La casilla "Variante" de una entrada de Etiquetas es donde NACE el nombre del rollo.
+  // Ofrecia el catalogo de producto terminado (producto + envase) y por ahi entraron los
+  // rollos con tamaño en el nombre que hoy arrastra el inventario.
+  assert.match(source, /function getVarianteOptions\(\)[\s\S]*getEtiquetaOptions\(\)/);
+  assert.doesNotMatch(source, /function getVarianteOptions\(\)[\s\S]{0,400}\['Genérica'\]\.concat\(getCatalog\('productos'\)\)/);
+});

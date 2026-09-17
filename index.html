@@ -3226,7 +3226,14 @@
       var categoria = valueOf('Categoria');
       var item = normalize(valueOf('Item'));
       if (categoria === 'Etiqueta' || item === 'etiqueta') {
-        return unique(['Genérica'].concat(getCatalog('productos')));
+        // AQUI ES DONDE NACE EL NOMBRE DEL ROLLO, y por eso va la MISMA lista de tipos.
+        // Ofrecia los 228 del catalogo de producto terminado, que se llaman producto +
+        // envase: por ahi entraron los 14 rollos con tamaño en el nombre que hoy tiene el
+        // inventario ("DETERFULL GALON", "Cera para pisos Galón 4 L", "AMBIENTADOR DE PISO
+        // 2LT"). Un rollo por tamaño no existe: es el mismo para todos.
+        return unique(['Genérica'].concat(getEtiquetaOptions().filter(function (o) {
+          return normalize(o) !== 'sin etiqueta';
+        })));
       }
       return [];
     }
