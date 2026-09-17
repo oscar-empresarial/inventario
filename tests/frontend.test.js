@@ -283,3 +283,77 @@ test('el nombre del rollo nace del mismo sitio: no se crean etiquetas por tamañ
   assert.match(source, /function getVarianteOptions\(\)[\s\S]*getEtiquetaOptions\(\)/);
   assert.doesNotMatch(source, /function getVarianteOptions\(\)[\s\S]{0,400}\['Genérica'\]\.concat\(getCatalog\('productos'\)\)/);
 });
+
+// EL VINAGRE LLEVA SAL (16-sep-2026). Se CORRE buildPreparacion de verdad, con un formulario
+// de mentiras: la pregunta tiene que salir cuando falta la sal, agregar la cantidad de la
+// receta al aceptar, y no tocar lo que el ingeniero ya escribio.
+function cargarPreparacion(form, mps) {
+  const ctx = { console, Math, String, Number, parseFloat, isFinite, Array, Object };
+  vm.createContext(ctx);
+  const tomar = (firma, hasta) => {
+    const i = source.indexOf(firma);
+    assert.ok(i >= 0, 'no se encontro ' + firma);
+    const fin = hasta ? source.indexOf(hasta, i) : source.indexOf('\n    }', i) + 6;
+    assert.ok(fin > i, 'no se encontro el final de ' + firma);
+    return source.slice(i, fin);
+  };
+  const codigo = [
+    tomar('function normalize'), tomar('function unique'), tomar('function similarityScore'),
+    tomar('function resolverEnCatalogo'), tomar('function textoVariosCatalogo'),
+    tomar('function conPunto'), tomar('function esNumero'),
+    tomar('var _confirmoSoloConsumo'),
+    tomar('function buildPreparacion()', '\n    function buildEmpaque()'),
+  ].join('\n');
+  vm.runInContext(codigo, ctx);
+  Object.assign(ctx, {
+    valueOf: k => (form[k] == null ? '' : form[k]),
+    leerFilasMp: () => mps.map(m => Object.assign({ variante: '' }, m)),
+    infoTanque: () => null,
+    baseRecord: tipo => ({ TipoRegistro: tipo }),
+    getCatalog: () => ['Acético', 'Agua', 'Sal', 'Salicilato'],
+    invItems: () => [],
+    state: { catalogos: {} },
+    document: { getElementById: () => ({ checked: true }) },
+  });
+  return ctx;
+}
+
+test('preparar vinagre sin sal PREGUNTA y al aceptar agrega la de la receta', () => {
+  const form = { Destino: 'tanque', TamborID: '11', Producto: 'Vinagre para consumo y limpieza', LitrosPreparados: '119' };
+  const ctx = cargarPreparacion(form, [{ item: 'Acético', cantidad: '3', unidad: 'L' }, { item: 'Agua', cantidad: '116', unidad: 'L' }]);
+  const r = ctx.buildPreparacion();
+  assert.ok(!r.error, r.error);
+  assert.ok(r.confirmar, 'tenia que preguntar por la sal');
+  assert.match(r.confirmar, /108 g de sal/);
+  const records = r.build();
+  assert.equal(records.length, 1);
+  const sal = records[0].Componentes.filter(c => c.Item === 'Sal');
+  assert.equal(sal.length, 1);
+  assert.equal(sal[0].Cantidad, '108');
+  assert.equal(sal[0].Unidad, 'g');
+  // y la bandera no se queda prendida para la siguiente preparacion
+  assert.ok(ctx.buildPreparacion().confirmar);
+});
+
+test('si el ingeniero ya puso la sal, vale la suya y no se pregunta', () => {
+  const form = { Destino: 'tanque', TamborID: '11', Producto: 'Vinagre para consumo y limpieza', LitrosPreparados: '110' };
+  const ctx = cargarPreparacion(form, [{ item: 'Acético', cantidad: '3', unidad: 'L' },
+    { item: 'Agua', cantidad: '107', unidad: 'L' }, { item: 'sal', cantidad: '150', unidad: 'g' }]);
+  const r = ctx.buildPreparacion();
+  assert.ok(!r.error && !r.confirmar, r.error || r.confirmar);
+  const sal = r.records[0].Componentes.filter(c => c.Item === 'Sal');
+  assert.equal(sal.length, 1);
+  assert.equal(sal[0].Cantidad, '150');
+});
+
+test('otro producto no pide sal, y la pregunta no tapa las demas validaciones', () => {
+  const ctx = cargarPreparacion({ Destino: 'tanque', TamborID: '12', Producto: 'Deterfull', LitrosPreparados: '110' },
+    [{ item: 'Agua', cantidad: '109', unidad: 'L' }, { item: 'Acético', cantidad: '1', unidad: 'L' }]);
+  const r = ctx.buildPreparacion();
+  assert.ok(!r.error && !r.confirmar && r.records.length === 1);
+  // vinagre con la formula corta: primero el error de la formula, no la sal
+  const ctx2 = cargarPreparacion({ Destino: 'tanque', TamborID: '11', Producto: 'Vinagre para consumo y limpieza', LitrosPreparados: '119' },
+    [{ item: 'Acético', cantidad: '3', unidad: 'L' }, { item: 'Agua', cantidad: '50', unidad: 'L' }]);
+  const r2 = ctx2.buildPreparacion();
+  assert.match(r2.error || '', /incompleta/);
+});

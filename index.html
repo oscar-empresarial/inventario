@@ -1463,7 +1463,7 @@
         'EXXSOL Galón', 'Butylglycol', 'Bicarbonato', 'Silicona Pura', 'Salicilato',
         'Aceite Mineral USP', 'Creolina 3*1', 'Blend Ecov', 'Deltaforce', 'Quita Óxido',
         'Mentol Cristales', 'Cloruro de Benzalconio', 'Clorhexidina', 'Suavizante',
-        'PAC Líquido', 'Bicromato de Potasio', 'Detergente en Bulto', 'Agua'
+        'PAC Líquido', 'Bicromato de Potasio', 'Detergente en Bulto', 'Agua', 'Sal'
       ],
       fragancias: ['Chicle', 'Canela', 'Bouquet', 'Lavanda', 'Limón', 'Dulce', 'Cítrico'],
       colores: ['Azul', 'Verde', 'Amarillo', 'Rojo', 'Morado'],
@@ -3758,11 +3758,53 @@
         if (cobertura > 1.05) return { error: 'La fórmula declara más volumen que la producción. Revisa cantidades y unidades.' };
         produccion.FormulaCompleta = true;
         produccion.Componentes = componentes;
+
+        // EL VINAGRE LLEVA SAL. Oscar, 16-sep-2026: la receta la trae (100 g por lote de
+        // 110 L, hoja Vinagre del Excel de costeo) y Carlos nunca la registraba, asi que la
+        // sal no se descontaba de ningun lado. Va de ULTIMO a proposito: si la pregunta
+        // saliera antes de las otras validaciones, al aceptar se rearmaria la preparacion,
+        // otra validacion podria frenarla y se perderia la respuesta.
+        // No se adivina la cantidad que ya escribio: si puso sal, vale la suya.
+        var faltaSal = SAL_VINAGRE.aplica(produccion.Producto) &&
+          !componentes.some(function (c) { return normalize(c.Item) === 'sal'; });
+        if (faltaSal) {
+          var gSal = SAL_VINAGRE.gramos(conPunto(litros));
+          if (gSal > 0 && _agregarSalVinagre) {
+            componentes.push({ Item: 'Sal', Variante: '', Cantidad: String(gSal), Unidad: 'g' });
+          } else if (gSal > 0) {
+            return {
+              confirmar: 'El vinagre lleva SAL y no la anotaste.\n\n' +
+                'Para ' + litros + ' L la receta pide ' + gSal + ' g de sal (100 g por cada 110 L).\n\n' +
+                '· Aceptar = agregar ' + gSal + ' g de sal y guardar\n' +
+                '· Cancelar = volver y escribir la sal que de verdad le echaste',
+              alCancelar: 'Preparación',
+              build: function () {
+                _agregarSalVinagre = true;
+                try { var r = buildPreparacion(); return r.records || []; }
+                finally { _agregarSalVinagre = false; }
+              }
+            };
+          }
+        }
       }
 
       if (!records.length) return { error: 'No hay nada para guardar.' };
       return { records: records };
     }
+
+    // La sal del vinagre: cuanto pide la receta por litro preparado. Vive aqui y en
+    // 3-INVENTARIO/ajuste_sal_vinagre.mjs (que la lee de la receta en D1); si la receta
+    // cambia, se cambian los dos.
+    var SAL_VINAGRE = {
+      gramosPorLitro: 100 / 110,
+      aplica: function (producto) { return normalize(producto).indexOf('vinagre') >= 0; },
+      gramos: function (litros) {
+        var l = parseFloat(litros);
+        return isFinite(l) && l > 0 ? Math.round(l * this.gramosPorLitro) : 0;
+      }
+    };
+    // En true SOLO mientras se rearma la preparacion despues de aceptar la sal.
+    var _agregarSalVinagre = false;
 
     function buildEmpaque() {
       var sub = valueOf('Subempaque');
