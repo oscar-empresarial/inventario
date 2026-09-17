@@ -857,7 +857,7 @@
                 <input id="Etiqueta" placeholder="Ej: Genérica, Deterfull, Sin etiqueta" />
                 <div id="etiquetaSuggestions" class="suggest-box"></div>
               </div>
-              <div class="hint">De qué producto es la etiqueta. Si no lleva, escribe “Sin etiqueta”.</div>
+              <div class="hint">De qué producto es la etiqueta: el tipo, no el tamaño (el tamaño ya lo dice la Presentación). Si no lleva, escribe “Sin etiqueta”.</div>
             </div>
             <div class="field hidden" data-field="resultante">
               <label>¿A qué producto resulta?</label>
@@ -1602,27 +1602,9 @@
       setupSuggest('Presentacion', 'presentacionSuggestions', getPresentacionOptions, null, 'envase');
       setupSuggest('TamborID', 'tamborSuggestions', getTamborOptions, updateTanqueCampos);
       document.getElementById('TamborID').addEventListener('input', updateTanqueCampos);
-      // Mismo campo de siempre, mismo sitio: lo único que cambia es que ahora también
-      // sugiere los productos DE SIIGO. Al escoger uno, el SKU viaja solo con el registro
-      // y ya no hay que traducir nombres a mano después. Lo que ya conocía (Sin etiqueta,
-      // Genérica, los productos propios) sigue primero para no descolocarlo.
-      setupSuggest('Etiqueta', 'etiquetaSuggestions', function () {
-        // AQUÍ CABEN LAS DOS LISTAS, Y ESO IMPORTA.
-        //
-        // Primero puse los 1.245 de Siigo de primeras (para que el SKU viajara) y le tapé
-        // al ingeniero SUS propias etiquetas: la caja de sugerencias solo muestra 10, así
-        // que los nombres de toda la vida quedaron fuera. Oscar, 2026-08-12: "en la app del
-        // ingeniero solo aparecen productos de siigo, los que tenía antes no aparecen".
-        //
-        // Ahora se reparte el cupo: primero lo suyo (que es poco y se lo sabe), y detrás
-        // los de Siigo que coincidan con lo que está escribiendo. Así ve sus etiquetas Y
-        // encuentra el producto con código cuando lo busca.
-        var propias = unique(['Sin etiqueta', 'Genérica'].concat(getCatalog('productos')));
-        var escrito = normalize(valueOf('Etiqueta'));
-        var siigo = opcionesSiigo();
-        if (escrito) siigo = siigo.filter(function (o) { return normalize(o.value).indexOf(escrito) >= 0; });
-        return propias.concat(siigo.slice(0, 40));
-      }, null, 'libre');
+      // Mismo campo de siempre, mismo sitio. Lo que cambia (16-sep) es que la lista es de
+      // TIPOS de producto y no de tamaños: ver getEtiquetaOptions.
+      setupSuggest('Etiqueta', 'etiquetaSuggestions', getEtiquetaOptions, null, 'libre');
       setupSuggest('BaseTanque', 'baseSuggestions', getTamborOptions);
       setupSuggest('ItemDestino', 'itemDestinoSuggestions', getItemOptions);
       setupSuggest('Accesorio', 'accesorioSuggestions', function () {
@@ -2578,7 +2560,9 @@
       } else {
         oculto.value = '';
         caja.innerHTML = '<span class="hint">' + (varios && varios.length
-          ? 'Hay ' + varios.length + ' posibles. Toca “Cambiar” y escoge cuál es.'
+          ? (varios.length === 1
+              ? 'Hay uno parecido, pero el tamaño no cuadra. Toca “Cambiar” y confirma cuál es.'
+              : 'Hay ' + varios.length + ' posibles. Toca “Cambiar” y escoge cuál es.')
           : 'Sin definir todavía. Toca “Cambiar” para escogerlo.') + '</span>';
       }
     }
@@ -2766,8 +2750,115 @@
       return { sku: sku, nombre: sku };
     }
 
-    function opcionesSiigo() {
-      return siigoProductos.map(function (p) { return { value: p.nombre, label: p.nombre + '  ·  ' + p.sku }; });
+    // ============ LA ETIQUETA ES POR TIPO DE PRODUCTO, NUNCA POR TAMAÑO ============
+    //
+    // Oscar, 2026-09-16: "cuando Carlos va a elegir la etiqueta del producto, aparecen todos
+    // los productos de Siigo. Ya te había recordado que eso no puede ser así, porque por
+    // tamaño no se etiqueta, sino por TIPO de producto. [Un producto] no tiene distintas
+    // variaciones, tiene una única variación: etiqueta de ese producto y ya. Y si se le
+    // elige al galón, que sea por su distinto".
+    //
+    // LO QUE SALIA, medido el 16-sep contra el catalogo real: escribir "extermin" en la
+    // casilla de la etiqueta le mostraba DIECIOCHO renglones — el de 500 ml, el de 2 LT, el
+    // galon, la pimpina, los dos de bomba fumigadora, el combo de 4 productos, las dos
+    // recargas, el ENVASE de extermin y hasta la materia prima. "deterfull" le mostraba
+    // diez, que son el MISMO rollo de etiquetas en cinco tamaños.
+    //
+    // Y eso no es un detalle de comodidad: el rollo que Carlos pega es uno solo por
+    // producto. Pedirle que escoja entre cinco tamaños de etiqueta es pedirle que adivine
+    // algo que no existe, y de ahi salen los SKU cruzados (ver buscarEnSiigo).
+    //
+    // El tamaño ya lo dice la PRESENTACION, que es el campo de al lado. Aqui va el TIPO:
+    // los nombres de Siigo se juntan quitandoles el tamaño, asi que los cinco Deterfull
+    // quedan en UN renglon, y un producto de una sola presentacion deja UN renglon — no hay
+    // nada que escoger.
+    // El "L" y el "g" solos cuentan: en la casa se escribe "Galón 4 L" y "Bolsa 500 g".
+    var TAMANO_CON_NUMERO = /\b\d+(?:[.,]\d+)?\s*(?:cc|cm3|ml|lts|lt|litros|litro|l|gramos|gr|g|kilos|kilo|kgs|kg|libras|libra|lbs|lb|onz|oz|und|unidades)\b/gi;
+    var TAMANO_SUELTO = /\b(?:lt|lts|litro|litros|ml|cc|galon|galón|pimpina|bulto|garrafa|caneca|onza|onzas)\b/gi;
+    // Lo que NUNCA lleva etiqueta de producto terminado: no tiene por que estorbar la lista.
+    // "evnase" no es un error de aqui: asi quedaron escritos tres envases en el inventario.
+    var NO_SE_ETIQUETA = /(combo|kit|oferta|muestra|promo|recarga|envase|evnase|gatillo|materia prima|^\s*mp\b)/i;
+    var COLOR_DEL_ENVASE = /\s+(transparente|opaco|opaca|azul|ambar|ámbar|blanco|negro|reciclado|recuperado|liso)$/i;
+    function tipoDeEtiqueta(nombre) {
+      return String(nombre || '')
+        .replace(TAMANO_CON_NUMERO, ' ')
+        .replace(TAMANO_SUELTO, ' ')
+        .replace(/\bx\s*\d+\b/gi, ' ')
+        // Un numero suelto al final es el tamaño sin unidad ("ECOVARSOL 1000" y
+        // "ECOVARSOL 500" son el mismo rollo de etiqueta). De 3 a 5 cifras: los codigos
+        // largos que algunos nombres arrastran no se tocan.
+        .replace(/\s\d{3,5}\s*$/, ' ')
+        .replace(/\s{2,}/g, ' ')
+        .replace(/[\s.,·-]+$/, '')
+        .trim();
+    }
+    // EL CATALOGO DE PRODUCTOS DEL SERVIDOR ES "PRODUCTO + ENVASE", Y AHI ESTABA EL LIO.
+    //
+    // Los 228 nombres que manda el servidor son el inventario de producto TERMINADO, y cada
+    // uno se llama producto + presentacion: "Deterfull transparente 1 L", "Deterfull
+    // Galón 4 L", "Deterfull Opaco 2 L", "Extermin Pimpina 20 L", "Extermin Bomba
+    // fumigadora 2 L", "Extermin Recarga litros"... Eso es un INVENTARIO, no una lista de
+    // etiquetas: son el mismo rollo repetido por cada envase que existe.
+    //
+    // Se le quita el envase con la lista de envases de verdad (la misma que llena la casilla
+    // de Presentacion), comparando palabra por palabra desde el final. Asi los 228 quedan en
+    // ~83 productos, que es lo que de verdad se etiqueta.
+    function quitarEnvase(nombre) {
+      var palabras = String(nombre || '').trim().split(/\s+/);
+      if (palabras.length < 2) return String(nombre || '').trim();
+      var norm = palabras.map(normalize);
+      var envases = unique(getCatalog('presentaciones')
+        .concat(invItems('Envase')).concat(getCatalog('envases')));
+      var mejor = 0;
+      for (var i = 0; i < envases.length; i++) {
+        var e = normalize(envases[i]).split(' ').filter(Boolean);
+        if (!e.length || e.length >= palabras.length || e.length <= mejor) continue;
+        var ok = true;
+        for (var j = 0; j < e.length; j++) {
+          if (norm[norm.length - e.length + j] !== e[j]) { ok = false; break; }
+        }
+        if (ok) mejor = e.length;
+      }
+      return mejor ? palabras.slice(0, palabras.length - mejor).join(' ') : palabras.join(' ');
+    }
+
+    function getEtiquetaOptions() {
+      // 1. Los rollos de etiqueta que de verdad hay en el inventario, con el nombre EXACTO:
+      //    al empacar se descuenta la etiqueta por ese nombre, asi que aqui no se toca nada.
+      //    Y detras los productos de la casa, que son pocos y se los sabe de memoria.
+      var propias = unique(['Sin etiqueta', 'Genérica']
+        .concat(getCatalog('etiquetas').filter(function (e) { return normalize(e) !== 'etiqueta'; }))
+        .concat(catalogosLocales.productos));
+      var vistos = {};
+      propias.forEach(function (p) { vistos[normalize(p)] = true; });
+      var agregar = function (lista, nombre) {
+        var t = tipoDeEtiqueta(nombre);
+        var k = normalize(t);
+        if (!t || vistos[k] || NO_SE_ETIQUETA.test(t)) return;
+        // El COLOR del envase tampoco es una etiqueta. "Deterfull transparente" es el
+        // Deterfull en envase transparente: si el producto ya esta en la lista, no entra
+        // otra vez por el color del frasco. Si NO estuviera (el caso de "Varsol
+        // transparente", que es un producto de verdad), entra igual.
+        var base = t;
+        while (COLOR_DEL_ENVASE.test(base)) {
+          base = base.replace(COLOR_DEL_ENVASE, '');
+          if (vistos[normalize(base)]) return;
+        }
+        vistos[k] = true;
+        lista.push(t);
+      };
+      // 2. Lo que el laboratorio ya ha empacado, sin el envase: un renglon por producto.
+      var delLab = [];
+      ((state.catalogos && state.catalogos.productos) || []).forEach(function (p) {
+        agregar(delLab, quitarEnvase(p));
+      });
+      // 3. Y por ultimo los tipos de Siigo, para poder encontrar un producto nuevo que
+      //    todavia no esta en ninguna de las dos listas de arriba.
+      var deSiigo = [];
+      siigoProductos.forEach(function (p) {
+        if (!NO_SE_ETIQUETA.test(p.nombre)) agregar(deSiigo, p.nombre);
+      });
+      return propias.concat(delLab).concat(deSiigo);
     }
     // Devuelve el SKU si lo que quedó escrito es un producto de Siigo. Si el operario
     // escribió otra cosa, devuelve '' y todo sigue funcionando como antes.
@@ -2843,7 +2934,9 @@
       // Vidrios Limpios con Deterfull Litro" llevaba el nombre y el tamaño, así que
       // aparecía junto al Deterfull de verdad y obligaba a preguntar por gusto. Si el
       // ingeniero escribe esa palabra en la etiqueta, entonces sí la está buscando.
-      var ESTORBOS = ['combo', 'kit', 'oferta', 'muestra', 'recarga', 'promo'];
+      // "envase" va en la lista desde el 16-sep: empacar nunca PRODUCE un envase, lo
+      // consume. Y aun asi "Envase extermin 500 ml" salia de candidato al empacar Extermin.
+      var ESTORBOS = ['combo', 'kit', 'oferta', 'muestra', 'recarga', 'promo', 'envase'];
       var pedidos = ESTORBOS.filter(function (w) { return normalize(etiqueta).indexOf(w) >= 0; });
       var sirve = function (p) {
         var n = normalize(p.nombre);
@@ -2858,13 +2951,28 @@
       // "DETERFULL LT"); pedir solo la primera dejaba empates tontos ("Extermin con aroma a
       // limon" contra el Extermin sin aroma). Gana el que coincida en MAS palabras, y solo
       // se resuelve solo cuando hay un unico ganador.
+      //
+      // PRIMERO EL PRODUCTO, DESPUES EL TAMAÑO. Hasta el 16-sep el tamaño de la
+      // presentacion filtraba ANTES de puntuar, y eso hacia justo lo que Oscar dice que no
+      // puede pasar: mezclaba productos distintos por venir del mismo tamaño. Medido
+      // contra el catalogo real, con el codigo viejo:
+      //   etiqueta "Full desincrustante" + "Tarro 1 L"    -> guardaba FUL7777 = ShoeFull Lt
+      //   etiqueta "Full desincrustante" + "Frasco 250 ml"-> guardaba SHOE250 = ShoeFull 250
+      //   etiqueta "Detergente de ropa de coco…" + 500 ml -> guardaba FUL145 = Aceite Coco
+      //   etiqueta "Varsol transparente" + "Frasco 250 ml"-> guardaba un ENVASE
+      // Ninguno daba error: el SKU equivocado entraba callado, y con el la etiqueta que se
+      // pega al envase y el producto que despues se factura.
+      //
+      // Ahora se busca la FAMILIA por el nombre (el tipo de producto, que es lo que dice la
+      // etiqueta) y el tamaño solo desempata DENTRO de esa familia. Si el tamaño no cuadra
+      // con ninguna de SUS presentaciones, se pregunta con las suyas — nunca con las de
+      // otro producto.
+      var DISTINGUEN = ['aroma', 'limon', 'bomba', 'fumigadora', 'antibacterial', 'bebe', 'industrial', 'sin color', 'recarga', 'combo'];
+      var puntuar = function (conDistinguen) {
       var puntuados = [];
       for (var k = 0; k < siigoProductos.length; k++) {
         var p = siigoProductos[k];
         if (!sirve(p)) continue;
-        // Sin tamano en la presentacion no se puede desempatar por ahi: pasa y que el
-        // nombre haga el trabajo.
-        if (tam && tamanoDe(p.nombre) !== tam) continue;
         var n = normalize(p.nombre);
         var palabrasN = n.split(' ');
         var punto = 0;
@@ -2881,10 +2989,11 @@
         // producto las trae y la etiqueta NO. Asi "Extermin" le gana al "Extermin aroma",
         // y si el escribe "Extermin con aroma" gana el otro. El tamano lo sigue diciendo la
         // presentacion, que es lo correcto: la etiqueta nunca dice el tamano.
-        var DISTINGUEN = ['aroma', 'limon', 'bomba', 'fumigadora', 'antibacterial', 'bebe', 'industrial', 'sin color', 'recarga', 'combo'];
-        for (var z = 0; z < DISTINGUEN.length; z++) {
-          var d = DISTINGUEN[z];
-          if (n.indexOf(d) >= 0 && normalize(etiqueta).indexOf(d) < 0) punto -= 2;
+        if (conDistinguen) {
+          for (var z = 0; z < DISTINGUEN.length; z++) {
+            var d = DISTINGUEN[z];
+            if (n.indexOf(d) >= 0 && normalize(etiqueta).indexOf(d) < 0) punto -= 2;
+          }
         }
         for (var i = 0; i < palabras.length; i++) {
           var w = palabras[i];
@@ -2894,13 +3003,47 @@
         }
         if (punto > 0) puntuados.push({ p: p, punto: punto });
       }
+      return puntuados;
+      };
+
+      // LA RESTA NO PUEDE DEJAR AL PRODUCTO SIN FAMILIA. Los cinco Deterfull de Siigo se
+      // llaman "…Desengrasante Industrial", y la palabra "industrial" descuenta 2: con la
+      // etiqueta "Deterfull" TODOS quedaban en negativo y la app no proponia nada — ni
+      // siquiera para el galon. La resta sirve para desempatar entre hermanos (aroma contra
+      // sin aroma), no para borrar al unico candidato. Si nadie queda en pie, se vuelve a
+      // puntuar sin ella.
+      var puntuados = puntuar(true);
+      if (!puntuados.length) puntuados = puntuar(false);
       if (!puntuados.length) return null;
       var mejor = 0;
       puntuados.forEach(function (x) { if (x.punto > mejor) mejor = x.punto; });
-      var candidatos = puntuados.filter(function (x) { return x.punto === mejor; })
-                                .map(function (x) { return x.p; });
-      if (candidatos.length === 1) return { sku: candidatos[0].sku, nombre: candidatos[0].nombre };
-      return { varios: candidatos.slice(0, 8) };
+      var familia = puntuados.filter(function (x) { return x.punto === mejor; })
+                             .map(function (x) { return x.p; });
+
+      // UNA SOLA PRESENTACION = NO HAY NADA QUE ESCOGER. Es el caso que pidio Oscar: el
+      // producto que existe en un solo tamaño se asigna solo, sin preguntarle el tamaño a
+      // nadie. Dos frenos, porque de aqui sale la etiqueta fisica:
+      //  - si la presentacion dice un tamaño y el producto dice OTRO, no se asigna: se pregunta.
+      //  - si los dos nombres traen una medida con coma y no es la misma, tampoco (un
+      //    "Palo aluminio mariposa 1.20 m" no se guarda como el cabo de 1.50).
+      if (familia.length === 1) {
+        var tamProd = tamanoDe(familia[0].nombre);
+        var medidaE = normalize(etiqueta).match(/\d+[.,]\d+/);
+        var medidaP = normalize(familia[0].nombre).match(/\d+[.,]\d+/);
+        var chocaMedida = medidaE && medidaP && medidaE[0] !== medidaP[0];
+        var chocaTamano = tam && tamProd && tamProd !== tam;
+        if (!chocaMedida && !chocaTamano) return { sku: familia[0].sku, nombre: familia[0].nombre };
+        return { varios: familia };
+      }
+
+      // Varias presentaciones de verdad: ahora si manda el tamaño, pero solo para escoger
+      // entre las de ESTE producto.
+      if (tam) {
+        var porTam = familia.filter(function (p2) { return tamanoDe(p2.nombre) === tam; });
+        if (porTam.length === 1) return { sku: porTam[0].sku, nombre: porTam[0].nombre };
+        if (porTam.length) familia = porTam;
+      }
+      return { varios: familia.slice(0, 8) };
     }
 
     /**
