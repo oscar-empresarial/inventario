@@ -952,7 +952,6 @@
             <h4>⚠ Esto no tiene existencia registrada en el inventario</h4>
             <p>Ve, revisa físicamente cuánto hay de cada cosa y regístralo aquí mismo (quedará marcado como CONTEO en la trazabilidad). Si es porque acaba de llegar, eso entra por la app de compras cuando se marca la orden como recibida, no aquí. Después vuelve a presionar Guardar.</p>
             <div id="stockFilas"></div>
-            <button type="button" class="btn-azul" id="btnOmitirStock" style="margin-top:6px">Guardar de todas formas sin registrar existencias</button>
           </div>
 
           <div class="actions">
@@ -1167,38 +1166,6 @@
       <h3>¡Vamos a trabajar excelente hoy!</h3>
       <p>Con la ayuda de Dios todo sale mejor. 💪</p>
       <p class="verso" id="versoDia"></p>
-    </div>
-  </div>
-
-  <!-- Modal crear envase -->
-  <div id="modalEnvase" class="overlay">
-    <div class="tour-caja">
-      <h3>Crear envase nuevo</h3>
-      <div style="margin-bottom:10px">
-        <label for="envNombre">Nombre del envase</label>
-        <input id="envNombre" placeholder="Ej: Tarro, Galón, Bolsa, Botella ámbar" />
-      </div>
-      <div class="row" style="margin-bottom:14px">
-        <div>
-          <label for="envCapacidad">Capacidad</label>
-          <input id="envCapacidad" type="text" inputmode="decimal" placeholder="Ej: 4" />
-        </div>
-        <div>
-          <label for="envMedida">Medida</label>
-          <select id="envMedida">
-            <option value="ml">ml (mililitros)</option>
-            <option value="L">L (litros)</option>
-            <option value="g">g (gramos)</option>
-            <option value="kg">kg (kilos)</option>
-            <option value="lb">lb (libras)</option>
-          </select>
-        </div>
-      </div>
-      <div class="hint" style="margin-bottom:12px">Quedará como “Tarro 4 L”. Con esa capacidad la app descuenta del tanque al empacar.</div>
-      <div style="display:flex;gap:8px;justify-content:flex-end">
-        <button type="button" class="clear" id="btnEnvCancelar" style="padding:10px 14px">Cancelar</button>
-        <button type="button" class="btn-verde" id="btnEnvCrear">Crear envase</button>
-      </div>
     </div>
   </div>
 
@@ -1476,7 +1443,6 @@
       conciliacion: null,
       correccionProducciones: [],
       revTab: 'pendientes',
-      omitirStock: false,
       backendVersion: '',
       backendCompatible: false
     };
@@ -1592,11 +1558,6 @@
         });
       });
       document.getElementById('btnMpAgregar').addEventListener('click', function () { agregarFilaMp(); });
-      document.getElementById('btnOmitirStock').addEventListener('click', function () {
-        state.omitirStock = true;
-        ocultarStockAviso();
-        document.getElementById('mainForm').requestSubmit();
-      });
       document.getElementById('btnInvRecargar').addEventListener('click', loadInventario);
       document.getElementById('invBuscar').addEventListener('input', renderInventario);
       document.getElementById('btnMovCargar').addEventListener('click', loadMovimientos);
@@ -2444,7 +2405,6 @@
     // ================== SELECCIÓN DE TIPO ==================
     function selectType(type) {
       state.selectedType = type;
-      state.omitirStock = false;
       state.resultanteFijado = false;
       ocultarStockAviso();
       document.getElementById('formTitle').textContent = type === 'Preparación' ? 'Preparé / usé materia prima' : type;
@@ -3046,7 +3006,6 @@
       // adentro, 10 dejaban por fuera lo que el operario buscaba. 18 caben en pantalla y
       // dan aire para que salgan las dos listas.
       list = list.slice(0, 18);
-      var esModalEnvase = allowCreate === 'envase' || (input.id === 'Item' && valueOf('Categoria') === 'Envase' && allowCreate);
       // 🔴 AQUI SE CORTA LA CREACION DE ITEMS. Oscar, 4-sep-2026: *"no puedes dejar que en
       // esa app se creen items, deshabilita todo eso porfa"*. Antes, cuando lo escrito no
       // estaba en la lista, el desplegable ofrecia "+ Crear nuevo" — y el servidor lo
@@ -3067,7 +3026,7 @@
         box.style.display = 'none';
         return;
       }
-      var textoCrear = esModalEnvase ? '+ Crear envase nuevo' : '+ Crear nuevo: “' + escapeHtml(cap(input.value.trim())) + '”';
+      var textoCrear = '+ Crear nuevo: “' + escapeHtml(cap(input.value.trim())) + '”';
       box.innerHTML = list.map(function (o) {
         return '<div class="suggest-item" data-value="' + escapeHtml(o.value) + '">' + escapeHtml(o.label) + '</div>';
       }).join('') + (puedeCrear
@@ -3076,11 +3035,6 @@
       box.querySelectorAll('.suggest-item').forEach(function (el) {
         el.addEventListener('click', function () {
           if (el.dataset.crear) {
-            if (esModalEnvase) {
-              box.style.display = 'none';
-              abrirModalEnvase(input, afterPick, input.id === 'Item');
-              return;
-            }
             input.value = cap(input.value.trim());
             if (allowCreate === true) document.getElementById('CrearNuevoItem').checked = true;
           } else {
@@ -3091,28 +3045,6 @@
         });
       });
       box.style.display = 'block';
-    }
-
-    // Modal para crear envases con la lógica: nombre + capacidad + medida
-    function abrirModalEnvase(input, afterPick, marcarNuevo) {
-      var m = document.getElementById('modalEnvase');
-      document.getElementById('envNombre').value = '';
-      document.getElementById('envCapacidad').value = '';
-      document.getElementById('envMedida').value = 'ml';
-      m.classList.add('visible');
-      document.getElementById('envNombre').focus();
-      document.getElementById('btnEnvCancelar').onclick = function () { m.classList.remove('visible'); };
-      document.getElementById('btnEnvCrear').onclick = function () {
-        var nombre = valueOf('envNombre');
-        var capNum = valueOf('envCapacidad');
-        var medida = valueOf('envMedida');
-        if (!nombre) { document.getElementById('envNombre').focus(); return; }
-        if (!esNumero(capNum, false)) { document.getElementById('envCapacidad').focus(); return; }
-        input.value = cap(nombre) + ' ' + capNum + ' ' + medida;
-        if (marcarNuevo) document.getElementById('CrearNuevoItem').checked = true;
-        m.classList.remove('visible');
-        if (typeof afterPick === 'function') afterPick();
-      };
     }
     function hideSuggestions() {
       document.querySelectorAll('.suggest-box').forEach(function (box) { box.style.display = 'none'; });
@@ -4151,21 +4083,18 @@
           if (r[k]) r[k] = cap(r[k]);
         });
       });
-      var faltantesAlGuardar = [];
-      if (!state.omitirStock) {
-        // 2026-08-11: ANTES AQUÍ HABÍA UN `return` Y SE PERDÍA EL TRABAJO.
-        //
-        // Si algún ítem no tenía existencia, la app mostraba el aviso y se salía SIN
-        // GUARDAR. El formulario quedaba lleno, así que el ingeniero creía que ya había
-        // registrado — y si no le daba Guardar otra vez, esa producción se iba al vacío.
-        // Con las materias primas mostrando 0 (la hoja nunca recibió el conteo del 7),
-        // esto le saltaba en casi cada registro.
-        //
-        // Ahora SIEMPRE se guarda. El aviso se sigue mostrando, para que registre la
-        // existencia que falta, pero ya no cuesta perder lo que acababa de hacer:
-        // lo que pasó en la planta pasó, y el registro tiene que quedar.
-        faltantesAlGuardar = faltantesDe(records);
-      }
+      // 2026-08-11: ANTES AQUÍ HABÍA UN `return` Y SE PERDÍA EL TRABAJO.
+      //
+      // Si algún ítem no tenía existencia, la app mostraba el aviso y se salía SIN
+      // GUARDAR. El formulario quedaba lleno, así que el ingeniero creía que ya había
+      // registrado — y si no le daba Guardar otra vez, esa producción se iba al vacío.
+      // Con las materias primas mostrando 0 (la hoja nunca recibió el conteo del 7),
+      // esto le saltaba en casi cada registro.
+      //
+      // Ahora SIEMPRE se guarda. El aviso se sigue mostrando, para que registre la
+      // existencia que falta, pero ya no cuesta perder lo que acababa de hacer:
+      // lo que pasó en la planta pasó, y el registro tiene que quedar.
+      var faltantesAlGuardar = faltantesDe(records);
       ocultarStockAviso();
       var btn = document.getElementById('btnSubmit');
       btn.disabled = true;
@@ -4301,7 +4230,6 @@
         showStatus(textoOk, 'ok');
         document.getElementById('Responsable').value = keepResp;
         state.registros = null;
-        state.omitirStock = false;
         // EL INVENTARIO NUEVO, ESPERANDO AL REFRESCO. `parseInventario` no solo llena
         // state.inventario: tambien repuebla state.catalogos.tambores, que es de donde sale la
         // lista de "Empacar desde tambor". Alimentarlo con una copia vieja es lo que hacia
@@ -4347,7 +4275,6 @@
       ocultarStockAviso();
       hideSuggestions();
       setWarning(document.getElementById('itemWarning'), '');
-      state.omitirStock = false;
       // El producto que resulta vuelve a proponerse solo: si el ingeniero lo fijo a mano
       // para el registro anterior, esa decision NO se arrastra al siguiente.
       state.resultanteFijado = false;
@@ -5994,7 +5921,6 @@
 
     var TOUR = [
       { t: 'Bienvenido a la app de Full Company', x: 'Aquí se registra TODO lo que pasa en el laboratorio: lo que llega, lo que se prepara, lo que se empaca y lo que sale. Con eso el inventario se calcula solo, sin cuadernos.\n\nEste tour te explica cada parte. Puedes volver a verlo cuando quieras con el botón ❔ Ayuda.' },
-      { t: '📦 Llegó mercancía', x: 'Registra TODO apenas llegue: materia prima, envases, etiquetas, fragancias, accesorios.\n\n· Elige categoría y busca el ítem en la lista. Si no existe, toca “+ Crear nuevo” en el desplegable.\n· Envases: escríbelos con nombre + capacidad (Tarro 30 ml, Bolsa 1 lb) e indica con qué llegaron tapados (o “Sin tapa”): las tapas quedan registradas solas.\n· Fragancias y colores: SIEMPRE con su nombre (Chicle, Canela, Citrux…).' },
       { t: '🧪 Preparé / usé materia prima', x: 'Todo en un solo paso: eliges DÓNDE lo usaste y anotas todas las materias primas con sus cantidades.\n\n· Tanque nuevo: enuméralo (Tanque 1, Tanque 2…) y pon qué producto lleva.\n· Bases: si preparas CMC preparado, Genapol preparado, etc., ese es el “producto”. Después, cuando un producto use esa base, indicas de cuál tanque la sacaste y cuántos litros.\n· ¿El tanque queda incompleto (falta disolver o reposar)? Marca “Queda EN PROCESO”. Cuando esté, entra de nuevo, elige el tanque existente, marca “Ya quedó LISTO” y guarda: no necesitas poner nada más.' },
       { t: '🧴 Empaqué producto', x: 'Elige el tanque o balde (la lista te muestra qué tiene y cuántos litros le quedan), la presentación, cuántas unidades, la tapa y la etiqueta.\n\nLa app descuenta sola: los litros del tanque, los envases, las tapas y las etiquetas. Y el producto terminado queda con su LOTE (el tanque del que salió).\n\n¿Presentación nueva? Escribe nombre + capacidad: “Tarro 30 ml” — con esa capacidad se descuenta del tanque.\n\nTambién puedes empacar materia prima directa (ácido, varsol) sin tanque.' },
       { t: '⚖️ Sólidos y 🧹 Palos', x: 'Sólidos/polvos: eliges el polvo, la bolsa o tarro y cuántas unidades. Se descuenta el polvo por peso y las bolsas por unidad.\n\nFabricar palos: pones cuántos hiciste y se descuentan solos los tubos, mangos, roscas o piezas de mariposa.' },
