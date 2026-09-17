@@ -2940,6 +2940,11 @@
       var pedidos = ESTORBOS.filter(function (w) { return normalize(etiqueta).indexOf(w) >= 0; });
       var sirve = function (p) {
         var n = normalize(p.nombre);
+        // Ni la MATERIA PRIMA: el 1-sep "Empacar solido/polvo" de CMC CHINO guardo el SKU de
+        // "MP CMC CHINO" y el saldo del CMC subio 24 kg que nunca entraron. Empacar gasta la MP;
+        // el producto que sale es otro. (El puente ya lo frena del otro lado; esto evita
+        // proponerlo.) Va con frontera de palabra: "mp" suelto esta dentro de "limpiador".
+        if (/^mp\b|\bmateria prima\b/.test(n) && !/^mp\b|\bmateria prima\b/.test(normalize(etiqueta))) return false;
         for (var j = 0; j < ESTORBOS.length; j++) {
           if (pedidos.indexOf(ESTORBOS[j]) < 0 && n.indexOf(ESTORBOS[j]) >= 0) return false;
         }
