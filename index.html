@@ -1826,6 +1826,20 @@
     var fuenteUltimaLectura = '';
     function leerBackend(params, onOk, onFail, timeoutMs) {
       var accion = String((params && params.action) || '');
+      // EL CRONOMETRO, de punta a punta: desde que la pantalla pide hasta que tiene los
+      // datos, pase por donde pase (Worker, o Worker fallido y despues Google). Se envuelve
+      // aqui, en el unico sitio por donde salen TODAS las lecturas, para que ninguna se
+      // quede sin medir el dia que alguien agregue una pantalla nueva.
+      var tPedido = Date.now();
+      var okDeLaPantalla = onOk, falloDeLaPantalla = onFail;
+      onOk = function (data) {
+        reportarTiempo('pantalla', Date.now() - tPedido, accion + ' · ' + (fuenteUltimaLectura || '?'));
+        if (okDeLaPantalla) okDeLaPantalla(data);
+      };
+      onFail = function (err) {
+        reportarTiempo('pantalla', Date.now() - tPedido, accion + ' · sin respuesta');
+        if (falloDeLaPantalla) falloDeLaPantalla(err);
+      };
       var vaAlWorker = !!LAB_API && !!LAB_LLAVE && LAB_LLAVE.indexOf('__') !== 0 && ACCIONES_WORKER.indexOf(accion) >= 0;
       function irAGoogle(porQue) {
         if (porQue) console.log('leerBackend: ' + accion + ' cae al Apps Script (' + porQue + ')');
@@ -1886,6 +1900,39 @@
           method: 'POST', keepalive: true,
           headers: { 'Content-Type': 'text/plain;charset=utf-8' },
           body: JSON.stringify(cuerpo)
+        }).catch(function () {});
+      } catch (e) {}
+    }
+
+    // ================== EL CRONOMETRO: LO QUE DE VERDAD ESPERA EL INGENIERO ==================
+    //
+    // 18-sep-2026. Oscar: *"el ingeniero otra vez volvio a quejarse de que esta lenta la
+    // plataforma... necesito que este rapida. Siempre. Nunca lenta."*
+    //
+    // El "otra vez" es el problema: la lentitud solo se sabia cuando alguien se quejaba, y
+    // para entonces ya se habia perdido la mañana. Ahora cada operacion manda cuanto tardo,
+    // medido AQUI, en el celular: incluye la red del laboratorio, la espera de Google y los
+    // reintentos. Es la unica medida que corresponde a la queja — medido desde el servidor,
+    // el 18-sep todo daba 76 ms mientras un guardado tardaba decenas de segundos, porque
+    // guardar no pasa por el Worker (va por POST al Apps Script).
+    //
+    // No molesta, no frena y si falla, falla callado A PROPOSITO: es un apunte al margen,
+    // no puede estorbarle el trabajo a nadie. En el Worker lo recibe action=lento y lo
+    // resume por hora (src/lab_velocidad.js); de ahi salen los renglones de /salud.
+    function reportarTiempo(que, ms, detalle) {
+      try {
+        if (!LAB_API || !LAB_LLAVE || LAB_LLAVE.indexOf('__') === 0 || typeof fetch !== 'function') return;
+        var n = Number(ms);
+        if (!isFinite(n) || n <= 0 || n > 600000) return;
+        fetch(LAB_API, {
+          method: 'POST', keepalive: true,
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({
+            action: 'lento', llave: LAB_LLAVE,
+            que: que, ms: Math.round(n),
+            quien: (typeof valueOf === 'function' ? (valueOf('Responsable') || '') : ''),
+            detalle: String(detalle == null ? '' : detalle).slice(0, 120)
+          })
         }).catch(function () {});
       } catch (e) {}
     }
@@ -4152,7 +4199,23 @@
       });
     }
 
+    /**
+     * GUARDAR, CRONOMETRADO. Esto es lo que el ingeniero llama "la plataforma": el rato que
+     * se queda parado frente al tanque esperando la confirmacion. Se mide entero —los tres
+     * envios, las esperas y las consultas— y se manda al Worker, salga bien o salga mal:
+     * un guardado que termina en error tambien le costo el tiempo. Limite: 5 s bueno, 15 s
+     * es cuando ya cree que se perdio y lo vuelve a escribir.
+     */
     async function enviarRegistro(record) {
+      var tGuardado = Date.now();
+      try {
+        return await enviarRegistroCronometrado(record);
+      } finally {
+        reportarTiempo('guardar', Date.now() - tGuardado, (record && record.TipoRegistro) || '');
+      }
+    }
+
+    async function enviarRegistroCronometrado(record) {
       if (!record.RequestId) record.RequestId = nuevoRequestId();
       // Verificación de versión: bloquea SOLO si el backend responde y es incompatible.
       // Si no alcanza a responder, se envía igual — el RequestId impide duplicados y el

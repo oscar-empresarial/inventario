@@ -298,7 +298,7 @@ test('tanque 1 y tanque 12 usan coincidencia exacta para una base', () => {
 });
 
 function makeFrontend(operationStates) {
-  const calls = { fetch: [], status: [], espejo: [] };
+  const calls = { fetch: [], status: [], espejo: [], apuntes: [] };
   const storage = {};
   const context = {
     console,
@@ -308,9 +308,17 @@ function makeFrontend(operationStates) {
     // avisarEspejoLab tambien usa fetch (un GET al Worker). Se separan: `calls.fetch`
     // son SOLO los envios del registro; `calls.espejo`, los avisos al espejo. Antes se
     // mezclaban y por eso esta prueba llevaba dias en rojo culpando a quien no era.
+    // Y por el mismo POST salen tambien los APUNTES al Worker, que no son envios del
+    // registro: `action:'lento'` (el cronometro, 18-sep) y `action:'rechazo'` (lo que la
+    // pantalla freno). Se reconocen porque llevan `action`; el registro del ingeniero
+    // nunca lo lleva. Sin esta separacion, agregar un apunte pone en rojo la prueba de
+    // los reintentos y se termina culpando a quien no es.
     fetch: async (...args) => {
       const opts = args[1] || {};
-      if (String(opts.method || 'GET').toUpperCase() === 'POST') calls.fetch.push(args);
+      let cuerpo = null;
+      try { cuerpo = JSON.parse(opts.body || 'null'); } catch (e) { cuerpo = null; }
+      if (cuerpo && cuerpo.action) calls.apuntes.push(args);
+      else if (String(opts.method || 'GET').toUpperCase() === 'POST') calls.fetch.push(args);
       else calls.espejo.push(args);
       return { ok: true };
     },
