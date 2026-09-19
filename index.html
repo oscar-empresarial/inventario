@@ -1922,8 +1922,11 @@
     function reportarTiempo(que, ms, detalle) {
       try {
         if (!LAB_API || !LAB_LLAVE || LAB_LLAVE.indexOf('__') === 0 || typeof fetch !== 'function') return;
+        // El 0 SE MANDA (una lectura servida de cache tarda menos de 1 ms). Descartarlo
+        // borraria solo las rapidas y el porcentaje de lentas subiria solo, hasta cantar
+        // "esta lenta" un dia en que todo volo. Se descarta lo que no es una medicion.
         var n = Number(ms);
-        if (!isFinite(n) || n <= 0 || n > 600000) return;
+        if (!isFinite(n) || n < 0 || n > 600000) return;
         fetch(LAB_API, {
           method: 'POST', keepalive: true,
           headers: { 'Content-Type': 'text/plain;charset=utf-8' },
