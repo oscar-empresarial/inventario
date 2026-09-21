@@ -45,6 +45,10 @@ test('la pantalla separa la capacidad del tanque de los litros que se fabrican',
   assert.match(html, /id="btnRestoAgua"[^>]*>El resto en agua</);
   assert.match(html, /id="restoAguaCuenta"/);
   assert.match(source, /getElementById\('btnRestoAgua'\)\.addEventListener\('click', ponerRestoEnAgua\)/);
+  // El tanque 1 (ambientador de piso) es de 170 L y la lista no lo tenia: quedaba como
+  // "Otro / revisar" (auditoria del 21-sep). Con el freno de capacidad, escoger 160 lo
+  // bloquearia al llenarlo completo.
+  assert.match(html, /<select id="Tanque">[\s\S]*?<option>170 L<\/option>[\s\S]*?<\/select>/);
 });
 
 function cargarCuentas() {
