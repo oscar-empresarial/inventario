@@ -339,6 +339,8 @@ test('21-sep: con los nombres REALES del servidor, una etiqueta por producto', (
   assert.deepEqual(ver('extermin'), ['Extermin', 'Extermin con aroma a limón']);
   assert.deepEqual(ver('ambientador'), ['Ambientadores de piso']);
   assert.deepEqual(ver('hipoclorito'), ['Hipoclorito al 13%', 'Hipoclorito al 6%']);
+  // Oscar, 21-sep: el blanqueador con aroma (dulce o citrico) lleva la MISMA etiqueta.
+  assert.deepEqual(ver('blanqueador'), ['Blanqueador con cloro al 6%']);
   // Ni recargas ni tamaños, escriba lo que escriba.
   assert.deepEqual(ver('recarga'), []);
   assert.deepEqual(ver('galon'), []);
@@ -359,7 +361,8 @@ test('21-sep: el nombre viejo escrito a mano va a su producto; el desconocido no
    ['Hipoclorito 6% Galon', 'Hipoclorito al 6%'], ['HIPOCLORITO LITRO 6%', 'Hipoclorito al 6%'],
    ['ECOVARSOL 1000', 'Ecovarsol'], ['Cera para pisos Galón 4 L', 'Cera emulsionada'],
    ['Oxycolor', 'Oxycolor normal'], ['Ropa color troquelado', 'Oxycolor troquelado'],
-   ['Percarbonato de sodio / Oxígeno Activo', 'Oxígeno Activo'], ['Etiqueta Jabón', 'Jabón líquido para manos']
+   ['Percarbonato de sodio / Oxígeno Activo', 'Oxígeno Activo'], ['Etiqueta Jabón', 'Jabón líquido para manos'],
+   ['Blanqueador con cloro al 6% con aroma dulce o cítrico', 'Blanqueador con cloro al 6%']
   ].forEach(([viejo, nuevo]) => assert.equal(etiquetaCanonica(viejo), nuevo, viejo));
   assert.equal(etiquetaCanonica('Producto que no existe'), 'Producto que no existe');
   assert.equal(sirveDeEtiqueta('Extermin 500'), false);
