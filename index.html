@@ -3006,12 +3006,11 @@
         var texto = 'Se descuentan ' + fmtMpEmpaque(c.total) + ' ' + fila.unidad + (fila.item ? ' de ' + fila.item : '') +
           (fila.modo === 'unidad' ? ' (' + c.texto + ')' : '');
         // Cuanto hay, para que se vea ANTES de guardar si el candado va a frenar. Se busca
-        // por nombre y solo si hay UN renglon: r.variante no sirve para esto, porque
-        // parseInventario la llena con la Referencia cuando la variante viene vacia.
-        var delItem = (state.inventario || []).filter(function (r) {
-          return fila.item && normalize(r.item) === normalize(fila.item);
-        });
-        var hay = delItem.length === 1 ? delItem[0] : null;
+        // el MISMO renglon que se descuenta: el item con la variante vacia (asi lo manda
+        // registrosMpEmpaque). "Varsol" es el de 14,69 L, no "Varsol · Limon".
+        var hay = (state.inventario || []).filter(function (r) {
+          return fila.item && normalize(r.item) === normalize(fila.item) && !normalize(r.variante || '');
+        })[0];
         if (hay && isFinite(hay.stock)) texto += ' · en inventario: ' + fmtMpEmpaque(hay.stock) + ' ' + (hay.unidad || '');
         caja.textContent = texto;
       });
@@ -5164,7 +5163,11 @@
       return rows.map(function (r) {
         return {
           item: pickField(r, ['item', 'nombre', 'producto', 'descripcion']),
-          variante: pickField(r, ['variante', 'aroma', 'referencia']),
+          // 'referencia' NO va aqui: es el nivel mas alto que ha tenido el item (un numero,
+          // para el semaforo de compras). Con la variante vacia, pickField caia a ella y el
+          // inventario decia "Varsol · 56", y el aviso de despues de guardar decia que no
+          // habia Varsol teniendo 14,69 L. Una variante vacia se queda vacia.
+          variante: pickField(r, ['variante', 'aroma']),
           categoria: pickField(r, ['categoria', 'tipo', 'grupo']),
           stock: parseFloat(String(pickField(r, ['stock', 'existencia', 'existencias', 'saldo', 'disponible', 'cantidad'])).replace(',', '.')),
           unidad: pickField(r, ['unidad', 'und', 'um']),
