@@ -21,7 +21,7 @@
  *
  * SALE CON CODIGO 1 si algo falla, para poder colgarlo de un cron.
  */
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -153,7 +153,10 @@ async function seccionEstatica() {
   });
 
   await probar('las pruebas de `npm test` pasan todas', () => {
-    const salida = execFileSync(process.execPath, ['--test', 'tests/frontend.test.js', 'tests/backend.test.js', 'tests/adversarial.test.js'],
+    // TODAS las de tests/, no una lista a mano: con la lista, un archivo de pruebas nuevo
+    // (tests/preparar_tanque.test.js, 21-sep-2026) se quedaba por fuera sin que nadie lo notara.
+    const archivos = readdirSync(join(AQUI, 'tests')).filter(f => f.endsWith('.test.js')).sort().map(f => 'tests/' + f);
+    const salida = execFileSync(process.execPath, ['--test', ...archivos],
       { cwd: AQUI, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
     const fallos = (salida.match(/^ℹ fail (\d+)/m) || [])[1];
     exigir(fallos === '0', 'hay ' + fallos + ' prueba(s) en rojo. Corre `npm test` para verlas.');

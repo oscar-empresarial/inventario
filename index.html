@@ -266,6 +266,7 @@
       cursor: pointer;
       width: 100%;
     }
+    .mp-agua { margin-top: 8px; border-color: #0891b2; background: #ecfeff; color: #0e7490; }
 
     /* ===== Panel de existencias faltantes ===== */
     .stock-aviso {
@@ -726,7 +727,7 @@
           </div>
           <div class="row">
             <div class="field hidden" data-field="tanque">
-              <label for="Tanque">Tamaño del tanque</label>
+              <label for="Tanque">Capacidad del tanque</label>
               <select id="Tanque">
                 <option value="">Seleccionar</option>
                 <option>20 L</option>
@@ -737,10 +738,11 @@
                 <option>160 L</option>
                 <option>Otro / revisar</option>
               </select>
+              <div class="hint">Lo que le cabe al tanque. Puedes fabricar menos: el saldo del tanque sale de los litros que fabricas, no de la capacidad.</div>
             </div>
             <div class="field hidden" data-field="litros">
-              <label for="LitrosPreparados" id="litrosLabel">Litros preparados</label>
-              <input id="LitrosPreparados" type="text" inputmode="decimal" placeholder="Ej: 120" />
+              <label for="LitrosPreparados" id="litrosLabel">Litros que vas a fabricar</label>
+              <input id="LitrosPreparados" type="text" inputmode="decimal" placeholder="Ej: 60" />
             </div>
           </div>
 
@@ -758,25 +760,15 @@
               <input id="BaseLitros" type="text" inputmode="decimal" placeholder="Ej: 20" />
             </div>
           </div>
-          <div class="row">
-            <div class="field hidden" data-field="estanque">
-              <label for="EstadoTanque">Estado del tanque</label>
-              <select id="EstadoTanque">
-                <option value="">Sin cambio</option>
-                <option value="En proceso">Queda EN PROCESO (se termina otro día)</option>
-                <option value="Listo">Ya quedó LISTO</option>
-              </select>
-              <div class="hint">Hay productos que tardan días: márcalo “en proceso”, y cuando lo termines vuelve aquí y márcalo “Listo”.</div>
-            </div>
-          </div>
-
           <!-- Materias primas usadas (lista dinámica) -->
           <div class="row">
             <div class="field full hidden" data-field="materias">
               <label>Materias primas que usaste</label>
               <div id="mpLista"></div>
               <button type="button" class="mp-agregar" id="btnMpAgregar">+ Agregar otra materia prima</button>
-              <div class="hint">Escribe cada materia prima con su cantidad. Para fragancia o color, pon el aroma/color en la casilla "variante".</div>
+              <button type="button" class="mp-agregar mp-agua" id="btnRestoAgua">El resto en agua</button>
+              <div class="hint" id="restoAguaCuenta" aria-live="polite"></div>
+              <div class="hint">Escribe cada materia prima con su cantidad. Para fragancia o color, pon el aroma/color en la casilla "variante". “El resto en agua” completa con agua hasta los litros que vas a fabricar.</div>
               <label class="check-row" style="margin-top:12px">
                 <input type="checkbox" id="FormulaCompleta" />
                 <span>Confirmo que registré la fórmula completa, incluida el agua y todas las bases usadas.</span>
@@ -1513,7 +1505,7 @@
 
     var visibility = {
       'Entrada mercancía': ['responsable', 'categoria', 'item', 'variante', 'cantidad', 'unidad', 'observacion'],
-      'Preparación': ['responsable', 'destino', 'materias', 'baseusada', 'baselitros', 'estanque', 'observacion'],
+      'Preparación': ['responsable', 'destino', 'materias', 'baseusada', 'baselitros', 'observacion'],
       'Empacar producto': ['responsable', 'subempaque', 'observacion'],
       'Empacar sólido/polvo': ['responsable', 'item', 'variante', 'presentacion', 'cantpres', 'etiqueta', 'resultante', 'merma', 'observacion'],
       'Salida directa/Baja': ['responsable', 'categoria', 'item', 'variante', 'cantidad', 'unidad', 'motivo', 'observacion'],
@@ -1558,6 +1550,7 @@
         });
       });
       document.getElementById('btnMpAgregar').addEventListener('click', function () { agregarFilaMp(); });
+      document.getElementById('btnRestoAgua').addEventListener('click', ponerRestoEnAgua);
       document.getElementById('btnInvRecargar').addEventListener('click', loadInventario);
       document.getElementById('invBuscar').addEventListener('input', renderInventario);
       document.getElementById('btnMovCargar').addEventListener('click', loadMovimientos);
@@ -1945,6 +1938,7 @@
       try {
         return {
           destino: valueOf('Destino'), tanque: valueOf('TamborID'), producto: valueOf('Producto'),
+          capacidad: valueOf('Tanque'),
           litros: valueOf('LitrosPreparados'), item: valueOf('Item'), cantidad: valueOf('Cantidad'),
           unidad: valueOf('Unidad'), presentacion: valueOf('Presentacion'),
           cantidadPresentacion: valueOf('CantidadPresentacion'), etiqueta: valueOf('Etiqueta'),
@@ -2510,6 +2504,9 @@
       if (state.selectedType !== 'Preparación') return;
       var d = valueOf('Destino');
       esconderCampos(['tambor', 'producto', 'tanque', 'litros']);
+      // "El resto en agua" necesita los litros a fabricar: en "Uso directo" no hay.
+      var btnAgua = document.getElementById('btnRestoAgua');
+      if (btnAgua) btnAgua.style.display = (d === 'tanque' || d === 'balde') ? '' : 'none';
       var tamborLbl = document.getElementById('tamborLabel');
       var hint = document.getElementById('tamborHint');
       if (d === 'tanque') {
@@ -2521,11 +2518,11 @@
         mostrarCampos(['tambor', 'producto', 'litros']);
         tamborLbl.textContent = 'Nombre del balde';
         hint.textContent = 'Ej: Balde jabón, Balde ambientador. Se empaca de una vez.';
-        document.getElementById('litrosLabel').textContent = 'Litros preparados';
+        document.getElementById('litrosLabel').textContent = 'Litros que vas a fabricar';
       }
     }
-    // Si el tanque elegido está VACÍO o es nuevo, pide producto y litros (lote nuevo).
-    // Si tiene contenido, solo litros adicionados (opcional) y estado.
+    // Si el tanque elegido está VACÍO o es nuevo, pide producto, capacidad y litros a fabricar
+    // (lote nuevo). Si tiene contenido, solo litros adicionados (opcional).
     function updateTanqueCampos() {
       if (state.selectedType !== 'Preparación' || valueOf('Destino') !== 'tanque') return;
       var nombre = valueOf('TamborID');
@@ -2541,7 +2538,7 @@
         lbl.textContent = 'Litros que le pusiste (deja vacío si no adicionaste líquido)';
       } else {
         mostrarCampos(['producto', 'tanque', 'litros']);
-        lbl.textContent = 'Litros preparados';
+        lbl.textContent = 'Litros que vas a fabricar';
         if (info && info.vacio) {
           showStatus('Este tanque está VACÍO: se inicia un LOTE nuevo. Pon qué producto lleva ahora y los litros.', 'warn');
         }
@@ -2739,6 +2736,9 @@
     function limpiarFilasMp() {
       document.getElementById('mpLista').innerHTML = '';
       agregarFilaMp();
+      // La cuenta del agua era de la formula anterior: con la lista vacia ya no aplica.
+      var cuentaAgua = document.getElementById('restoAguaCuenta');
+      if (cuentaAgua) cuentaAgua.textContent = '';
     }
 
     // ================== SUGERENCIAS ==================
@@ -3703,7 +3703,16 @@
           }
         } else {
           if (!producto) return { error: 'Escribe qué producto se prepara en el tanque.' };
-          if (!esNumero(litros, false)) return { error: 'Debes poner los litros preparados.' };
+          // LA CAPACIDAD NO REEMPLAZA A LOS LITROS. Oscar, 21-sep-2026: "una cosa es la
+          // capacidad del tanque y otra cuanto va a fabricar de verdad". El saldo del tanque
+          // (lo que ve Empacar) sale de LitrosPreparados; si faltan, se PIDEN, nunca se toma
+          // la capacidad en silencio. Y no cabe mas de lo que le cabe al tanque.
+          var capT = capacidadLitros(tanque);
+          if (!esNumero(litros, false)) return { error: capT
+            ? 'Escribe cuántos litros vas a fabricar. El tanque es de ' + capT + ' L, pero eso es lo que le cabe, no lo que preparaste: si lo llenaste completo, pon ' + capT + '.'
+            : 'Escribe cuántos litros vas a fabricar.' };
+          if (capT && parseFloat(conPunto(litros)) > capT) return { error: 'Vas a fabricar ' + litros +
+            ' litros y el tanque es de ' + capT + ' L: no caben. Revisa la capacidad del tanque o los litros que vas a fabricar.' };
           produccion = baseRecord('Preparar tambor');
           produccion.TamborID = tambor;
           produccion.Producto = producto;
@@ -3714,7 +3723,7 @@
       } else if (destino === 'balde') {
         if (!tambor) return { error: 'Ponle un nombre al balde (Ej: Balde jabón).' };
         if (!producto) return { error: 'Escribe qué producto se prepara.' };
-        if (!esNumero(litros, false)) return { error: 'Debes poner los litros preparados.' };
+        if (!esNumero(litros, false)) return { error: 'Escribe cuántos litros vas a fabricar en el balde.' };
         produccion = baseRecord('Preparar tambor');
         produccion.TamborID = tambor;
         produccion.Producto = producto;
@@ -3743,16 +3752,13 @@
         }
       }
 
-      var estadoT = valueOf('EstadoTanque');
-      if (estadoT && produccion) {
-        produccion.Motivo = estadoT;
-      } else if (estadoT && destino === 'tanque' && tambor) {
-        var rEstado = baseRecord('Estado tambor');
-        rEstado.TamborID = tambor;
-        rEstado.Motivo = estadoT;
-        rEstado.Observacion = ('Cambio de estado del tanque a: ' + estadoT + '. ' + valueOf('Observacion')).trim();
-        records.push(rEstado);
-      }
+      // TODO TANQUE PREPARADO QUEDA LISTO. Oscar, 21-sep-2026, de la casilla "Estado del
+      // tanque" (Sin cambio / En proceso / Ya quedo listo): "Quita eso, no lo usa. Que cuando
+      // lo haga, ya queda listo." La preparacion sale con Motivo vacio y los DOS motores
+      // (Código.js y lab_motor.js) dejan el tanque en 'Listo' cuando no viene estado.
+      // Medido en el espejo ese dia: en toda la historia solo 5 preparaciones mandaron
+      // estado, las 5 "Listo"; ninguna "En proceso" y ninguna fila 'Estado tambor'. Y el
+      // estado nunca escondio un tanque de Empacar: era solo un letrero.
 
       var mpsValidas = mps.filter(function (m) { return m.item; });
       var listaFrag = getCatalog('fragancias').concat(invItems('Fragancia'));
@@ -3860,6 +3866,122 @@
     };
     // En true SOLO mientras se rearma la preparacion despues de aceptar la sal.
     var _agregarSalVinagre = false;
+
+    // ================== CAPACIDAD DEL TANQUE Y "EL RESTO EN AGUA" ==================
+    //
+    // Oscar, 21-sep-2026: "una cosa es la capacidad del tanque y otra cuanto va a fabricar
+    // de verdad". Un tanque de 120 L puede llevar un lote de 60 L. La capacidad es solo el
+    // rotulo del tanque; el saldo que despues ve Empacar sale de los litros FABRICADOS
+    // (LitrosPreparados -> disponible, igual en Código.js y en lab_motor.js).
+    // Viven aqui, junto a buildPreparacion, para que las pruebas que la corren en un vm las
+    // encuentren (tests/frontend.test.js toma desde buildPreparacion hasta buildEmpaque).
+
+    /** "120 L" -> 120. "Otro / revisar" o vacio -> null: no hay con que comparar. */
+    function capacidadLitros(texto) {
+      var m = /^\s*(\d+(?:[.,]\d+)?)\s*(?:l|lt|litros?)\b/i.exec(String(texto == null ? '' : texto));
+      if (!m) return null;
+      var n = parseFloat(m[1].replace(',', '.'));
+      return isFinite(n) && n > 0 ? n : null;
+    }
+
+    // Cuanta agua falta para llegar a los litros que se van a fabricar:
+    //   agua = litros a fabricar - materias primas en L o ml - litros de base de otro tanque
+    // Lo que va en kg, g o unidades NO se suma como volumen. Es la misma regla con la que el
+    // guardado mide si la formula explica el lote (cobertura 80-105%, aqui y en
+    // validarProduccionPost_ del Apps Script): con el agua de este boton la formula cuadra al
+    // 100%. Una fila de Agua ya puesta no cuenta, porque es la que se va a reemplazar.
+    // No toca la pantalla: devuelve la cuenta y ponerRestoEnAgua() la pinta.
+    function calcularRestoAgua(litrosFabricar, filas, baseLitros) {
+      var total = parseFloat(conPunto(litrosFabricar));
+      if (!isFinite(total) || total <= 0) return { error: 'sin-litros' };
+      var enLitros = 0;
+      var sinVolumen = [];
+      (filas || []).forEach(function (f) {
+        if (!f || !f.item || normalize(f.item) === 'agua') return;
+        var q = parseFloat(conPunto(f.cantidad));
+        if (!isFinite(q) || q <= 0) return;
+        var u = normalize(f.unidad);
+        if (u === 'l' || u === 'lt' || u === 'litro' || u === 'litros') enLitros += q;
+        else if (u === 'ml' || u === 'mililitro' || u === 'mililitros') enLitros += q / 1000;
+        else sinVolumen.push(f.item + ' ' + f.cantidad + ' ' + (f.unidad || ''));
+      });
+      var base = parseFloat(conPunto(baseLitros));
+      if (!isFinite(base) || base < 0) base = 0;
+      var r3 = function (n) { return Math.round(n * 1000) / 1000; };
+      return { total: r3(total), enLitros: r3(enLitros), base: r3(base),
+        agua: r3(total - enLitros - base), sinVolumen: sinVolumen };
+    }
+
+    // El boton "El resto en agua": hace la cuenta, pone (o corrige) el renglon de Agua y deja
+    // escrita en una linea QUE se sumo, para que el ingeniero vea de donde sale el numero.
+    // Si no hay litros a fabricar, PREGUNTA si son los de la capacidad; nunca los supone.
+    // Si el agua sale en cero o negativa, lo dice y no pone nada.
+    function ponerRestoEnAgua() {
+      var cuenta = document.getElementById('restoAguaCuenta');
+      var decir = function (texto, malo) {
+        if (!cuenta) return;
+        cuenta.textContent = texto;
+        cuenta.style.color = malo ? '#b91c1c' : '#0e7490';
+      };
+      var fmtL = function (n) { return String(Math.round(n * 1000) / 1000).replace('.', ','); };
+      var seVe = function (nombre) {
+        var el = document.querySelector('[data-field="' + nombre + '"]');
+        return !!el && !el.classList.contains('hidden');
+      };
+      if (!seVe('litros')) {
+        decir('Primero elige el tanque o balde: ahí se escriben los litros que vas a fabricar.', true);
+        return;
+      }
+      var cap = seVe('tanque') ? capacidadLitros(valueOf('Tanque')) : null;
+      var litros = valueOf('LitrosPreparados');
+      if (!esNumero(litros, false)) {
+        if (cap && window.confirm('No escribiste cuántos litros vas a fabricar.\n\n' +
+            'El tanque es de ' + fmtL(cap) + ' L. ¿Vas a fabricar los ' + fmtL(cap) + ' L completos?\n\n' +
+            '· Aceptar = sí, ' + fmtL(cap) + ' L\n' +
+            '· Cancelar = escribo yo los litros')) {
+          document.getElementById('LitrosPreparados').value = String(cap);
+          litros = String(cap);
+        } else {
+          decir('Escribe primero cuántos litros vas a fabricar y vuelve a tocar “El resto en agua”.', true);
+          enfocarCampoError('litros');
+          return;
+        }
+      }
+      var n = parseFloat(conPunto(litros));
+      if (cap && n > cap) {
+        decir('Vas a fabricar ' + fmtL(n) + ' L y el tanque es de ' + fmtL(cap) + ' L: no caben. Revisa la capacidad o los litros. No se puso agua.', true);
+        enfocarCampoError('litros');
+        return;
+      }
+      var r = calcularRestoAgua(litros, leerFilasMp(), valueOf('BaseLitros'));
+      if (r.error) {
+        decir('Escribe primero cuántos litros vas a fabricar.', true);
+        return;
+      }
+      var cuentaTexto = fmtL(r.total) + ' L a fabricar − ' + fmtL(r.enLitros) + ' L de materias primas en L o ml' +
+        (r.base > 0 ? ' − ' + fmtL(r.base) + ' L de base' : '');
+      var noSuman = r.sinVolumen.length
+        ? ' Lo que va en kg, g o unidades (' + r.sinVolumen.join(', ') + ') no se suma como volumen.'
+        : ' Lo que vaya en kg, g o unidades no se suma como volumen.';
+      if (!(r.agua > 0)) {
+        decir('No queda espacio para agua: ' + cuentaTexto + ' = ' + fmtL(r.agua) + ' L. Revisa cantidades y unidades. No se puso agua.', true);
+        return;
+      }
+      var filas = Array.prototype.slice.call(document.querySelectorAll('#mpLista .mp-fila'));
+      var fila = filas.filter(function (f) { return normalize(f.querySelector('.mp-item').value) === 'agua'; })[0] ||
+        filas.filter(function (f) {
+          return !f.querySelector('.mp-item').value.trim() && !f.querySelector('.mp-cant').value.trim();
+        })[0];
+      if (!fila) {
+        agregarFilaMp();
+        var todas = document.querySelectorAll('#mpLista .mp-fila');
+        fila = todas[todas.length - 1];
+      }
+      fila.querySelector('.mp-item').value = 'Agua';
+      fila.querySelector('.mp-cant').value = String(r.agua);
+      fila.querySelector('.mp-uni').value = 'L';
+      decir('Agua: ' + cuentaTexto + ' = ' + fmtL(r.agua) + ' L.' + noSuman + ' Si cambias algo, vuelve a tocar el botón.', false);
+    }
 
     function buildEmpaque() {
       var sub = valueOf('Subempaque');
@@ -6184,7 +6306,7 @@
 
     var TOUR = [
       { t: 'Bienvenido a la app de Full Company', x: 'Aquí se registra TODO lo que pasa en el laboratorio: lo que llega, lo que se prepara, lo que se empaca y lo que sale. Con eso el inventario se calcula solo, sin cuadernos.\n\nEste tour te explica cada parte. Puedes volver a verlo cuando quieras con el botón ❔ Ayuda.' },
-      { t: '🧪 Preparé / usé materia prima', x: 'Todo en un solo paso: eliges DÓNDE lo usaste y anotas todas las materias primas con sus cantidades.\n\n· Tanque nuevo: enuméralo (Tanque 1, Tanque 2…) y pon qué producto lleva.\n· Bases: si preparas CMC preparado, Genapol preparado, etc., ese es el “producto”. Después, cuando un producto use esa base, indicas de cuál tanque la sacaste y cuántos litros.\n· ¿El tanque queda incompleto (falta disolver o reposar)? Marca “Queda EN PROCESO”. Cuando esté, entra de nuevo, elige el tanque existente, marca “Ya quedó LISTO” y guarda: no necesitas poner nada más.' },
+      { t: '🧪 Preparé / usé materia prima', x: 'Todo en un solo paso: eliges DÓNDE lo usaste y anotas todas las materias primas con sus cantidades.\n\n· Tanque nuevo: enuméralo (Tanque 1, Tanque 2…) y pon qué producto lleva.\n· Bases: si preparas CMC preparado, Genapol preparado, etc., ese es el “producto”. Después, cuando un producto use esa base, indicas de cuál tanque la sacaste y cuántos litros.\n· Capacidad del tanque = lo que le cabe. Litros que vas a fabricar = lo que de verdad preparas (pueden ser menos). El saldo del tanque sale de los litros que fabricas.\n· Pon las materias primas y toca “El resto en agua”: la app calcula el agua que falta para llegar a esos litros.\n· Al guardar, el tanque queda LISTO para empacar.' },
       { t: '🧴 Empaqué producto', x: 'Elige el tanque o balde (la lista te muestra qué tiene y cuántos litros le quedan), la presentación, cuántas unidades, la tapa y la etiqueta.\n\nLa app descuenta sola: los litros del tanque, los envases, las tapas y las etiquetas. Y el producto terminado queda con su LOTE (el tanque del que salió).\n\n¿Presentación nueva? Escribe nombre + capacidad: “Tarro 30 ml” — con esa capacidad se descuenta del tanque.\n\nTambién puedes empacar materia prima directa (ácido, varsol) sin tanque.' },
       { t: '⚖️ Sólidos y 🧹 Palos', x: 'Sólidos/polvos: eliges el polvo, la bolsa o tarro y cuántas unidades. Se descuenta el polvo por peso y las bolsas por unidad.\n\nFabricar palos: pones cuántos hiciste y se descuentan solos los tubos, mangos, roscas o piezas de mariposa.' },
       { t: '🚚 Salida directa / baja', x: 'Solo para lo que sale de bodega SIN pasar por empaque: venta de mercancía tal cual (un bulto, un producto ya empacado), muestras, exhibición, o pérdidas por daño o derrame.\n\nSi lo que haces es empacar y vender, usa “Empaqué producto” y luego la venta sale por acá.' },
