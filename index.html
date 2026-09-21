@@ -1594,7 +1594,11 @@
       });
       document.getElementById('btnRestoAgua').addEventListener('click', ponerRestoEnAgua);
       // Si el ingeniero cambia la capacidad a mano, ya no es "la que puso la app": se respeta.
-      document.getElementById('Tanque').addEventListener('change', function () { delete this.dataset.auto; });
+      // Y queda amarrada al tanque para el que la escogio: si cambia de tanque, no se arrastra.
+      document.getElementById('Tanque').addEventListener('change', function () {
+        delete this.dataset.auto;
+        this.dataset.para = normalize(valueOf('TamborID'));
+      });
       document.getElementById('btnInvRecargar').addEventListener('click', loadInventario);
       document.getElementById('invBuscar').addEventListener('input', renderInventario);
       document.getElementById('btnMovCargar').addEventListener('click', loadMovimientos);
@@ -2577,6 +2581,7 @@
       }
       sel.value = opcion.value;
       sel.dataset.auto = '1';
+      delete sel.dataset.para;
     }
     function updateDestino() {
       if (state.selectedType !== 'Preparación') return;
@@ -2621,7 +2626,10 @@
       var cap = info && info.capacidad;
       var selCap = document.getElementById('Tanque');
       if (cap) ponerCapacidadGuardada(cap);
-      else if (selCap && selCap.dataset.auto) { selCap.value = ''; delete selCap.dataset.auto; }
+      else if (selCap && (selCap.dataset.auto ||
+          (selCap.dataset.para !== undefined && selCap.dataset.para !== normalize(nombre)))) {
+        selCap.value = ''; delete selCap.dataset.auto; delete selCap.dataset.para;
+      }
       var fmtL = function (n) { return String(Math.round(n * 100) / 100).replace('.', ','); };
       if (info && !info.vacio) {
         esconderCampos(['producto']);

@@ -391,6 +391,13 @@ test('un tanque sin capacidad la PREGUNTA la primera vez, y la respuesta viaja e
   assert.match(vacio.error || '', /no caben/);
 });
 
+test('la capacidad de un tanque nunca se arrastra a otro (ni la que puso la app ni la escogida a mano)', () => {
+  const upd = tomar('function updateTanqueCampos');
+  assert.match(upd, /if \(cap\) ponerCapacidadGuardada\(cap\);/);
+  assert.match(upd, /selCap\.dataset\.auto \|\|[\s\S]{0,120}selCap\.dataset\.para !== normalize\(nombre\)/);
+  assert.match(source, /addEventListener\('change', function \(\) \{\s*delete this\.dataset\.auto;\s*this\.dataset\.para = normalize\(valueOf\('TamborID'\)\);/);
+});
+
 test('la pregunta "¿adicionales o total?" no ofrece adicionales cuando no caben', () => {
   assert.match(source, /NO PUEDEN SER ADICIONALES/);
   assert.match(source, /ACEPTAR  =  son el TOTAL del tanque/);
