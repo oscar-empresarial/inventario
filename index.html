@@ -2992,10 +2992,13 @@
         if (!(c.total > 0)) { caja.textContent = c.texto; return; }
         var texto = 'Se descuentan ' + fmtMpEmpaque(c.total) + ' ' + fila.unidad + (fila.item ? ' de ' + fila.item : '') +
           (fila.modo === 'unidad' ? ' (' + c.texto + ')' : '');
-        // Cuanto hay, para que se vea ANTES de guardar si el candado va a frenar.
-        var hay = (state.inventario || []).filter(function (r) {
-          return fila.item && normalize(r.item) === normalize(fila.item) && !normalize(r.variante || '');
-        })[0];
+        // Cuanto hay, para que se vea ANTES de guardar si el candado va a frenar. Se busca
+        // por nombre y solo si hay UN renglon: r.variante no sirve para esto, porque
+        // parseInventario la llena con la Referencia cuando la variante viene vacia.
+        var delItem = (state.inventario || []).filter(function (r) {
+          return fila.item && normalize(r.item) === normalize(fila.item);
+        });
+        var hay = delItem.length === 1 ? delItem[0] : null;
         if (hay && isFinite(hay.stock)) texto += ' · en inventario: ' + fmtMpEmpaque(hay.stock) + ' ' + (hay.unidad || '');
         caja.textContent = texto;
       });
