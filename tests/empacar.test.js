@@ -42,11 +42,13 @@ function cargar(form, filasMp, opciones = {}) {
     'function validarPresentacion', 'function recordMerma', 'function validarItemCatalogo',
     'function fmtMpEmpaque', 'function cuentaMpEmpaque', 'function litrosEmpacadosMp', 'function aLitrosMp',
     'function armarMpEmpaque', 'function registrosMpEmpaque', 'function faltaProductoResultante',
+    'function firmaResultante', 'function resultanteConfirmado',
     'function buildEmpaque()', 'function buildRecords()',
   ].map(tomar).join('\n');
   vm.runInContext(codigo, ctx);
   const pintado = [];
   Object.assign(ctx, {
+    pintarConfirmacionResultante: () => {},
     valueOf: k => (form[k] == null ? '' : String(form[k])),
     leerFilasMpEmpaque: () => filasMp || [],
     baseRecord: tipo => ({ TipoRegistro: tipo, Responsable: 'Carlos', Observacion: form.Observacion || '' }),
@@ -61,6 +63,10 @@ function cargar(form, filasMp, opciones = {}) {
     document: { getElementById: () => ({ checked: false }) },
   });
   ctx.pintado = pintado;
+  // Carlos toco "Sí, es este" con lo que hay en pantalla (salvo que la prueba diga que no).
+  if (form.SkuResultante && opciones.confirmado !== false) {
+    ctx.state.resultanteConfirmado = { sku: String(form.SkuResultante), firma: ctx.firmaResultante() };
+  }
   return ctx;
 }
 
@@ -86,6 +92,58 @@ test('si la propuesta sale al guardar, se MUESTRA y aun asi no se guarda en ese 
   assert.match(r.error || '', /propone DETERFULL GALON \(111235\)/);
   assert.ok(!r.records, 'la app no puede escoger por el ingeniero');
   assert.equal(ctx.pintado.length, 1, 'la propuesta se pinta en "¿A qué producto resulta?" para que la vea');
+});
+
+// Oscar, 21-sep (segunda vuelta): "Carlos tiene que CONFIRMAR el producto que resulta en
+// cada empaque, con un toque, aunque la propuesta de la app esté bien".
+test('la propuesta de la app SIN confirmar NO alcanza para guardar', () => {
+  const ctx = cargar(GALONES, [], { confirmado: false });
+  ctx.state.resultanteMostrado = { sku: '111235', nombre: 'DETERFULL GALON' };
+  const r = ctx.buildEmpaque();
+  assert.ok(r.error, 'se dejo guardar con la propuesta sin confirmar');
+  assert.match(r.error, /Confirma ¿A qué producto resulta\?: la app propone DETERFULL GALON \(111235\)/);
+  assert.match(r.error, /Sí, es este/);
+  assert.ok(!r.records && !r.build, 'no puede salir nada para guardar');
+  // Lo mismo en solido/polvo y en recarga.
+  const solido = { tipo: 'Empacar sólido/polvo', Responsable: 'Carlos', Item: 'Bicarbonato', Presentacion: 'Bolsa 500 g',
+    CantidadPresentacion: '10', Etiqueta: 'Bicarbonato', SkuResultante: 'BIC500' };
+  assert.match(cargar(solido, [], { confirmado: false }).buildRecords().error || '', /Confirma/);
+  const recarga = con({ TamborID: '7', Presentacion: 'Recarga litros', CantidadPresentacion: '12',
+    Etiqueta: 'Sin etiqueta', Accesorio: 'Sin accesorio', SkuResultante: 'RCG-LCQ204' });
+  assert.match(cargar(recarga, [], { confirmado: false }).buildEmpaque().error || '', /Confirma/);
+});
+
+test('si cambia el tanque, la presentacion, el item o la etiqueta, la confirmacion se pierde', () => {
+  const casos = [['TamborID', '9'], ['Presentacion', 'Envase transparente 2 L'], ['Etiqueta', 'Extermin']];
+  for (const [campo, nuevo] of casos) {
+    const form = con({});
+    const ctx = cargar(form, []);                       // confirmado con el tanque 5
+    assert.ok(!ctx.buildEmpaque().error, 'confirmado tenia que guardar');
+    form[campo] = nuevo;                                // cambia DESPUES de confirmar
+    assert.match(ctx.buildEmpaque().error || '', /Confirma/, 'cambio ' + campo + ' y la confirmacion vieja siguio valiendo');
+  }
+  const mp = { Responsable: 'Carlos', Subempaque: 'materia', Item: 'Varsol', Presentacion: 'Litro transparente 1 L',
+    CantidadPresentacion: '10', Etiqueta: 'Varsol', Accesorio: 'Tapa normal', SkuResultante: '258' };
+  const ctxMp = cargar(mp, []);
+  assert.ok(!ctxMp.buildEmpaque().error);
+  mp.Item = 'Acido Sulfónico';
+  assert.match(ctxMp.buildEmpaque().error || '', /Confirma/, 'cambio el item y la confirmacion siguio valiendo');
+  // Y confirmar un SKU y guardar OTRO tampoco vale.
+  const form2 = con({});
+  const ctx2 = cargar(form2, []);
+  form2.SkuResultante = '999';
+  assert.match(ctx2.buildEmpaque().error || '', /Confirma/);
+});
+
+test('el toque existe: "Sí, es este", tocar la propuesta, y "Cambiar" tambien confirma', () => {
+  assert.match(html, /id="btnResultanteSi"[^>]*>Sí, es este</);
+  assert.match(source, /getElementById\('btnResultanteSi'\)\.addEventListener\('click', confirmarResultante\)/);
+  assert.match(source, /getElementById\('resultanteTexto'\)\.addEventListener\('click'/);
+  assert.match(tomar('async function cambiarResultante'), /confirmarResultante\(\)/);
+  // Escoger de la lista de sugerencias no dispara 'input': tiene que soltar igual.
+  assert.match(tomar('function renderSuggestions'), /soltarConfirmacionResultante\(\)/);
+  assert.match(tomar('function resetForm'), /state\.resultanteConfirmado = null/);
+  assert.match(tomar('function selectType'), /state\.resultanteConfirmado = null/);
 });
 
 test('lo que se guarda es lo que se VE: el SKU ya no se rellena por debajo con el buscador', () => {

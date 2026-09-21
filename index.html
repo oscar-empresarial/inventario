@@ -868,15 +868,18 @@
             <div class="field hidden" data-field="resultante">
               <label>¿A qué producto resulta?</label>
               <input type="hidden" id="SkuResultante" />
-              <div style="display:flex;gap:8px;align-items:center">
-                <div id="resultanteTexto" style="flex:1;min-width:0;padding:10px 12px;border:1px solid var(--linea,#d9dde3);border-radius:8px;background:var(--fondo2,#f7f8fa)"></div>
+              <div id="resultanteCaja" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                <div id="resultanteTexto" style="flex:1;min-width:0;padding:10px 12px;border:1px solid var(--linea,#d9dde3);border-radius:8px;background:var(--fondo2,#f7f8fa);cursor:pointer"></div>
+                <button type="button" id="btnResultanteSi" style="display:none;padding:10px 14px;white-space:nowrap;border:none;border-radius:10px;background:#16a34a;color:#fff;font-weight:bold;cursor:pointer">Sí, es este</button>
                 <button type="button" class="clear" id="btnResultante" style="padding:10px 14px;white-space:nowrap">Cambiar</button>
               </div>
+              <div id="resultanteMarca" class="hint" style="font-weight:600"></div>
               <div class="hint">
                 Es el producto de Siigo que ENTRA al inventario y el que después se factura.
                 La app propone uno, pero el que manda eres tú: <b>un tanque puede tener una
                 base</b> que hoy sale como un producto y mañana, con algo más, como otro.
-                <b>Es obligatorio:</b> sin él no se guarda (también en las recargas).
+                <b>Es obligatorio y se confirma:</b> toca «Sí, es este» (o escoge otro con
+                «Cambiar»). Sin confirmar no se guarda, también en las recargas.
               </div>
             </div>
           </div>
@@ -1568,13 +1571,18 @@
       // para un tanque, se da cuenta de que era otro tanque, lo cambia — y la pantalla
       // seguiria mostrando el producto del primero. Se vuelve a proponer y el vuelve a
       // decidir, que es justo lo que Oscar pidio: que se elija, no que se herede.
+      // Y LA CONFIRMACION TAMBIEN SE PIERDE (21-sep): "Sí, es este" vale para el tanque, la
+      // presentacion, el item y la etiqueta que habia cuando se toco. Escoger de la lista
+      // de sugerencias no dispara 'input', por eso renderSuggestions llama al mismo aviso.
       ['Etiqueta', 'Presentacion', 'TamborID', 'Item'].forEach(function (id) {
         var el = document.getElementById(id);
         if (!el) return;
-        el.addEventListener('input', function () {
-          state.resultanteFijado = false;
-          refrescarResultante();
-        });
+        el.addEventListener('input', function () { soltarConfirmacionResultante(); });
+      });
+      document.getElementById('btnResultanteSi').addEventListener('click', confirmarResultante);
+      // Tocar la propuesta tambien la confirma; si no hay propuesta, abre la lista.
+      document.getElementById('resultanteTexto').addEventListener('click', function () {
+        if (valueOf('SkuResultante')) confirmarResultante(); else cambiarResultante();
       });
       document.getElementById('btnMpAgregar').addEventListener('click', function () { agregarFilaMp(); });
       // Lo que se echa al empacar: la cuenta "por cada unidad" depende de cuantas se
@@ -1641,7 +1649,7 @@
           var c = etiquetaCanonica(this.value);
           if (!c || c === this.value.trim() || !sirveDeEtiqueta(c)) return;
           this.value = c;
-          if (id === 'Etiqueta') { state.resultanteFijado = false; refrescarResultante(); }
+          if (id === 'Etiqueta') soltarConfirmacionResultante();
         });
       });
       setupSuggest('BaseTanque', 'baseSuggestions', getTamborOptions);
@@ -2480,6 +2488,7 @@
     function selectType(type) {
       state.selectedType = type;
       state.resultanteFijado = false;
+      state.resultanteConfirmado = null;
       ocultarStockAviso();
       document.getElementById('formTitle').textContent = type === 'Preparación' ? 'Preparé / usé materia prima' : type;
       document.getElementById('mainForm').classList.add('active');
@@ -2656,15 +2665,66 @@
       if (!caja || !oculto) return;
       if (elegido && elegido.sku) {
         oculto.value = elegido.sku;
+        state.resultanteMostrado = { sku: elegido.sku, nombre: elegido.nombre };
         caja.innerHTML = '<b>' + esc(elegido.nombre) + '</b><br><span class="hint">' + esc(elegido.sku) + '</span>';
       } else {
         oculto.value = '';
+        state.resultanteMostrado = null;
         caja.innerHTML = '<span class="hint">' + (varios && varios.length
           ? (varios.length === 1
               ? 'Hay uno parecido, pero el tamaño no cuadra. Toca “Cambiar” y confirma cuál es.'
               : 'Hay ' + varios.length + ' posibles. Toca “Cambiar” y escoge cuál es.')
           : 'Sin definir todavía. Toca “Cambiar” para escogerlo.') + '</span>';
       }
+      pintarConfirmacionResultante();
+    }
+
+    // ============ CONFIRMAR EL PRODUCTO QUE RESULTA, CON UN TOQUE ============
+    //
+    // Oscar, 21-sep-2026 (segunda vuelta): la propuesta de la app, aunque este bien, NO
+    // alcanza para guardar. Carlos la CONFIRMA con un toque —"Sí, es este", o tocando la
+    // propuesta— o escoge otro con "Cambiar", que tambien cuenta como confirmar.
+    //
+    // La confirmacion queda atada a lo que habia en pantalla cuando se dio (tipo, subtipo,
+    // tanque, presentacion, item y etiqueta: la FIRMA). Si algo de eso cambia —tecleado o
+    // escogido de la lista de sugerencias— deja de valer y hay que volver a confirmar. Se
+    // compara la firma al GUARDAR, no solo con eventos: un campo que cambie por un camino
+    // que no dispare 'input' no puede colar una confirmacion vieja.
+    function firmaResultante() {
+      return [state.selectedType, valueOf('Subempaque'), valueOf('TamborID'), valueOf('Presentacion'),
+        valueOf('Item'), valueOf('Etiqueta')].map(function (x) { return normalize(x); }).join('|');
+    }
+    function resultanteConfirmado() {
+      var c = state.resultanteConfirmado;
+      var sku = valueOf('SkuResultante');
+      return !!(c && sku && c.sku === sku && c.firma === firmaResultante());
+    }
+    function confirmarResultante() {
+      var sku = valueOf('SkuResultante');
+      if (!sku) return;
+      state.resultanteConfirmado = { sku: sku, firma: firmaResultante() };
+      state.resultanteFijado = true;       // desde aqui la propuesta automatica no la pisa
+      pintarConfirmacionResultante();
+    }
+    function soltarConfirmacionResultante() {
+      state.resultanteConfirmado = null;
+      state.resultanteFijado = false;
+      refrescarResultante();
+      pintarConfirmacionResultante();
+    }
+    function pintarConfirmacionResultante() {
+      var caja = document.getElementById('resultanteTexto');
+      var si = document.getElementById('btnResultanteSi');
+      var marca = document.getElementById('resultanteMarca');
+      if (!caja || !si || !marca) return;
+      var hay = !!valueOf('SkuResultante');
+      var ok = resultanteConfirmado();
+      si.style.display = hay && !ok ? '' : 'none';
+      caja.style.borderColor = ok ? '#16a34a' : (hay ? '#e0a800' : '');
+      caja.style.background = ok ? '#f0fdf4' : (hay ? '#fffbeb' : '');
+      marca.style.color = ok ? '#15803d' : '#92400e';
+      marca.textContent = ok ? '✔ Confirmado'
+        : (hay ? 'Propuesto por la app: confírmalo con «Sí, es este» o escoge otro con «Cambiar».' : '');
     }
 
     // state.resultanteFijado se pone en cuanto el ingeniero escoge a mano: desde ahi la
@@ -2677,6 +2737,7 @@
 
     function limpiarResultante() {
       state.resultanteFijado = false;
+      state.resultanteConfirmado = null;
       var oculto = document.getElementById('SkuResultante');
       if (oculto) oculto.value = '';
       pintarResultante(null, []);
@@ -2692,26 +2753,33 @@
       if (!elegido) return;                 // dijo "no está en la lista": se deja como estaba
       state.resultanteFijado = true;
       pintarResultante(elegido, []);
+      confirmarResultante();                // escoger otro con "Cambiar" TAMBIEN es confirmar
     }
 
     /**
-     * EL PRODUCTO QUE RESULTA, SÍ O SÍ. Devuelve '' si ya está escogido, o el mensaje de por
-     * qué NO se guarda. Lo que viaja es lo que se ve en "¿A qué producto resulta?".
+     * EL PRODUCTO QUE RESULTA, SÍ O SÍ, Y CONFIRMADO. Devuelve '' si Carlos lo confirmó para
+     * lo que hay en pantalla, o el mensaje de por qué NO se guarda. Lo que viaja es lo que se
+     * ve en "¿A qué producto resulta?".
      *
-     * Si la propuesta no alcanzó a salir (el catálogo de Siigo o el mapa llegan después de
-     * escribir la etiqueta, o la casilla se llenó escogiendo de una lista sin disparar
-     * 'input'), se propone AHORA, a la vista, y aun así NO se guarda en ese toque: el que
-     * dice qué producto salió es el ingeniero. Otro toque a Guardar si es ese; "Cambiar" si no.
+     * Una propuesta sin confirmar NO alcanza (Oscar, 21-sep-2026), aunque esté bien. Si la
+     * propuesta ni alcanzó a salir (el catálogo de Siigo o el mapa llegan después de escribir
+     * la etiqueta), se propone AHORA, a la vista, y tampoco se guarda: falta el toque.
      */
     function faltaProductoResultante() {
-      if (valueOf('SkuResultante')) return '';
-      var h = sugerirResultante();
-      if (h && h.sku) {
-        pintarResultante(h, []);
-        return 'Revisa ¿A qué producto resulta?: la app propone ' + h.nombre + ' (' + h.sku + '). ' +
-          'Si es ese, toca Guardar otra vez; si no, toca «Cambiar» y escoge el que salió. Todavía no se guardó nada.';
+      if (resultanteConfirmado()) return '';
+      var sku = valueOf('SkuResultante');
+      var m = state.resultanteMostrado;
+      var nombre = sku ? ((m && m.sku === sku && m.nombre) || sku) : '';
+      if (!sku) {
+        var h = sugerirResultante();
+        pintarResultante(h && h.sku ? h : null, (h && h.varios) || []);
+        if (h && h.sku) { sku = h.sku; nombre = h.nombre; }
       }
-      pintarResultante(null, (h && h.varios) || []);
+      pintarConfirmacionResultante();
+      if (sku) {
+        return 'Confirma ¿A qué producto resulta?: la app propone ' + nombre + ' (' + sku + '). ' +
+          'Si es ese, toca «Sí, es este»; si no, «Cambiar» y escoge el que salió. Sin confirmar no se guarda; lo que escribiste NO se pierde.';
+      }
       return 'Falta decir ¿A qué producto resulta?: toca «Cambiar» y escoge de la lista de Siigo el producto ' +
         'que salió de este empaque (las recargas también: RECARGA LITRO…). Sin eso no se guarda; lo que escribiste NO se pierde.';
     }
@@ -3557,6 +3625,9 @@
             input.value = el.dataset.value;
           }
           box.style.display = 'none';
+          // Escoger de la lista cambia el campo sin 'input': si es uno de los que deciden el
+          // producto que resulta, la propuesta se rehace y la confirmacion se pierde.
+          if (['Etiqueta', 'Presentacion', 'TamborID', 'Item'].indexOf(input.id) >= 0) soltarConfirmacionResultante();
           if (typeof afterPick === 'function') afterPick();
         });
       });
@@ -4997,8 +5068,10 @@
       hideSuggestions();
       setWarning(document.getElementById('itemWarning'), '');
       // El producto que resulta vuelve a proponerse solo: si el ingeniero lo fijo a mano
-      // para el registro anterior, esa decision NO se arrastra al siguiente.
+      // para el registro anterior, esa decision NO se arrastra al siguiente. Y la
+      // confirmacion tampoco: cada empaque se confirma el suyo.
       state.resultanteFijado = false;
+      state.resultanteConfirmado = null;
       if (typeof pintarResultante === 'function') pintarResultante(null, []);
       if (clearType) {
         state.selectedType = '';
@@ -5014,7 +5087,7 @@
       var mapa = [
         // Primero los de Empacar: sus mensajes dicen "producto", "cantidad" y "materia prima",
         // y sin esto el foco se iba a casillas que en Empacar estan escondidas.
-        ['a que producto resulta', 'btnResultante'], ['echaste al empacar', 'mpExtraLista'],
+        ['a que producto resulta', 'resultanteCaja'], ['echaste al empacar', 'mpExtraLista'],
         ['categor', 'Categoria'], ['responsable', 'Responsable'], ['cual tanque', 'TamborID'],
         ['nombre al balde', 'TamborID'], ['tanque o balde', 'TamborID'], ['litros', 'LitrosPreparados'],
         ['producto', 'Producto'], ['presentaci', 'Presentacion'], ['cuantas presentaciones', 'CantidadPresentacion'],
