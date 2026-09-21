@@ -267,6 +267,17 @@
       width: 100%;
     }
     .mp-agua { margin-top: 8px; border-color: #0891b2; background: #ecfeff; color: #0e7490; }
+    /* La materia prima que se echa AL EMPACAR (casi siempre la fragancia). Clase propia a
+       proposito: leerFilasMp() de "Preparé" lee TODO lo que tenga .mp-fila. */
+    .mpe-fila {
+      display: grid;
+      grid-template-columns: 2fr 0.9fr 0.7fr 1.4fr auto;
+      gap: 8px;
+      margin-bottom: 10px;
+      align-items: center;
+    }
+    .mpe-fila input, .mpe-fila select { padding: 10px; font-size: 14px; }
+    .mpe-fila .mpe-cuenta { grid-column: 1 / -1; font-size: 13px; font-weight: 600; color: var(--blue); }
 
     /* ===== Panel de existencias faltantes ===== */
     .stock-aviso {
@@ -560,6 +571,8 @@
       .row, .filtros { grid-template-columns: 1fr; }
       .mp-fila { grid-template-columns: 1.5fr 1fr 0.9fr auto; }
       .mp-fila .mp-var { display: none; }
+      .mpe-fila { grid-template-columns: 0.7fr 0.65fr 1.7fr auto; }
+      .mpe-fila .mpe-item { grid-column: 1 / -1; }
       .stock-fila { grid-template-columns: 1fr 0.8fr 0.6fr auto; }
       header h1 { font-size: 21px; }
       .actions { flex-direction: column; }
@@ -863,6 +876,7 @@
                 Es el producto de Siigo que ENTRA al inventario y el que después se factura.
                 La app propone uno, pero el que manda eres tú: <b>un tanque puede tener una
                 base</b> que hoy sale como un producto y mañana, con algo más, como otro.
+                <b>Es obligatorio:</b> sin él no se guarda (también en las recargas).
               </div>
             </div>
           </div>
@@ -878,6 +892,18 @@
                 <input id="MermaCantidad" type="text" inputmode="decimal" placeholder="¿Cuánto?" />
               </div>
               <div class="hint">Ej: el bulto de 20 kg rindió 20.1 kg → “Sobró 0.1”. Queda registrado y el inventario se ajusta solo.</div>
+            </div>
+          </div>
+          <!-- LA MATERIA PRIMA QUE SE ECHA AL EMPACAR (Oscar, 21-sep-2026): casi siempre la
+               fragancia, que no va al tanque grande sino al empacar. Cada renglon viaja como un
+               "Consumo materia prima" en el MISMO movimiento que el empaque. Ver
+               agregarFilaMpEmpaque. -->
+          <div class="row">
+            <div class="field full hidden" data-field="mpextra">
+              <label>¿Le echaste materia prima al empacar? (opcional)</label>
+              <div class="hint" style="margin:0 0 8px">Casi siempre es la fragancia que no va al tanque grande. Escoge cuál, cuánto, y si esa cantidad fue <b>para todo lo empacado</b> o <b>por cada unidad</b>. Se descuenta del inventario.</div>
+              <div id="mpExtraLista"></div>
+              <button type="button" class="mp-agregar" id="btnMpExtraAgregar">+ Sí, le eché materia prima / fragancia</button>
             </div>
           </div>
           <div class="row">
@@ -1508,7 +1534,7 @@
       'Entrada mercancía': ['responsable', 'categoria', 'item', 'variante', 'cantidad', 'unidad', 'observacion'],
       'Preparación': ['responsable', 'destino', 'materias', 'baseusada', 'baselitros', 'observacion'],
       'Empacar producto': ['responsable', 'subempaque', 'observacion'],
-      'Empacar sólido/polvo': ['responsable', 'item', 'variante', 'presentacion', 'cantpres', 'etiqueta', 'resultante', 'merma', 'observacion'],
+      'Empacar sólido/polvo': ['responsable', 'item', 'variante', 'presentacion', 'cantpres', 'etiqueta', 'resultante', 'merma', 'mpextra', 'observacion'],
       'Salida directa/Baja': ['responsable', 'categoria', 'item', 'variante', 'cantidad', 'unidad', 'motivo', 'observacion'],
       'Fabricar palos': ['responsable', 'item', 'cantidad', 'observacion'],
       'Novedad/Corrección': ['responsable', 'categoria', 'item', 'variante', 'cantidad', 'unidad', 'motivo', 'referencia', 'observacion'],
@@ -1551,6 +1577,12 @@
         });
       });
       document.getElementById('btnMpAgregar').addEventListener('click', function () { agregarFilaMp(); });
+      // Lo que se echa al empacar: la cuenta "por cada unidad" depende de cuantas se
+      // empacaron, asi que se repinta tambien cuando cambian esas dos casillas.
+      document.getElementById('btnMpExtraAgregar').addEventListener('click', function () { agregarFilaMpEmpaque(); });
+      ['CantidadPresentacion', 'Presentacion'].forEach(function (id) {
+        document.getElementById(id).addEventListener('input', pintarCuentasMpEmpaque);
+      });
       document.getElementById('btnRestoAgua').addEventListener('click', ponerRestoEnAgua);
       document.getElementById('btnInvRecargar').addEventListener('click', loadInventario);
       document.getElementById('invBuscar').addEventListener('input', renderInventario);
@@ -1944,7 +1976,9 @@
           unidad: valueOf('Unidad'), presentacion: valueOf('Presentacion'),
           cantidadPresentacion: valueOf('CantidadPresentacion'), etiqueta: valueOf('Etiqueta'),
           baseTanque: valueOf('BaseTanque'), baseLitros: valueOf('BaseLitros'),
-          materias: (typeof leerFilasMp === 'function' ? leerFilasMp() : [])
+          materias: (typeof leerFilasMp === 'function' ? leerFilasMp() : []),
+          resultante: valueOf('SkuResultante'),
+          alEmpacar: (typeof leerFilasMpEmpaque === 'function' ? leerFilasMpEmpaque() : [])
         };
       } catch (e) { return {}; }
     }
@@ -2558,8 +2592,13 @@
     //
     // Por eso el producto que resulta se MUESTRA siempre y se puede cambiar siempre. La app
     // propone (por etiqueta+presentacion, o por el tanque cuando no hay etiqueta) y el
-    // ingeniero confirma o escoge otro. Si queda vacio, el servidor lo pide antes de guardar:
-    // nunca se empaca a ciegas.
+    // ingeniero confirma o escoge otro.
+    //
+    // Y ES OBLIGATORIO (Oscar, 2026-09-21): "A Carlos no lo dejes guardar sin elegir a qué
+    // producto resulta; tiene que decir sí o sí qué producto resulta". Si queda vacio NO se
+    // guarda — ni aqui (faltaProductoResultante) ni en el servidor (validarEmpaquePost_ y
+    // exigirProductoQueResulta_ de Código.js, que ya no lo rellena solo con el mapa). Lo que
+    // se guarda es lo que se VE en la casilla; nada lo rellena por debajo.
 
     function productoDelTanqueUI(id) {
       if (!id) return '';
@@ -2642,18 +2681,40 @@
       pintarResultante(elegido, []);
     }
 
+    /**
+     * EL PRODUCTO QUE RESULTA, SÍ O SÍ. Devuelve '' si ya está escogido, o el mensaje de por
+     * qué NO se guarda. Lo que viaja es lo que se ve en "¿A qué producto resulta?".
+     *
+     * Si la propuesta no alcanzó a salir (el catálogo de Siigo o el mapa llegan después de
+     * escribir la etiqueta, o la casilla se llenó escogiendo de una lista sin disparar
+     * 'input'), se propone AHORA, a la vista, y aun así NO se guarda en ese toque: el que
+     * dice qué producto salió es el ingeniero. Otro toque a Guardar si es ese; "Cambiar" si no.
+     */
+    function faltaProductoResultante() {
+      if (valueOf('SkuResultante')) return '';
+      var h = sugerirResultante();
+      if (h && h.sku) {
+        pintarResultante(h, []);
+        return 'Revisa ¿A qué producto resulta?: la app propone ' + h.nombre + ' (' + h.sku + '). ' +
+          'Si es ese, toca Guardar otra vez; si no, toca «Cambiar» y escoge el que salió. Todavía no se guardó nada.';
+      }
+      pintarResultante(null, (h && h.varios) || []);
+      return 'Falta decir ¿A qué producto resulta?: toca «Cambiar» y escoge de la lista de Siigo el producto ' +
+        'que salió de este empaque (las recargas también: RECARGA LITRO…). Sin eso no se guarda; lo que escribiste NO se pierde.';
+    }
+
     function updateSubempaque() {
       if (state.selectedType !== 'Empacar producto') return;
       var s = valueOf('Subempaque');
-      esconderCampos(['tambor', 'item', 'variante', 'presentacion', 'cantpres', 'accesorio', 'etiqueta', 'resultante']);
+      esconderCampos(['tambor', 'item', 'variante', 'presentacion', 'cantpres', 'accesorio', 'etiqueta', 'resultante', 'mpextra']);
       var tamborLbl = document.getElementById('tamborLabel');
       var hint = document.getElementById('tamborHint');
       if (s === 'tambor') {
-        mostrarCampos(['tambor', 'presentacion', 'cantpres', 'accesorio', 'etiqueta', 'resultante', 'merma']);
+        mostrarCampos(['tambor', 'presentacion', 'cantpres', 'accesorio', 'etiqueta', 'resultante', 'merma', 'mpextra']);
         tamborLbl.textContent = '¿De cuál tanque o balde?';
         hint.textContent = 'Elige el tanque/balde de la lista: muestra qué tiene cada uno. Si no existe, primero registra la preparación.';
       } else {
-        mostrarCampos(['item', 'variante', 'presentacion', 'cantpres', 'accesorio', 'etiqueta', 'resultante']);
+        mostrarCampos(['item', 'variante', 'presentacion', 'cantpres', 'accesorio', 'etiqueta', 'resultante', 'mpextra']);
         document.getElementById('itemLabel').textContent = 'Materia prima que empacas';
       }
     }
@@ -2740,6 +2801,204 @@
       // La cuenta del agua era de la formula anterior: con la lista vacia ya no aplica.
       var cuentaAgua = document.getElementById('restoAguaCuenta');
       if (cuentaAgua) cuentaAgua.textContent = '';
+    }
+
+    // ============ LA MATERIA PRIMA QUE SE ECHA AL EMPACAR ============
+    //
+    // Oscar, 2026-09-21: "Cuando Carlos vaya a darle empacar, que le dé también cómo colocar
+    // cuánto sacó de más de materia prima — generalmente es fragancia, porque Carlos no la
+    // echa al tanque grande, sólo cuando empaca le echa la fragancia. Que dé la opción de
+    // cuánto echó en total para todo, o cuánto echó para cada uno".
+    //
+    // Hasta hoy esa fragancia no tenia donde ir: quedaba escrita en la observacion, y ahi no
+    // descuenta nada ni le suma costo a nadie.
+    //
+    // NO ES UN TIPO NUEVO. Cada renglon sale como un "Consumo materia prima" normal —el mismo
+    // que manda "Preparé / usé materia prima"— dentro del MISMO movimiento compuesto que el
+    // empaque. Por eso, sin tocar ningun motor:
+    //   · los DOS motores (Código.js y lab_motor.js del Worker) lo descuentan con la misma
+    //     cuenta (3-INVENTARIO/app-ingeniero/prueba_empaque_resulta.mjs los compara);
+    //   · el candado de existencias del servidor (validarStockItem_) lo revisa igual, y si
+    //     frena, frena el empaque entero: o entra completo o no entra;
+    //   · anular el empaque devuelve tambien la fragancia (comparten OperacionID);
+    //   · el puente a D1 (fabrica_sync) lo baja al saldo vivo como cualquier consumo.
+    // "Por cada unidad" se multiplica AQUI y a la vista, antes de guardar: lo que viaja es el
+    // total, y la cuenta (30 ml × 20 = 600 ml) queda escrita en la observacion del renglon.
+    // No se crean items: la lista es la misma de "Preparé" (materias primas y fragancias).
+    function agregarFilaMpEmpaque(valores) {
+      var cont = document.getElementById('mpExtraLista');
+      var fila = document.createElement('div');
+      fila.className = 'mpe-fila';
+      fila.innerHTML =
+        '<input class="mpe-item" list="dlMp" placeholder="Fragancia / materia prima" />' +
+        '<input class="mpe-cant" type="text" inputmode="decimal" placeholder="Cant." />' +
+        '<select class="mpe-uni"><option>ml</option><option>L</option><option>g</option><option>kg</option><option>und</option></select>' +
+        '<select class="mpe-modo"><option value="total">para todo lo empacado</option><option value="unidad">por cada unidad</option></select>' +
+        '<button type="button" class="mp-quitar" title="Quitar">✕</button>' +
+        '<div class="mpe-cuenta"></div>';
+      fila.querySelector('.mp-quitar').addEventListener('click', function () {
+        fila.remove();
+        pintarCuentasMpEmpaque();
+      });
+      fila.addEventListener('input', pintarCuentasMpEmpaque);
+      fila.addEventListener('change', pintarCuentasMpEmpaque);
+      if (valores) {
+        fila.querySelector('.mpe-item').value = valores.item || '';
+        fila.querySelector('.mpe-cant').value = valores.cantidad || '';
+        fila.querySelector('.mpe-uni').value = valores.unidad || 'ml';
+        fila.querySelector('.mpe-modo').value = valores.modo || 'total';
+      }
+      cont.appendChild(fila);
+      pintarCuentasMpEmpaque();
+    }
+    function leerFilasMpEmpaque() {
+      var filas = [];
+      document.querySelectorAll('#mpExtraLista .mpe-fila').forEach(function (f) {
+        var item = f.querySelector('.mpe-item').value.trim();
+        var cantidad = f.querySelector('.mpe-cant').value.trim();
+        if (!item && !cantidad) return;
+        filas.push({ item: item, cantidad: cantidad, unidad: f.querySelector('.mpe-uni').value,
+          modo: f.querySelector('.mpe-modo').value });
+      });
+      return filas;
+    }
+    function limpiarFilasMpEmpaque() {
+      var cont = document.getElementById('mpExtraLista');
+      if (cont) cont.innerHTML = '';
+    }
+    function fmtMpEmpaque(v) {
+      return String(Math.round(Number(v) * 1000000) / 1000000).replace('.', ',');
+    }
+    /**
+     * La cuenta de UN renglon: {total, texto}, o null si todavia no tiene cantidad.
+     * "Por cada unidad" = cantidad × lo empacado; en una recarga lo empacado son litros.
+     */
+    function cuentaMpEmpaque(fila, nPres, pres) {
+      var q = parseFloat(conPunto(fila.cantidad));
+      if (!(q > 0)) return null;
+      var u = fila.unidad || 'ml';
+      if (fila.modo !== 'unidad') {
+        return { total: Math.round(q * 1000000) / 1000000, texto: fmtMpEmpaque(q) + ' ' + u + ' para todo lo empacado' };
+      }
+      var recarga = /recarga/i.test(pres || '');
+      var n = parseFloat(conPunto(nPres));
+      if (!(n > 0)) return { total: 0, texto: fmtMpEmpaque(q) + ' ' + u + ' por cada unidad: falta decir cuántas empacaste' };
+      var total = Math.round(q * n * 1000000) / 1000000;
+      return { total: total, texto: fmtMpEmpaque(q) + ' ' + u + (recarga ? ' por cada litro × ' : ' por cada unidad × ') +
+        fmtMpEmpaque(n) + (recarga ? ' L de recarga' : ' unidades') + ' = ' + fmtMpEmpaque(total) + ' ' + u };
+    }
+    /** Los litros que salieron en el empaque, leidos de la presentacion (0 si no se sabe). */
+    function litrosEmpacadosMp(pres, nPres) {
+      var n = parseFloat(conPunto(nPres));
+      if (!(n > 0)) return 0;
+      var t = normalize(pres);
+      if (/recarga/.test(t)) return /mililitro|\bml\b/.test(t) ? n / 1000 : n;
+      if (/pimpina/.test(t)) return 19 * n;
+      var m = t.match(/(\d+(?:[.,]\d+)?)\s*(ml|cc|lts|lt|litros|litro|l)\b/);
+      if (!m) return 0;
+      var v = parseFloat(m[1].replace(',', '.'));
+      return (/^(ml|cc)$/.test(m[2]) ? v / 1000 : v) * n;
+    }
+    /** Un total en litros, o null si la unidad no es de volumen (kilos, gramos, unidades). */
+    function aLitrosMp(total, unidad) {
+      var u = normalize(unidad);
+      if (u === 'ml') return total / 1000;
+      if (u === 'l') return total;
+      return null;
+    }
+    /**
+     * Valida los renglones y los deja listos: {error} o {lineas:[...]}. Se llama ANTES de
+     * cualquier confirmacion, para que un error no aparezca a la mitad de un guardado.
+     */
+    function armarMpEmpaque(filas, nPres, pres) {
+      var listaFrag = getCatalog('fragancias').concat(invItems('Fragancia'));
+      var listaCol = getCatalog('colores').concat(invItems('Color'));
+      var listaMp = getCatalog('materiasPrimas').concat(invItems('Materia prima'));
+      var enInventario = invItems('Fragancia').concat(invItems('Color')).concat(invItems('Materia prima'));
+      var catalogo = unique(listaMp.concat(listaFrag).concat(listaCol));
+      var literal = function (lista, x) { return lista.some(function (y) { return String(y).trim() === String(x).trim(); }); };
+      var parecido = function (lista, x) { return lista.some(function (y) { return normalize(y) === normalize(x); }); };
+      var empacados = litrosEmpacadosMp(pres, nPres);
+      var lineas = [];
+      var vistos = {};
+      for (var i = 0; i < (filas || []).length; i++) {
+        var f = filas[i];
+        if (!f.item) return { error: 'En lo que echaste al empacar hay un renglón con cantidad y sin decir cuál materia prima. Escógela de la lista o quita ese renglón con la ✕.' };
+        if (!esNumero(f.cantidad, false)) return { error: 'Ponle cantidad a "' + f.item + '" en lo que echaste al empacar, o quita ese renglón con la ✕.' };
+        // "lavanda" ES "Lavanda": se resuelve contra la lista y viaja con el nombre de la
+        // lista, igual que en "Preparé" (si no, el saldo se parte en dos nombres).
+        var resuelto = resolverEnCatalogo(f.item, catalogo);
+        if (resuelto.estado === 'varios') return { error: 'En lo que echaste al empacar: ' + textoVariosCatalogo(f.item, resuelto.opciones) };
+        if (resuelto.estado !== 'ok') return { error: 'La materia prima "' + f.item + '" que echaste al empacar no aparece en la lista. ' +
+          'Escógela del desplegable (trae las materias primas y las fragancias). Aquí no se crean ítems: si de verdad falta, se crea en Siigo y se ata en /enlaces.' };
+        var nombre = resuelto.nombre;
+        var cuenta = cuentaMpEmpaque(f, nPres, pres);
+        if (!cuenta || !(cuenta.total > 0)) return { error: 'Para "' + nombre + '" por cada unidad falta saber cuántas empacaste (lo que echaste al empacar).' };
+        // La tilde decide: "Limon" es la fragancia y "Limón" la materia prima. Se mira el
+        // nombre LETRA POR LETRA, y solo si no esta en ninguna otra lista, por parecido.
+        var esFrag = literal(listaFrag, nombre) || (!literal(listaMp, nombre) && !literal(listaCol, nombre) && parecido(listaFrag, nombre));
+        var esCol = !esFrag && (literal(listaCol, nombre) || (!literal(listaMp, nombre) && parecido(listaCol, nombre)));
+        // La fragancia que la lista muestra como "Nombre (variante)" se guarda partida, igual
+        // que la parte doPost: el saldo vive en Item + Variante, no en el texto con parentesis.
+        var item = nombre, variante = '';
+        var partes = String(nombre).match(/^(.*?)\s*\((.*)\)\s*$/);
+        if (partes && esFrag && !literal(enInventario, nombre) && !literal(listaMp, nombre)) {
+          item = partes[1].trim();
+          variante = partes[2].trim();
+        }
+        var claveL = normalize(item) + '|' + normalize(variante);
+        if (vistos[claveL]) return { error: '"' + nombre + '" está repetida en lo que echaste al empacar. Déjala en un solo renglón con la cantidad total.' };
+        vistos[claveL] = true;
+        // EL ERROR DE MIL VECES. "30" con la unidad en L en vez de ml, o "por cada unidad"
+        // cuando era para todo, da mas fragancia que producto. Eso no puede pasar en la planta.
+        var litros = aLitrosMp(cuenta.total, f.unidad);
+        if (litros != null && empacados > 0 && litros >= empacados) {
+          return { error: 'De "' + nombre + '" pusiste ' + cuenta.texto + ', y eso es igual o más que TODO lo que empacaste (' +
+            fmtMpEmpaque(empacados) + ' L). Revisa la unidad (¿ml en vez de L?) o si era "para todo lo empacado" en vez de "por cada unidad". (Es lo que echaste al empacar.)' };
+        }
+        lineas.push({
+          item: item, variante: variante,
+          categoria: esFrag ? 'Fragancia' : (esCol ? 'Color' : 'Materia prima'),
+          total: cuenta.total, unidad: f.unidad || 'ml', texto: cuenta.texto
+        });
+      }
+      return { lineas: lineas };
+    }
+    /** Lo que viaja: un "Consumo materia prima" por renglon, pegado al empaque. */
+    function registrosMpEmpaque(lineas, tambor, producto) {
+      return (lineas || []).map(function (l) {
+        var r = baseRecord('Consumo materia prima');
+        r.Categoria = l.categoria;
+        r.Item = l.item;
+        r.Variante = l.variante;
+        r.Cantidad = String(l.total);
+        r.Unidad = l.unidad;
+        r.TamborID = tambor || '';
+        r.Producto = producto || '';
+        r.Observacion = ('Echada al empacar: ' + l.texto + '. ' + valueOf('Observacion')).trim();
+        return r;
+      });
+    }
+    /** La cuenta de cada renglon, a la vista, antes de guardar. */
+    function pintarCuentasMpEmpaque() {
+      var nPres = valueOf('CantidadPresentacion');
+      var pres = valueOf('Presentacion');
+      document.querySelectorAll('#mpExtraLista .mpe-fila').forEach(function (f) {
+        var caja = f.querySelector('.mpe-cuenta');
+        var fila = { item: f.querySelector('.mpe-item').value.trim(), cantidad: f.querySelector('.mpe-cant').value.trim(),
+          unidad: f.querySelector('.mpe-uni').value, modo: f.querySelector('.mpe-modo').value };
+        var c = cuentaMpEmpaque(fila, nPres, pres);
+        if (!c) { caja.textContent = fila.item ? 'Pon cuánto le echaste.' : ''; return; }
+        if (!(c.total > 0)) { caja.textContent = c.texto; return; }
+        var texto = 'Se descuentan ' + fmtMpEmpaque(c.total) + ' ' + fila.unidad + (fila.item ? ' de ' + fila.item : '') +
+          (fila.modo === 'unidad' ? ' (' + c.texto + ')' : '');
+        // Cuanto hay, para que se vea ANTES de guardar si el candado va a frenar.
+        var hay = (state.inventario || []).filter(function (r) {
+          return fila.item && normalize(r.item) === normalize(fila.item) && !normalize(r.variante || '');
+        })[0];
+        if (hay && isFinite(hay.stock)) texto += ' · en inventario: ' + fmtMpEmpaque(hay.stock) + ' ' + (hay.unidad || '');
+        caja.textContent = texto;
+      });
     }
 
     // ================== SUGERENCIAS ==================
@@ -3609,10 +3868,10 @@
         r.CantidadPresentacion = valueOf('CantidadPresentacion');
         r.Etiqueta = valueOf('Etiqueta');
         // Igual que en el empaque de líquidos: la etiqueta dice QUÉ es y la presentación
-        // DE QUÉ TAMAÑO. Aquí los tamaños son en peso (libra, kilo, bulto) y el buscador
-        // devuelve vacío si no cuadra; entonces se guarda sin SKU, como antes.
-        var halladoP = buscarEnSiigo(valueOf('Etiqueta'), valueOf('Presentacion'));
-        r.SKU = valueOf('SkuResultante') || (halladoP && halladoP.sku) || '';
+        // DE QUÉ TAMAÑO. Y el producto que resulta es el que se VE en "¿A qué producto
+        // resulta?": ya no se rellena por debajo con el buscador ni se guarda sin él
+        // (Oscar, 21-sep-2026: "tiene que decir sí o sí qué producto resulta").
+        r.SKU = valueOf('SkuResultante');
         r.Cantidad = '';
         r.Unidad = '';
         if (!r.Item) return { error: 'Debes escribir el polvo/sólido que empacas.' };
@@ -3623,10 +3882,14 @@
         if (e3) return { error: e3 };
         var e4 = validarPresentacion(r.Presentacion);
         if (e4) return { error: e4 };
+        var faltaS = faltaProductoResultante();
+        if (faltaS) return { error: faltaS };
+        var extraS = armarMpEmpaque(leerFilasMpEmpaque(), r.CantidadPresentacion, r.Presentacion);
+        if (extraS.error) return { error: extraS.error };
         var listaS = [r];
         var rM = recordMerma(r.Item, r.Variante, '', 'kg');
         if (rM) listaS.push(rM);
-        return { records: listaS };
+        return { records: listaS.concat(registrosMpEmpaque(extraS.lineas, '', r.Item)) };
       }
 
       if (type === 'Fabricar palos') {
@@ -4010,14 +4273,31 @@
       // salen sin etiquetas, guardalo en tu base de conocimiento". El cliente trae su
       // envase y no se le pega nada, asi que no hay producto de Siigo que buscar ni nada
       // que avisar. Se mira la PRESENTACION y no solo lo que diga la etiqueta: asi la
-      // regla vale aunque el ingeniero escriba cualquier cosa en ese campo.
-      var esRecarga = /recarga/i.test(pres);
-      var sinEtiqueta = esRecarga || /^sin etiqueta/i.test(etiq);
-      var hallado = sinEtiqueta ? null : buscarEnSiigo(etiq, pres);
-      // MANDA LO QUE ESCOGIO EL INGENIERO. El campo "¿A qué producto resulta?" es la
-      // decision; el buscador es solo la propuesta de respaldo. Si los dos quedan vacios,
-      // el servidor lo pide al guardar y se abre la lista.
-      var skuEmpaque = valueOf('SkuResultante') || (hallado && hallado.sku) || '';
+      // regla vale aunque el ingeniero escriba cualquier cosa en ese campo. Sin etiqueta
+      // no quiere decir sin producto: la recarga RESULTA en su RECARGA LITRO <producto>.
+      //
+      // MANDA LO QUE ESCOGIO EL INGENIERO, Y SIN ESO NO SE GUARDA (Oscar, 21-sep-2026: "A
+      // Carlos no lo dejes guardar sin elegir a qué producto resulta; tiene que decir sí o
+      // sí qué producto resulta"). Hasta hoy, si la casilla quedaba vacia, aqui se rellenaba
+      // por debajo con el buscador y en el servidor con el mapa: nadie lo escogia. Ahora
+      // viaja SOLO lo que se ve en "¿A qué producto resulta?" (ver faltaProductoResultante).
+      var tambor = sub === 'tambor' ? valueOf('TamborID') : '';
+      if (sub === 'tambor' && !tambor) return { error: 'Escribe de cuál tanque o balde empacaste.' };
+      var item = '';
+      if (sub !== 'tambor') {
+        item = valueOf('Item');
+        if (!item) return { error: 'Escribe cuál materia prima empacaste.' };
+        var e1 = validarItemCatalogo(item, document.getElementById('CrearNuevoItem').checked ? 'Sí' : 'No',
+          unique(getCatalog('materiasPrimas').concat(invItems('Materia prima'))), function (bueno) { item = bueno; });
+        if (e1) return { error: e1 };
+      }
+      var faltaProducto = faltaProductoResultante();
+      if (faltaProducto) return { error: faltaProducto };
+      var skuEmpaque = valueOf('SkuResultante');
+      // Lo que se echo al empacar (casi siempre la fragancia). Se valida AQUI, antes de la
+      // pregunta del tanque: un error no puede aparecer a la mitad de un guardado.
+      var extra = armarMpEmpaque(leerFilasMpEmpaque(), nPres, pres);
+      if (extra.error) return { error: extra.error };
 
       // AQUI HABIA UN "ACEPTAR = guardar asi de todas formas" QUE YA ERA MENTIRA.
       //
@@ -4031,12 +4311,11 @@
       // se le abre la lista de Siigo para que escoja (ver el ciclo de preguntas al
       // guardar). Una sola puerta, y ninguna forma de guardar sin trazabilidad.
       //
-      // Se deja pasar a proposito: el servidor decide. Asi tambien quedan cubiertas las
-      // recargas, que salen sin etiqueta y su SKU lo resuelve el tanque del que se empaca.
+      // (Desde el 21-sep la casilla vacia ya no llega al servidor: se frena arriba. El ciclo
+      // de preguntas de submitForm queda de respaldo para una pestaña vieja en cache.)
 
       if (sub === 'tambor') {
-        var tambor = valueOf('TamborID');
-        if (!tambor) return { error: 'Escribe de cuál tanque o balde empacaste.' };
+        var productoTanque = productoDelTanqueUI(tambor);
         // LA MERMA VA DENTRO DE build(), NO AFUERA.
         //
         // Estaba afuera: el camino normal hacia `build()` y despues le pegaba la merma. Pero
@@ -4058,7 +4337,9 @@
           var lista = [r];
           var m = recordMerma('', '', tambor, 'L');
           if (m) lista.push(m);
-          return lista;
+          // Y lo que se echo al empacar, por la MISMA razon que la merma: si el tanque no
+          // aparece y el ingeniero confirma, tiene que viajar igual.
+          return lista.concat(registrosMpEmpaque(extra.lineas, tambor, productoTanque));
         };
         if (!tamborExiste(tambor)) {
           return {
@@ -4070,12 +4351,7 @@
         return { records: build() };
       }
 
-      // materia prima directa
-      var item = valueOf('Item');
-      if (!item) return { error: 'Escribe cuál materia prima empacaste.' };
-      var e1 = validarItemCatalogo(item, document.getElementById('CrearNuevoItem').checked ? 'Sí' : 'No',
-        unique(getCatalog('materiasPrimas').concat(invItems('Materia prima'))), function (bueno) { item = bueno; });
-      if (e1) return { error: e1 };
+      // materia prima directa (el item ya se valido arriba, antes del producto que resulta)
       var rm = baseRecord('Empacar materia prima');
       rm.Categoria = 'Materia prima';
       rm.Item = item;
@@ -4085,7 +4361,7 @@
       rm.Accesorio = acc;
       rm.Etiqueta = etiq;
       rm.SKU = skuEmpaque;
-      return { records: [rm] };
+      return { records: [rm].concat(registrosMpEmpaque(extra.lineas, '', item)) };
     }
 
     // Sobrante o faltante detectado durante el empaque (ajusta el inventario o el tanque)
@@ -4657,6 +4933,7 @@
       document.getElementById('mainForm').reset();
       document.getElementById('CrearNuevoItem').checked = false;
       limpiarFilasMp();
+      limpiarFilasMpEmpaque();   // lo que se echo al empacar era de ESE empaque, no del siguiente
       clearStatus();
       ocultarStockAviso();
       hideSuggestions();
@@ -4677,6 +4954,9 @@
     // Cuando falta un dato, se enfoca y resalta la casilla correspondiente
     function enfocarCampoError(msg) {
       var mapa = [
+        // Primero los de Empacar: sus mensajes dicen "producto", "cantidad" y "materia prima",
+        // y sin esto el foco se iba a casillas que en Empacar estan escondidas.
+        ['a que producto resulta', 'btnResultante'], ['echaste al empacar', 'mpExtraLista'],
         ['categor', 'Categoria'], ['responsable', 'Responsable'], ['cual tanque', 'TamborID'],
         ['nombre al balde', 'TamborID'], ['tanque o balde', 'TamborID'], ['litros', 'LitrosPreparados'],
         ['producto', 'Producto'], ['presentaci', 'Presentacion'], ['cuantas presentaciones', 'CantidadPresentacion'],
