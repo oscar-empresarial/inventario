@@ -757,6 +757,7 @@
             <div class="field hidden" data-field="litros">
               <label for="LitrosPreparados" id="litrosLabel">Litros que vas a fabricar</label>
               <input id="LitrosPreparados" type="text" inputmode="decimal" placeholder="Ej: 60" />
+              <div class="hint" id="litrosHint" aria-live="polite"></div>
             </div>
           </div>
 
@@ -1592,6 +1593,8 @@
         document.getElementById(id).addEventListener('input', pintarCuentasMpEmpaque);
       });
       document.getElementById('btnRestoAgua').addEventListener('click', ponerRestoEnAgua);
+      // Si el ingeniero cambia la capacidad a mano, ya no es "la que puso la app": se respeta.
+      document.getElementById('Tanque').addEventListener('change', function () { delete this.dataset.auto; });
       document.getElementById('btnInvRecargar').addEventListener('click', loadInventario);
       document.getElementById('invBuscar').addEventListener('input', renderInventario);
       document.getElementById('btnMovCargar').addEventListener('click', loadMovimientos);
@@ -2555,12 +2558,32 @@
         return normalize(x.id || '') === normalize(nombre);
       });
       if (!t) return null;
-      return { existe: true, vacio: normalize(t.estado || '') === 'vacio' || !(t.disponible > 0), producto: t.producto };
+      return { existe: true, vacio: normalize(t.estado || '') === 'vacio' || !(t.disponible > 0), producto: t.producto,
+        disponible: Number(t.disponible) || 0,
+        // La capacidad GUARDADA del tanque (la calculan los dos motores). null = sin dato: se pregunta.
+        capacidad: Number(t.capacidad) > 0 ? Number(t.capacidad) : null };
+    }
+    // Deja escogida la capacidad guardada del tanque en la casilla. Si el numero no esta en la
+    // lista (un galon de 4 L), se agrega: la casilla tiene que mostrar el dato real, no el mas
+    // parecido. Se marca como puesta por la app para poder quitarla si cambia el tanque.
+    function ponerCapacidadGuardada(cap) {
+      var sel = document.getElementById('Tanque');
+      if (!sel) return;
+      var opcion = Array.prototype.filter.call(sel.options, function (o) { return capacidadLitros(o.value) === cap; })[0];
+      if (!opcion) {
+        opcion = document.createElement('option');
+        opcion.textContent = String(cap).replace('.', ',') + ' L';
+        sel.insertBefore(opcion, sel.options[sel.options.length - 1]);
+      }
+      sel.value = opcion.value;
+      sel.dataset.auto = '1';
     }
     function updateDestino() {
       if (state.selectedType !== 'Preparación') return;
       var d = valueOf('Destino');
       esconderCampos(['tambor', 'producto', 'tanque', 'litros']);
+      var pistaL = document.getElementById('litrosHint');
+      if (pistaL) pistaL.textContent = '';
       // "El resto en agua" necesita los litros a fabricar: en "Uso directo" no hay.
       var btnAgua = document.getElementById('btnRestoAgua');
       if (btnAgua) btnAgua.style.display = (d === 'tanque' || d === 'balde') ? '' : 'none';
@@ -2584,18 +2607,34 @@
       if (state.selectedType !== 'Preparación' || valueOf('Destino') !== 'tanque') return;
       var nombre = valueOf('TamborID');
       var lbl = document.getElementById('litrosLabel');
+      var pista = document.getElementById('litrosHint');
+      if (pista) pista.textContent = '';
       if (!nombre) {
         esconderCampos(['producto', 'tanque', 'litros']);
         return;
       }
       var info = infoTanque(nombre);
+      // LA CAPACIDAD SE DICE UNA VEZ POR TANQUE (Oscar, 21-sep-2026). Si el tanque ya la tiene
+      // guardada, queda escogida en la casilla; si no, la casilla se muestra vacia y se
+      // pregunta. Una capacidad que puso la app para OTRO tanque (al ir tecleando "1", "10",
+      // "100") se quita: nunca se hereda la de un tanque ajeno.
+      var cap = info && info.capacidad;
+      var selCap = document.getElementById('Tanque');
+      if (cap) ponerCapacidadGuardada(cap);
+      else if (selCap && selCap.dataset.auto) { selCap.value = ''; delete selCap.dataset.auto; }
+      var fmtL = function (n) { return String(Math.round(n * 100) / 100).replace('.', ','); };
       if (info && !info.vacio) {
-        esconderCampos(['producto', 'tanque']);
+        esconderCampos(['producto']);
+        if (cap) esconderCampos(['tanque']); else mostrarCampos(['tanque']);
         mostrarCampos(['litros']);
         lbl.textContent = 'Litros que le pusiste (deja vacío si no adicionaste líquido)';
+        if (pista) pista.textContent = cap
+          ? 'Tiene ' + fmtL(info.disponible) + ' de ' + fmtL(cap) + ' L: le caben ' + fmtL(Math.max(0, cap - info.disponible)) + ' L más.'
+          : 'Este tanque todavía no tiene capacidad guardada: escoge en “Capacidad del tanque” de cuántos litros es. Se pregunta una sola vez.';
       } else {
         mostrarCampos(['producto', 'tanque', 'litros']);
         lbl.textContent = 'Litros que vas a fabricar';
+        if (pista) pista.textContent = cap ? 'El tanque es de ' + fmtL(cap) + ' L.' : '';
         if (info && info.vacio) {
           showStatus('Este tanque está VACÍO: se inicia un LOTE nuevo. Pon qué producto lleva ahora y los litros.', 'warn');
         }
@@ -3704,8 +3743,11 @@
         var id = t.id || t.producto || '';
         var est = normalize(t.estado || '');
         var marca = est === 'vacio' ? '🔴 VACÍO' : (est === 'en proceso' ? '⏳ EN PROCESO' : '');
-        var label = [id, (t.producto && t.producto !== id) ? t.producto : '', t.variante, t.tanque,
-          (t.disponible != null ? 'quedan ' + t.disponible + ' L' : ''), marca]
+        // "quedan X de Y L" (Oscar, 21-sep-2026). Con la capacidad guardada, el rotulo viejo del
+        // lote ("Otro / revisar", "120 L") sobra; sin ella se deja, que es lo unico que hay.
+        var capT = Number(t.capacidad) > 0 ? Number(t.capacidad) : 0;
+        var label = [id, (t.producto && t.producto !== id) ? t.producto : '', t.variante, capT ? '' : t.tanque,
+          (t.disponible != null ? 'quedan ' + String(t.disponible).replace('.', ',') + (capT ? ' de ' + String(capT).replace('.', ',') : '') + ' L' : ''), marca]
           .filter(Boolean).join(' · ');
         return { value: id, label: label || id };
       });
@@ -4059,10 +4101,22 @@
         if (infoT && !infoT.vacio) {
           if (litros && !esNumero(litros, false)) return { error: 'Los litros adicionados deben ser mayores que cero.' };
           if (litros) {
+            // AGREGARLE LITROS TAMBIEN RESPETA LA CAPACIDAD (Oscar, 21-sep-2026). Si el tanque
+            // no la tiene guardada, se pregunta aqui (una vez) y la respuesta viaja en el
+            // registro. Lo que se sabe antes de mandar: los litros solos no pueden pasar la
+            // capacidad. Si ademas son ADICIONALES, saldo + litros tampoco: eso lo decide la
+            // pregunta del servidor "¿adicionales o total?", que ya trae la capacidad.
+            var capGuardadaA = infoT.capacidad || null;
+            if (!capGuardadaA && !tanque && state.tamboresCargados) return { error: '¿De cuántos litros es el tanque ' + tambor +
+              '? Escógelo en “Capacidad del tanque”: todavía no la tiene guardada y se pregunta una sola vez.' };
+            var capA = capacidadLitros(tanque) || capGuardadaA;
+            if (capA && parseFloat(conPunto(litros)) > capA) return { error: 'Vas a poner ' + litros +
+              ' litros y el tanque ' + tambor + ' es de ' + capA + ' L: no caben. Revisa los litros.' };
             produccion = baseRecord('Preparar tambor');
             produccion.TamborID = tambor;
             produccion.Producto = infoT.producto || producto;
             produccion.LitrosPreparados = litros;
+            if (!capGuardadaA && tanque) produccion.Tanque = tanque;   // la respuesta queda guardada
             produccion.Observacion = ('Adición de litros al tanque. ' + valueOf('Observacion')).trim();
             records.push(produccion);
           } else if (!_confirmoSoloConsumo && (mps.filter(function (m) { return m.item; }).length || valueOf('BaseLitros'))) {
@@ -4103,12 +4157,18 @@
           // capacidad del tanque y otra cuanto va a fabricar de verdad". El saldo del tanque
           // (lo que ve Empacar) sale de LitrosPreparados; si faltan, se PIDEN, nunca se toma
           // la capacidad en silencio. Y no cabe mas de lo que le cabe al tanque.
-          var capT = capacidadLitros(tanque);
+          // Un tanque nuevo, o uno vacio sin capacidad guardada, la PREGUNTA (una sola vez: la
+          // respuesta viaja en el registro y los motores la guardan). Solo se exige cuando la
+          // lista de tanques cargo: sin ella no se sabe si el tanque ya la tenia.
+          var capGuardadaN = (infoT && infoT.capacidad) || null;
+          if (!tanque && !capGuardadaN && state.tamboresCargados) return { error: '¿De cuántos litros es el tanque ' + tambor +
+            '? Escógelo en “Capacidad del tanque”: se pregunta una sola vez y queda guardada.' };
+          var capT = capacidadLitros(tanque) || capGuardadaN;
           if (!esNumero(litros, false)) return { error: capT
             ? 'Escribe cuántos litros vas a fabricar. El tanque es de ' + capT + ' L, pero eso es lo que le cabe, no lo que preparaste: si lo llenaste completo, pon ' + capT + '.'
             : 'Escribe cuántos litros vas a fabricar.' };
           if (capT && parseFloat(conPunto(litros)) > capT) return { error: 'Vas a fabricar ' + litros +
-            ' litros y el tanque es de ' + capT + ' L: no caben. Revisa la capacidad del tanque o los litros que vas a fabricar.' };
+            ' litros y el tanque es de ' + capT + ' L: no caben. Revisa los litros que vas a fabricar o la capacidad.' };
           produccion = baseRecord('Preparar tambor');
           produccion.TamborID = tambor;
           produccion.Producto = producto;
@@ -4328,10 +4388,14 @@
         decir('Primero elige el tanque o balde: ahí se escriben los litros que vas a fabricar.', true);
         return;
       }
-      var cap = seVe('tanque') ? capacidadLitros(valueOf('Tanque')) : null;
+      // Lote nuevo: la capacidad es la de la casilla. Tanque con producto: la guardada (la
+      // casilla esta escondida) y ahi no se ofrece "los litros completos": ya tiene algo.
+      var loteNuevo = seVe('tanque') && seVe('producto');
+      var infoB = valueOf('Destino') === 'tanque' ? infoTanque(valueOf('TamborID')) : null;
+      var cap = (seVe('tanque') ? capacidadLitros(valueOf('Tanque')) : null) || (infoB && infoB.capacidad) || null;
       var litros = valueOf('LitrosPreparados');
       if (!esNumero(litros, false)) {
-        if (cap && window.confirm('No escribiste cuántos litros vas a fabricar.\n\n' +
+        if (cap && loteNuevo && window.confirm('No escribiste cuántos litros vas a fabricar.\n\n' +
             'El tanque es de ' + fmtL(cap) + ' L. ¿Vas a fabricar los ' + fmtL(cap) + ' L completos?\n\n' +
             '· Aceptar = sí, ' + fmtL(cap) + ' L\n' +
             '· Cancelar = escribo yo los litros')) {
@@ -4947,11 +5011,22 @@
               // significan los litros que escribió: total del tanque, o litros nuevos
               // encima. El mensaje del servidor ya trae los dos totales calculados; aquí
               // solo se amarra cada botón a una de esas dos frases, con sus mismas palabras.
-              marcas.ResiduoTanque = window.confirm(
-                mensajeServidor.replace(/>>> /g, '\n\n• ') +
-                '\n\n───────────────\nACEPTAR  =  son ADICIONALES (se suman)' +
-                '\nCANCELAR =  son el TOTAL del tanque'
-              ) ? 'adicional' : 'total';
+              if (/NO PUEDEN SER ADICIONALES/i.test(mensajeServidor)) {
+                // SUMADOS NO CABEN EN EL TANQUE (21-sep-2026): "adicionales" no se ofrece.
+                // Queda "son el total" o no guardar; el servidor frena igual si llegara otra cosa.
+                if (!window.confirm(
+                  mensajeServidor.replace(/>>> /g, '\n\n• ') +
+                  '\n\n───────────────\nACEPTAR  =  son el TOTAL del tanque' +
+                  '\nCANCELAR =  no guardar (reviso los litros)'
+                )) throw new Error('No se guardó: esos litros no caben como adicionales en el tanque y no son el total. Revisa los litros.');
+                marcas.ResiduoTanque = 'total';
+              } else {
+                marcas.ResiduoTanque = window.confirm(
+                  mensajeServidor.replace(/>>> /g, '\n\n• ') +
+                  '\n\n───────────────\nACEPTAR  =  son ADICIONALES (se suman)' +
+                  '\nCANCELAR =  son el TOTAL del tanque'
+                ) ? 'adicional' : 'total';
+              }
             } else if (/Falta el producto de Siigo/i.test(mensajeServidor)) {
               // EL SERVIDOR ES EL QUE SABE. El mapa de parejas producto+envase verificadas
               // vive alla, no aca, asi que la app no puede adivinar de antemano si le va a
@@ -5092,7 +5167,8 @@
         // y sin esto el foco se iba a casillas que en Empacar estan escondidas.
         ['a que producto resulta', 'resultanteCaja'], ['echaste al empacar', 'mpExtraLista'],
         ['categor', 'Categoria'], ['responsable', 'Responsable'], ['cual tanque', 'TamborID'],
-        ['nombre al balde', 'TamborID'], ['tanque o balde', 'TamborID'], ['litros', 'LitrosPreparados'],
+        ['nombre al balde', 'TamborID'], ['tanque o balde', 'TamborID'], ['capacidad del tanque', 'Tanque'],
+        ['litros', 'LitrosPreparados'],
         ['producto', 'Producto'], ['presentaci', 'Presentacion'], ['cuantas presentaciones', 'CantidadPresentacion'],
         ['etiqueta', 'Etiqueta'], ['tapa', 'Accesorio'], ['accesorio', 'Accesorio'],
         ['unidad', 'Unidad'], ['cantidad', 'Cantidad'], ['destino del traslado', 'ItemDestino'],
@@ -5327,7 +5403,7 @@
             '<div><div class="inv-nombre">' + escapeHtml(t.id || t.producto || 'Tanque') + '</div>' +
             '<div class="inv-cat">' + escapeHtml([t.producto, t.variante, t.tanque].filter(Boolean).join(' · ') || 'Contenido sin nombre') + '</div></div>' +
             '<div style="display:flex;align-items:center;gap:10px">' +
-            '<span class="inv-stock">' + escapeHtml(t.disponible != null ? t.disponible + ' L' : '—') + '</span>' +
+            '<span class="inv-stock">' + escapeHtml(t.disponible != null ? t.disponible + (Number(t.capacidad) > 0 ? ' de ' + Number(t.capacidad) : '') + ' L' : '—') + '</span>' +
             '<span class="badge ' + badge[0] + '">' + badge[1] + '</span>' +
             '</div></div>';
         }).join('');
