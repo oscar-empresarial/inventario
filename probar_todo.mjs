@@ -234,6 +234,33 @@ async function seccionEstatica() {
     return 'pasa a Google si lleva mas de 15 min';
   });
 
+  // LAS ETIQUETAS VAN POR PRODUCTO (21-sep-2026, la tercera vez que Oscar lo pide). La
+  // lista vive en TRES sitios —la app, el Apps Script y el Worker— y el arreglo del 16-sep
+  // fallo justamente por arreglar uno solo. Si se separan, la app ofrece una lista y el
+  // servidor le junta el saldo a otra.
+  await probar('la lista de etiquetas es la MISMA en la app y en los DOS motores', () => {
+    const fuentes = {
+      'index.html': HTML,
+      'Código.js': readFileSync(join(AQUI, '..', '..', '3-INVENTARIO', 'app-ingeniero', 'Código.js'), 'utf8'),
+      'lab_motor.js': readFileSync(join(AQUI, '..', '..', '_cloudflare', 'full', 'src', 'lab_motor.js'), 'utf8'),
+    };
+    const sacarDe = (src, nombre, dueno) => {
+      const m = src.match(new RegExp('(?:var|const) ' + nombre + ' = ([\\[{][\\s\\S]*?\\n\\s*[\\]}]);'));
+      exigir(m, dueno + ' no tiene ' + nombre);
+      return JSON.stringify(new Function('return ' + m[1])());
+    };
+    const malos = [];
+    for (const nombre of ['ETIQUETAS_POR_PRODUCTO', 'ETIQUETA_ALIAS']) {
+      const base = sacarDe(fuentes['lab_motor.js'], nombre, 'lab_motor.js');
+      for (const dueno of ['index.html', 'Código.js']) {
+        if (sacarDe(fuentes[dueno], nombre, dueno) !== base) malos.push(dueno + ': ' + nombre + ' distinta a la del Worker');
+      }
+    }
+    exigir(!malos.length, malos.join(' · '));
+    const n = JSON.parse(sacarDe(fuentes['lab_motor.js'], 'ETIQUETAS_POR_PRODUCTO', 'lab_motor.js')).length;
+    return n + ' etiquetas, iguales en los tres';
+  });
+
   await probar('la regla de la pimpina (19 L) esta en los DOS motores', () => {
     const apps = readFileSync(join(AQUI, '..', '..', '3-INVENTARIO', 'app-ingeniero', 'Código.js'), 'utf8');
     const motor = readFileSync(join(AQUI, '..', '..', '_cloudflare', 'full', 'src', 'lab_motor.js'), 'utf8');
@@ -403,6 +430,39 @@ async function seccionIgualdad() {
     const cw = cuenta(w), cg = cuenta(g);
     exigir(cw === cg, 'Worker [' + cw + '] vs Google [' + cg + ']');
     return cw;
+  });
+
+  // LO QUE DE VERDAD VE CARLOS EN LA CASILLA DE LA ETIQUETA (21-sep-2026). Oscar: *"las
+  // etiquetas van por PRODUCTO, no por tamaño... Tampoco hay etiquetas de recarga"*. Se le
+  // pregunta a los DOS servidores, con los datos de hoy: ningun tamaño, ninguna recarga,
+  // ningun nombre viejo, nada repetido, y el saldo de los rollos viejos ya junto.
+  await probar('las etiquetas que ofrecen los DOS servidores: una por producto', async () => {
+    const [w, g] = await Promise.all([worker({ action: 'init' }), google({ action: 'init' })]);
+    const ew = w.etiquetas || [], eg = g.etiquetas || [];
+    exigir(ew.length, 'el Worker no mando etiquetas');
+    exigir(JSON.stringify(ew) === JSON.stringify(eg), 'Worker y Google ofrecen listas distintas:\n  W: ' +
+      ew.join(' | ') + '\n  G: ' + eg.join(' | '));
+    const norm = s => String(s || '').trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ');
+    const m = HTML.match(/var ETIQUETA_ALIAS = (\{[\s\S]*?\n\s*\});/);
+    exigir(m, 'index.html no tiene ETIQUETA_ALIAS');
+    const alias = new Function('return ' + m[1])();
+    const TAMANO = /\d\s*(cc|ml|l|lt|lts|litros?|g|gr|kg|lb)\b|\bgalon\b|\bpimpina\b|\blitro\b|\s\d{3,5}$/;
+    const problemas = [];
+    ew.forEach(n => {
+      const k = norm(n);
+      if (TAMANO.test(k)) problemas.push('"' + n + '" dice un tamaño');
+      if (/recarga/.test(k)) problemas.push('"' + n + '" es de recarga');
+      if (alias[k] || /^etiqueta\b/.test(k)) problemas.push('"' + n + '" es un nombre viejo');
+      if (/ropa color/.test(k)) problemas.push('"' + n + '" ya se llama Oxycolor');
+    });
+    if (new Set(ew.map(norm)).size !== ew.length) problemas.push('hay etiquetas repetidas');
+    ['Oxycolor normal', 'Oxycolor troquelado', 'Deterfull'].forEach(n => { if (ew.indexOf(n) < 0) problemas.push('falta "' + n + '"'); });
+    // El saldo: ningun rollo del inventario puede seguir llamandose con el nombre viejo.
+    (w.items || []).filter(i => norm(i.Categoria) === 'etiqueta').forEach(i => {
+      if (alias[norm(i.Variante)]) problemas.push('el rollo "' + i.Variante + '" sigue aparte en el inventario');
+    });
+    exigir(!problemas.length, problemas.join('\n  '));
+    return ew.length + ' etiquetas, iguales en los dos, ninguna por tamaño ni de recarga';
   });
 }
 

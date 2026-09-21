@@ -169,14 +169,21 @@ function cargarEtiquetas() {
     assert.ok(i > 0, 'no se encontro ' + marca);
     return source.slice(i, source.indexOf('\n', i));
   };
+  // Las listas de varias lineas (la canonica y los alias) se sacan enteras.
+  const bloque = (marca, fin) => {
+    const i = source.indexOf(marca);
+    assert.ok(i > 0, 'no se encontro ' + marca);
+    return source.slice(i, source.indexOf(fin, i) + fin.length);
+  };
   const piezas = ['function normalize', 'function unique', 'function tamanoDe', 'function palabrasDe',
-    'function skuDe', 'function buscarEnSiigo', 'function tipoDeEtiqueta', 'function quitarEnvase',
-    'function invItems', 'function getEtiquetaOptions'];
+    'function skuDe', 'function buscarEnSiigo', 'function etiquetaCanonica', 'function sirveDeEtiqueta',
+    'function productoDeEtiqueta', 'function invItems', 'function getEtiquetaOptions'];
   vm.runInContext('var siigoProductos=[];var siigoPorNombre={};var state={catalogos:{},inventario:[]};' +
     'var catalogosLocales={productos:[]};' +
     'function getCatalog(k){return unique((state.catalogos&&state.catalogos[k])||[]);}\n' +
-    [linea('var RELLENO = ['), linea('var TAMANO_CON_NUMERO ='), linea('var TAMANO_SUELTO ='),
-     linea('var NO_SE_ETIQUETA ='), linea('var COLOR_DEL_ENVASE =')].join('\n') + '\n' + piezas.map(trozo).join('\n'), ctx);
+    [linea('var RELLENO = ['), bloque('var ETIQUETAS_POR_PRODUCTO = [', '\n    ];'),
+     bloque('var ETIQUETA_ALIAS = {', '\n    };'), linea('var ETIQUETA_NO_VA ='),
+     linea('var ETIQUETA_CON_TAMANO ='), linea('var _etiquetaCanon =')].join('\n') + '\n' + piezas.map(trozo).join('\n'), ctx);
   const cat = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'catalogo_siigo.json'), 'utf8'));
   ctx.siigoProductos = cat.productos;
   cat.productos.forEach(p => { ctx.siigoPorNombre[ctx.normalize(p.nombre)] = p.sku; });
@@ -213,8 +220,10 @@ test('la lista de etiquetas no ofrece tamaños: un producto, un renglon', () => 
   assert.ok(verOpciones('ecovarsol').length <= 2, 'Ecovarsol vuelve a salir por tamaños: ' +
     verOpciones('ecovarsol').join(' / '));
   // Los seis Deterfull del inventario (galon, litro, opaco, transparente, 500 ml) son UNA
-  // etiqueta, y las tres presentaciones de Extermin tampoco se repiten.
-  assert.deepEqual(Array.from(verOpciones('deterfull')), ['Deterfull', 'Deterfull Desengrasante Industrial']);
+  // etiqueta, y las tres presentaciones de Extermin tampoco se repiten. (Hasta el 21-sep
+  // aqui se aceptaba tambien "Deterfull Desengrasante Industrial", que es el nombre de
+  // Siigo del MISMO producto: era justo la redundancia de la que Oscar se quejo.)
+  assert.deepEqual(Array.from(verOpciones('deterfull')), ['Deterfull']);
   assert.ok(verOpciones('extermin').indexOf('Extermin') >= 0);
   // (la "bomba fumigadora" si sigue: para la app es otra version del producto, no un
   // tamaño — esta en la lista DISTINGUEN que decidio Oscar el 18-ago)
@@ -282,6 +291,92 @@ test('el nombre del rollo nace del mismo sitio: no se crean etiquetas por tamañ
   // rollos con tamaño en el nombre que hoy arrastra el inventario.
   assert.match(source, /function getVarianteOptions\(\)[\s\S]*getEtiquetaOptions\(\)/);
   assert.doesNotMatch(source, /function getVarianteOptions\(\)[\s\S]{0,400}\['Genérica'\]\.concat\(getCatalog\('productos'\)\)/);
+});
+
+// ============ 21-SEP: LA LISTA ES UNA POR PRODUCTO, CON LOS NOMBRES DE VERDAD ============
+//
+// Oscar, 2026-09-21: *"las etiquetas van por PRODUCTO, no por tamaño, y hay unas que estan
+// todas redundantes... Tampoco hay etiquetas de recarga"*. El arreglo del 16-sep paso
+// estas mismas pruebas y aun asi Carlos veia "DETERFULL GALON", "Etiqueta Deterfull" y
+// "Deterfull preparado": las pruebas le daban al servidor una lista inventada y limpia.
+// Aqui van los 75 nombres REALES que servia el servidor el 21-sep (los dos motores daban lo
+// mismo), y se exige lo que Oscar pidio busqueda por busqueda.
+const ETIQUETAS_DEL_SERVIDOR_21SEP = ['Aceite de almendra', 'Aceite de coco corporal',
+  'Aceite de lavanda corporal', 'Aceite de manzanilla corporal', 'Aceite de naranja corporal',
+  'Ácido muriático', 'Ácido nítrico', 'Alcohol 70%', 'Alcohol 96%', 'Alcohol electrónico / isopropílico',
+  'AMBIENTADOR DE PISO 2LT', 'Ambientador de pisos Galon transparente 4 L', 'Ambientador de pisos Pimpina 20 L',
+  'Ambientador para trapear', 'Ambientadores de piso', 'Ambientadores de piso Galón 4 L',
+  'Blanqueador con cloro al 6%', 'Blanqueador con cloro al 6% con aroma dulce o cítrico', 'Cera emulsionada',
+  'Cera para pisos Galón 4 L', 'Clordeter', 'CLORDETER GALON 4.000ML', 'Creolina', 'Desinfectante frutas y verduras',
+  'DESMANCHADOR 500CC', 'Desmanchador de brechas', 'Deterfull', 'DETERFULL GALON',
+  'Detergente de ropa de coco con suavizante', 'Detergente líquido de ropa oscura',
+  'Detergente multiusos para ropa en general', 'Ecovarsol', 'ECOVARSOL 1000', 'Etiqueta Ambientador',
+  'Etiqueta Desmanchador', 'Etiqueta Deterfull', 'Etiqueta Extermin', 'Etiqueta genérica', 'Etiqueta Jabón',
+  'Etiqueta Limpia Vidrios', 'Etiqueta Oxígeno Activo', 'Etiqueta Palos', 'Extermin', 'Extermin con aroma a limón',
+  'Full desincrustante', 'Genérica', 'Glicerina', 'Hipoclorito 13% Pimpina', 'Hipoclorito 6% Galon',
+  'Hipoclorito al 13%', 'Hipoclorito al 6%', 'HIPOCLORITO LITRO 6%', 'Jabón líquido para manos',
+  'Lavaloza industrial arranca grasa puro', 'Lavaloza suave con las manos', 'Limpgrax', 'Limpiavidrios',
+  'Limpiavidrios  FDYS 1000 cc + Pistola', 'Otra', 'Oxígeno Activo Tarro 500 g oxígeno activo', 'Oxycolor',
+  'Percarbonato de sodio / Oxígeno Activo', 'Perfume de interiores', 'Prueba Claude No Usar',
+  'Shampoo con cera para vehículos', 'Shampoo de jacuzzi', 'Silicona', 'Sin etiqueta', 'Spray eliminador de olores',
+  'Suavizante de telas', 'Varsol', 'Varsol con aroma dulce', 'Varsol Galon transparente 4 L', 'Varsol sin aroma',
+  'Varsol transparente', 'Vinagre para consumo y limpieza'];
+
+test('21-sep: con los nombres REALES del servidor, una etiqueta por producto', () => {
+  const ctx = cargarEtiquetas();
+  ctx.state.catalogos.etiquetas = ETIQUETAS_DEL_SERVIDOR_21SEP;
+  const todas = Array.from(ctx.getEtiquetaOptions());
+  const ver = q => todas.filter(o => ctx.normalize(o).includes(ctx.normalize(q)));
+  // Lo que Oscar nombro: "Deterfull preparado, Deterfull desengrasante industrial, Deterfull
+  // galon, Deterfull etiqueta, Deterfull..." son UN rollo.
+  assert.deepEqual(ver('deterfull'), ['Deterfull']);
+  assert.deepEqual(ver('detergente'), ['Detergente de ropa de coco con suavizante',
+    'Detergente líquido de ropa oscura', 'Detergente multiusos para ropa en general']);
+  assert.deepEqual(ver('coco'), ['Aceite de coco corporal', 'Detergente de ropa de coco con suavizante']);
+  // La unica con dos rollos: Oxycolor normal y troquelado. "Ropa color" ya no existe.
+  assert.deepEqual(ver('oxycolor'), ['Oxycolor normal', 'Oxycolor troquelado']);
+  assert.deepEqual(ver('ropa color'), []);
+  assert.deepEqual(ver('extermin'), ['Extermin', 'Extermin con aroma a limón']);
+  assert.deepEqual(ver('ambientador'), ['Ambientadores de piso']);
+  assert.deepEqual(ver('hipoclorito'), ['Hipoclorito al 13%', 'Hipoclorito al 6%']);
+  // Ni recargas ni tamaños, escriba lo que escriba.
+  assert.deepEqual(ver('recarga'), []);
+  assert.deepEqual(ver('galon'), []);
+  todas.forEach(o => assert.doesNotMatch(o, TAMANO_EN_EL_NOMBRE, '"' + o + '" es un tamaño'));
+  todas.forEach(o => assert.doesNotMatch(o, /recarga|^etiqueta\b|ropa color|preparad/i, '"' + o + '" no es un rollo de producto'));
+  // Y nada repetido: ni por mayusculas, ni por el nombre viejo.
+  const canon = todas.map(o => ctx.normalize(ctx.etiquetaCanonica(o)));
+  assert.equal(new Set(canon).size, todas.length, 'hay renglones que son el mismo rollo');
+  // "Sin etiqueta" arriba (la recarga sale sin etiqueta y eso es lo normal) y cerrada: nada
+  // de Siigo ni del catalogo de producto terminado, que es de donde salian las 1.023.
+  assert.equal(todas[0], 'Sin etiqueta');
+  assert.ok(todas.length < 70, 'la lista volvio a crecer: ' + todas.length);
+});
+
+test('21-sep: el nombre viejo escrito a mano va a su producto; el desconocido no se inventa', () => {
+  const { etiquetaCanonica, sirveDeEtiqueta } = cargarEtiquetas();
+  [['DETERFULL GALON', 'Deterfull'], ['deterfull', 'Deterfull'], ['Etiqueta Deterfull', 'Deterfull'],
+   ['Hipoclorito 6% Galon', 'Hipoclorito al 6%'], ['HIPOCLORITO LITRO 6%', 'Hipoclorito al 6%'],
+   ['ECOVARSOL 1000', 'Ecovarsol'], ['Cera para pisos Galón 4 L', 'Cera emulsionada'],
+   ['Oxycolor', 'Oxycolor normal'], ['Ropa color troquelado', 'Oxycolor troquelado'],
+   ['Percarbonato de sodio / Oxígeno Activo', 'Oxígeno Activo'], ['Etiqueta Jabón', 'Jabón líquido para manos']
+  ].forEach(([viejo, nuevo]) => assert.equal(etiquetaCanonica(viejo), nuevo, viejo));
+  assert.equal(etiquetaCanonica('Producto que no existe'), 'Producto que no existe');
+  assert.equal(sirveDeEtiqueta('Extermin 500'), false);
+  assert.equal(sirveDeEtiqueta('Recarga Deterfull'), false);
+  assert.equal(sirveDeEtiqueta('Alcohol 70%'), true, 'el 70% no es un tamaño');
+});
+
+test('21-sep: los dos Oxycolor encuentran su producto de Siigo por el tamaño', () => {
+  const { buscarEnSiigo } = cargarEtiquetas();
+  assert.equal(buscarEnSiigo('Oxycolor normal', 'Pimpina 20 L').sku, 'FUL185-8');
+  assert.equal(buscarEnSiigo('Oxycolor troquelado', 'Pimpina 20 L').sku, 'FUL185-8');
+});
+
+test('21-sep: el nombre viejo tecleado se cambia por el del producto al salir de la casilla', () => {
+  // Sin esto, "deterfull galon" escrito a mano volveria a nacer como rollo aparte.
+  assert.match(source, /\['Etiqueta', 'Variante'\]\.forEach\(function \(id\) \{\s*document\.getElementById\(id\)\.addEventListener\('change'/);
+  assert.match(source, /acumular\('Etiqueta', etiquetaCanonica\(et\)/);
 });
 
 // EL VINAGRE LLEVA SAL (16-sep-2026). Se CORRE buildPreparacion de verdad, con un formulario
