@@ -1477,7 +1477,7 @@
 
     var catalogosLocales = {
       materiasPrimas: [
-        'Hipoclorito 13%', 'Blanqueador con cloro al 6%', 'Soda Líquida', 'Soda Cáustica',
+        'Hipoclorito 13%', 'Blanqueador con cloro al 6%', 'Soda Líquida al 50%',
         'Alcohol 96%', 'Alcohol 70%', 'Alcohol Extra Neutro', 'Alcohol Isopropílico',
         'Ácido Sulfónico', 'Ácido Nítrico 55%', 'Ácido Muriático', 'Ácido Acético',
         'Ácido Cítrico', 'Ácido Bórico', 'Peróxido 50%', 'Percarbonato de Sodio',
@@ -1504,7 +1504,7 @@
       ],
       solidos: [
         'Bicarbonato', 'Ácido Bórico', 'Tripolifosfato / Polvillo',
-        'Percarbonato de Sodio', 'Oxígeno Activo', 'Soda Cáustica', 'Detergente en Bulto'
+        'Percarbonato de Sodio', 'Oxígeno Activo', 'Soda Cáustica en Escamas', 'Detergente en Bulto'
       ],
       palosTerminados: [
         'Palo aluminio rosca 1.50 m', 'Palo aluminio rosca 1.20 m',
@@ -1658,6 +1658,15 @@
           this.value = c;
           if (id === 'Etiqueta') soltarConfirmacionResultante();
         });
+      });
+      // La soda: solo dos. "Soda CAustica" (o "Soda Cáustica"/"Soda Líquida" sin el nombre
+      // completo) se cambia por la soda que corresponde al salir de la casilla, igual que
+      // con las etiquetas. Lo que no es soda no se toca.
+      document.getElementById('Item').addEventListener('change', function () {
+        var c = sodaCanonica(this.value);
+        if (!c || c === this.value.trim()) return;
+        this.value = c;
+        validateItemSoft();
       });
       setupSuggest('BaseTanque', 'baseSuggestions', getTamborOptions);
       setupSuggest('ItemDestino', 'itemDestinoSuggestions', getItemOptions);
@@ -3323,6 +3332,29 @@
     function productoDeEtiqueta(nombre) {
       var t = String(nombre || '').trim();
       return /^(oxycolor|ropa color)\s+(normal|troquelad[oa])$/.test(normalize(t)) ? 'Oxycolor' : t;
+    }
+
+    // ================== LA SODA: SOLO DOS ==================
+    // Oscar, 21-sep: en el laboratorio solo existen 'Soda Cáustica en Escamas' (kg) y
+    // 'Soda Líquida al 50%' (L). Mismo mecanismo que las etiquetas: el nombre viejo (o mal
+    // escrito, "Soda CAustica") se lee/corrige como el canonico, sin inventar nada de lo que
+    // no sea soda. Igual en Código.js y lab_motor.js (SODA_ALIAS).
+    var SODAS_CANONICAS = ['Soda Cáustica en Escamas', 'Soda Líquida al 50%'];
+    var SODA_ALIAS = {
+      'soda caustica': 'Soda Cáustica en Escamas',
+      'soda liquida': 'Soda Líquida al 50%'
+    };
+    var _sodaCanon = null;
+    function sodaCanonica(nombre) {
+      var t = String(nombre || '').trim();
+      var k = normalize(t);
+      if (!k) return t;
+      if (!_sodaCanon) {
+        _sodaCanon = Object.create(null);
+        SODAS_CANONICAS.forEach(function (c) { _sodaCanon[normalize(c)] = c; });
+        Object.keys(SODA_ALIAS).forEach(function (a) { _sodaCanon[a] = SODA_ALIAS[a]; });
+      }
+      return _sodaCanon[k] || t;
     }
 
     function getEtiquetaOptions() {
@@ -6679,7 +6711,9 @@
             if (uni === 'ml') { cant = cant / 1000; uniBase = 'L'; }
             else if (uni === 'g') { cant = cant / 1000; uniBase = 'kg'; }
             else if (uni === 'l' || uni === 'lt') uniBase = 'L';
-            acumular(item, campoReg(r, ['variante']), cant, uniBase);
+            // La soda: solo dos, igual que en el inventario (sodaCanonica no toca nada que
+            // no sea soda).
+            acumular(sodaCanonica(item), campoReg(r, ['variante']), cant, uniBase);
           } else {
             if (t.indexOf('empacar') !== 0) return;
             var nPres = parseFloat(String(campoReg(r, ['cantidadpresentacion'])).replace(',', '.')) || 0;
