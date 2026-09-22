@@ -33,6 +33,10 @@ const INVENTARIO_REAL = {
     { Item: 'Ecovarsol Galon transparente 4 L', Variante: '12', Categoria: 'Producto terminado', Stock: 39, Unidad: 'und', Minimo: '', Referencia: 39 },
     { Item: 'Etiqueta', Variante: '', Categoria: 'Etiqueta', Stock: 5, Unidad: 'und', Minimo: '', Referencia: 56 },
     { Item: 'Etiqueta', Variante: 'Deterfull', Categoria: 'Etiqueta', Stock: 300, Unidad: 'und', Minimo: '', Referencia: 900 },
+    // El caso REAL del 22-sep: casi ninguna etiqueta tiene saldo positivo, porque nunca se
+    // registra una "entrada" de rollos (son texto libre a proposito). Medido en /lab/api el
+    // 22-sep: 51 de 55 etiquetas canonicas estaban en cero o negativo, como esta.
+    { Item: 'Etiqueta', Variante: 'Extermin', Categoria: 'Etiqueta', Stock: -242, Unidad: 'und', Minimo: '', Referencia: 20 },
   ],
   tambores: [],
 };
@@ -104,6 +108,62 @@ test('el aviso SI dice que falta lo que de verdad esta en cero', () => {
   ]);
   assert.deepEqual(Array.from(faltan, f => f.item + "|" + f.variante), ['Varsol|Limon']);
 });
+
+// ============ EL CUADRO "NO HAY TANTO" NO PUEDE SALIR POR UNA ETIQUETA (22-sep-2026) ============
+//
+// Oscar: "Cuando registra una preparación o registra un empaque, aparece un cuadro que dice
+// 'no hay tanto de tal producto'... Es únicamente las etiquetas. La verdad no debería ni sacar
+// eso." El candado real del servidor (esEtiqueta_ en Código.js y lab_motor.js) ya deja pasar
+// las etiquetas SIEMPRE, pero este aviso del cliente (faltantesDe/check) nunca tuvo la misma
+// excepcion desde que se escribio (13-ago-2026): solo el agua se saltaba. No se notaba porque
+// cada variante de nombre tenia su propio renglon y algo quedaba con saldo positivo por
+// accidente. Desde que las 55 etiquetas se UNIFICARON en un solo renglon por producto
+// (0fff8ed, 21-sep-2026) el saldo junto de casi todas quedo en cero o negativo (51 de 55
+// medido contra /lab/api el 22-sep), asi que CUALQUIER etiqueta disparaba el cuadro en TODO
+// empaque, siempre. Estas pruebas fallan con el codigo de antes del arreglo.
+test('empacar con una etiqueta EN NEGATIVO no dispara "sin existencia" (antes: SI la disparaba)', () => {
+  const ctx = cargar();
+  const faltan = ctx.faltantesDe([
+    { TipoRegistro: 'Empacar desde tambor', Presentacion: 'Recarga litros', Etiqueta: 'Extermin', Accesorio: '' },
+  ]);
+  assert.deepEqual(Array.from(faltan, f => f.item + '|' + f.variante), [],
+    'una etiqueta en negativo no puede generar el aviso: ' + JSON.stringify(faltan));
+});
+
+test('empacar con una etiqueta SIN NINGUNA fila en inventario tampoco dispara el aviso', () => {
+  const ctx = cargar();
+  const faltan = ctx.faltantesDe([
+    { TipoRegistro: 'Empacar sólido/polvo', Item: '', Presentacion: 'Recarga litros', Etiqueta: 'Producto sin ninguna fila' },
+  ]);
+  assert.deepEqual(Array.from(faltan, f => f.item + '|' + f.variante), []);
+});
+
+test('pero un envase o accesorio real sin existencia SIGUE avisando en Empacar (no se esconde el problema real)', () => {
+  const ctx = cargar();
+  const faltan = ctx.faltantesDe([
+    { TipoRegistro: 'Empacar desde tambor', Presentacion: 'Envase que no existe', Etiqueta: 'Extermin', Accesorio: 'Accesorio que no existe' },
+  ]);
+  const nombres = Array.from(faltan, f => f.item);
+  assert.ok(nombres.includes('Envase que no existe'), 'el envase real sin existencia debe seguir avisando');
+  assert.ok(nombres.includes('Accesorio que no existe'), 'el accesorio real sin existencia debe seguir avisando');
+  assert.ok(!nombres.some(n => normalizaSuelto(n) === 'etiqueta'), 'la etiqueta no puede colarse: ' + JSON.stringify(faltan));
+});
+
+test('Fabricar palos: el BOM incluye "Etiqueta" pero ya no debe generar aviso por ella (la pieza real SI sigue avisando)', () => {
+  const ctx = cargar();
+  ctx.BOM_PALOS_JS = { rosca: ['Pieza que no existe', 'Etiqueta'], mariposa: [] };
+  // Fixture propia, SIN ningun renglon "Etiqueta" con variante vacia y saldo positivo (el de
+  // INVENTARIO_REAL es para otra prueba y taparia el caso): asi la prueba de verdad ejercita
+  // la excepcion, no un acierto de casualidad.
+  ctx.state.inventario = ctx.parseInventario({
+    items: [{ Item: 'Etiqueta', Variante: '', Categoria: 'Etiqueta', Stock: -50, Unidad: 'und' }],
+  });
+  const faltan = ctx.faltantesDe([{ TipoRegistro: 'Fabricar palos', Item: 'Palo aluminio rosca 1.20 m' }]);
+  const nombres = Array.from(faltan, f => f.item);
+  assert.ok(nombres.includes('Pieza que no existe'), 'la pieza real sin existencia debe seguir avisando');
+  assert.ok(!nombres.some(n => normalizaSuelto(n) === 'etiqueta'), 'la etiqueta del BOM de palos no debe avisar: ' + JSON.stringify(faltan));
+});
+function normalizaSuelto(s) { return String(s || '').trim().toLowerCase(); }
 
 test('Empacar: la vista previa muestra el saldo del Varsol que se descuenta (el sin variante)', () => {
   const ctx = cargar();

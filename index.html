@@ -4676,6 +4676,19 @@
       function check(item, variante, categoria, unidad) {
         if (!item) return;
         if (normalize(item) === 'agua') return; // el agua no se registra, sale de la manguera :)
+        // LAS ETIQUETAS SON TEXTO LIBRE A PROPOSITO (Oscar, 13-ago/16-sep/21-sep): se acaban
+        // a cada rato y se reponen solas. El candado real del servidor ya las deja pasar
+        // SIEMPRE (esEtiqueta_ / excusaParaPasarSinExistencia_ en Código.js y lab_motor.js:
+        // "etiqueta -> pasa"), pero este aviso vive aparte, del lado del cliente, y nunca
+        // tuvo la misma excepcion desde que se escribio (13-ago-2026). No se notaba porque
+        // cada variante de nombre tenia su propio renglon y algún nombre sobrevivía con
+        // saldo positivo por accidente; desde que las 55 etiquetas quedaron UNIFICADAS en
+        // un solo renglon por producto (0fff8ed, 21-sep-2026) el saldo junto de casi todas
+        // quedo en cero o negativo (nunca se registra una "entrada" de rollos: medido el
+        // 22-sep, 51 de 55 etiquetas canonicas disparaban este cuadro). Asi que CUALQUIER
+        // etiqueta escogida lo disparaba en TODO empaque, siempre. Oscar, 22-sep-2026: "es
+        // unicamente las etiquetas... la verdad no deberia ni sacar eso".
+        if (normalize(item) === 'etiqueta') return;
         var n = normalize(item);
         var nv = normalize(variante);
         var hay = state.inventario.some(function (r) {
