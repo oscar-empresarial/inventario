@@ -1668,6 +1668,12 @@
         this.value = c;
         validateItemSoft();
       });
+      // El galon repetido: "Galón 4 L" escrito a mano se vuelve el transparente (ENVASE_ALIAS).
+      document.getElementById('Presentacion').addEventListener('change', function () {
+        var c = sodaCanonica(this.value);
+        if (!c || c === this.value.trim()) return;
+        this.value = c;
+      });
       setupSuggest('BaseTanque', 'baseSuggestions', getTamborOptions);
       setupSuggest('ItemDestino', 'itemDestinoSuggestions', getItemOptions);
       setupSuggest('Accesorio', 'accesorioSuggestions', function () {
@@ -3344,6 +3350,11 @@
       'soda caustica': 'Soda Cáustica en Escamas',
       'soda liquida': 'Soda Líquida al 50%'
     };
+    // Oscar, 25-sep: solo hay UN galon de 4 L, el PET transparente. "Galón 4 L" se corrige
+    // solo al salir de la casilla. El galon opaco es otro envase. Igual en Código.js y lab_motor.js.
+    var ENVASE_ALIAS = {
+      'galon 4 l': 'Galon transparente 4 L'
+    };
     var _sodaCanon = null;
     function sodaCanonica(nombre) {
       var t = String(nombre || '').trim();
@@ -3353,6 +3364,7 @@
         _sodaCanon = Object.create(null);
         SODAS_CANONICAS.forEach(function (c) { _sodaCanon[normalize(c)] = c; });
         Object.keys(SODA_ALIAS).forEach(function (a) { _sodaCanon[a] = SODA_ALIAS[a]; });
+        Object.keys(ENVASE_ALIAS).forEach(function (a) { _sodaCanon[a] = ENVASE_ALIAS[a]; });
       }
       return _sodaCanon[k] || t;
     }
@@ -3738,7 +3750,8 @@
         if (categoria === 'Materia prima') return unique(getCatalog('materiasPrimas').concat(invItems('Materia prima')));
         if (categoria === 'Fragancia') return unique(getCatalog('fragancias').concat(invItems('Fragancia')));
         if (categoria === 'Color') return unique(getCatalog('colores').concat(invItems('Color')));
-        if (categoria === 'Envase') return unique(getCatalog('envases').concat(invItems('Envase')));
+        // sodaCanonica: aunque el catalogo guardado en el celular sea viejo, "Galón 4 L" no se ofrece.
+        if (categoria === 'Envase') return unique(getCatalog('envases').concat(invItems('Envase')).map(sodaCanonica));
         if (categoria === 'Accesorio') return unique(getCatalog('accesorios').concat(invItems('Accesorio')));
         if (categoria === 'Etiqueta') return getCatalog('etiquetas');
         if (categoria === 'Material palo') return unique(getCatalog('materialesPalos').concat(invItems('Material palo')));
@@ -3766,7 +3779,7 @@
 
     function getPresentacionOptions() {
       // Presentaciones = envases del inventario + recargas/bulto + lo que traiga la hoja
-      var lista = unique(getCatalog('presentaciones').concat(invItems('Envase')).concat(getCatalog('envases')));
+      var lista = unique(getCatalog('presentaciones').concat(invItems('Envase')).concat(getCatalog('envases')).map(sodaCanonica));
       if (state.selectedType === 'Empacar sólido/polvo') {
         return lista.filter(function (p) { return /bolsa|tarro|bulto|lb|kg|\bg\b|gr/i.test(p); });
       }
@@ -6733,7 +6746,7 @@
             if (queGasto === 'Envases') {
               var pres = campoReg(r, ['presentacion']);
               if (!pres || /recarga|bulto/i.test(pres)) return;
-              acumular(pres, '', nPres, 'und');
+              acumular(sodaCanonica(pres), '', nPres, 'und');
             } else if (queGasto === 'Etiquetas') {
               var et = campoReg(r, ['etiqueta']);
               if (!et || /^sin etiqueta/i.test(et)) return;
