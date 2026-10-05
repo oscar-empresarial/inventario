@@ -1192,6 +1192,22 @@
     </div>
   </div>
 
+  <!-- EL SOBRANTE DEL TANQUE SE PREGUNTA CON EL NUMERO FINAL EN CADA BOTON (5-oct-2026).
+       Antes era un window.confirm de ACEPTAR = adicionales / CANCELAR = total. El 5-oct, en el
+       tanque 19 de Blanqueador (8 L de sobrante + 152 L nuevos = 160 L), Carlos toco CANCELAR
+       dos veces y el tanque quedo en 8 L: 160 L dados por perdidos. "Cancelar" es el boton de
+       salirse, y aqui GUARDABA. Ahora cada opcion dice con cuantos litros queda el tanque, y
+       la unica salida que no es un numero es "No guardar". -->
+  <div id="modalResiduo" class="overlay">
+    <div class="tour-caja">
+      <h3 id="residuoTitulo">¿Con cuántos litros queda el tanque?</h3>
+      <div class="hint" id="residuoContexto" style="margin-bottom:14px;line-height:1.5"></div>
+      <div id="residuoOpciones" style="display:flex;flex-direction:column;gap:10px;margin-bottom:12px"></div>
+      <div class="hint" id="residuoAviso" style="display:none;margin-bottom:12px;padding:10px;border-radius:10px;background:#fee2e2;color:#991b1b;font-weight:bold"></div>
+      <button type="button" class="clear" id="btnResiduoNo" style="width:100%;padding:12px">No guardar, voy a revisar los litros</button>
+    </div>
+  </div>
+
   <div id="modalSku" class="overlay">
     <div class="tour-caja">
       <h3>¿Cuál producto de Siigo salió?</h3>
@@ -3593,6 +3609,88 @@
      *
      * Resuelve con {sku, nombre}, o con null si dice que no esta en la lista.
      */
+    // LA PREGUNTA DEL SOBRANTE DEL TANQUE (5-oct-2026). Ver el comentario de #modalResiduo.
+    // Los numeros salen del mensaje del servidor (el es el que sabe cuanto habia). Devuelve
+    // 'adicional', 'total' o null (no guardar). Si "el total" deja el tanque con MENOS de lo que
+    // ya tenia, se dice cuanto producto hecho se da por perdido y hay que tocar otra vez: eso
+    // fue lo del 5-oct (tenia 152 L, registro 8 L, quedo en 8 L).
+    function preguntarResiduoTanque(mensajeServidor) {
+      return new Promise(function (resolve) {
+        var m = String(mensajeServidor || '').replace(/^Error:\s*/i, '');
+        var leer = function (re) { var x = m.match(re); return x ? Number(String(x[1]).replace(',', '.')) : NaN; };
+        var fmt = function (n) { return String(Math.round(n * 100) / 100).replace('.', ','); };
+        var tanque = ((m.match(/RESIDUO EN EL TANQUE\s+([^:]+):/i) || [])[1] || '').trim();
+        var habia = leer(/ya hab[ií]a\s+([\d.,]+)\s*L/i);
+        var nuevos = leer(/est[aá]s registrando\s+([\d.,]+)\s*L/i);
+        var capacidad = leer(/el tanque es de\s+([\d.,]+)\s*L/i);
+        var noCabe = /NO PUEDEN SER ADICIONALES/i.test(m);
+        var conNumeros = isFinite(habia) && isFinite(nuevos);
+        var sumados = conNumeros ? Math.round((habia + nuevos) * 100) / 100 : NaN;
+        var pierde = conNumeros ? Math.round((habia - nuevos) * 100) / 100 : 0;
+
+        var overlay = document.getElementById('modalResiduo');
+        var opciones = document.getElementById('residuoOpciones');
+        var aviso = document.getElementById('residuoAviso');
+        var btnNo = document.getElementById('btnResiduoNo');
+        document.getElementById('residuoTitulo').textContent =
+          '¿Con cuántos litros queda el tanque' + (tanque ? ' ' + tanque : '') + '?';
+        document.getElementById('residuoContexto').textContent = conNumeros
+          ? 'El sistema dice que el tanque ya tenía ' + fmt(habia) + ' L y estás registrando ' + fmt(nuevos) + ' L' +
+            (isFinite(capacidad) ? ' (es de ' + fmt(capacidad) + ' L)' : '') + '.' +
+            (noCabe ? ' Sumados darían ' + fmt(sumados) + ' L y no caben.' : '')
+          : m.replace(/>>> /g, '\n• ');   // si el texto cambiara, se muestra tal cual: no se adivina
+        aviso.style.display = 'none';
+        aviso.textContent = '';
+        opciones.innerHTML = '';
+
+        function cerrar(valor) {
+          overlay.classList.remove('visible');
+          btnNo.onclick = null;
+          resolve(valor);
+        }
+        function boton(clase, titulo, detalle, alTocar) {
+          var b = document.createElement('button');
+          b.type = 'button';
+          b.className = clase;
+          b.style.cssText = 'width:100%;text-align:left;padding:14px 16px;font-size:16px;line-height:1.35';
+          b.innerHTML = '<b>' + esc(titulo) + '</b><br><span style="font-weight:normal;font-size:14px">' + esc(detalle) + '</span>';
+          b.addEventListener('click', function () { alTocar(b); });
+          opciones.appendChild(b);
+          return b;
+        }
+
+        if (!noCabe) {
+          boton('btn-verde',
+            conNumeros ? 'Queda con ' + fmt(sumados) + ' L' : 'Son ADICIONALES (se suman)',
+            conNumeros ? 'Le agregué ' + fmt(nuevos) + ' L a los ' + fmt(habia) + ' L que ya tenía.'
+                       : 'Los litros que escribí van encima de lo que había.',
+            function () { cerrar('adicional'); });
+        }
+        var confirmado = false;
+        boton(pierde > 0.01 ? 'btn-naranja' : 'btn-azul',
+          conNumeros ? 'Queda con ' + fmt(nuevos) + ' L' : 'Son el TOTAL del tanque',
+          pierde > 0.01
+            ? 'Se dan por perdidos ' + fmt(pierde) + ' L que ya estaban hechos.'
+            : (conNumeros ? 'Los ' + fmt(nuevos) + ' L son todo lo que hay: el sobrante ya está adentro o se botó.'
+                          : 'Los litros que escribí son todo lo que hay en el tanque.'),
+          function (b) {
+            // Perder producto hecho pide un segundo toque, con el numero a la vista.
+            if (pierde > 0.01 && !confirmado) {
+              confirmado = true;
+              aviso.textContent = '¿Seguro? El tanque tenía ' + fmt(habia) + ' L y va a quedar con ' + fmt(nuevos) +
+                ' L: se pierden ' + fmt(pierde) + ' L de producto. Si le AGREGASTE producto, escoge el botón verde.' +
+                ' Si de verdad se botaron, toca otra vez el botón naranja.';
+              aviso.style.display = 'block';
+              b.querySelector('b').textContent = 'Sí, se botaron ' + fmt(pierde) + ' L: queda con ' + fmt(nuevos) + ' L';
+              return;
+            }
+            cerrar('total');
+          });
+        btnNo.onclick = function () { cerrar(null); };
+        overlay.classList.add('visible');
+      });
+    }
+
     function pedirSkuDeSiigo(datos) {
       return new Promise(function (resolve) {
         var overlay = document.getElementById('modalSku');
@@ -5079,22 +5177,12 @@
               // significan los litros que escribió: total del tanque, o litros nuevos
               // encima. El mensaje del servidor ya trae los dos totales calculados; aquí
               // solo se amarra cada botón a una de esas dos frases, con sus mismas palabras.
-              if (/NO PUEDEN SER ADICIONALES/i.test(mensajeServidor)) {
-                // SUMADOS NO CABEN EN EL TANQUE (21-sep-2026): "adicionales" no se ofrece.
-                // Queda "son el total" o no guardar; el servidor frena igual si llegara otra cosa.
-                if (!window.confirm(
-                  mensajeServidor.replace(/>>> /g, '\n\n• ') +
-                  '\n\n───────────────\nACEPTAR  =  son el TOTAL del tanque' +
-                  '\nCANCELAR =  no guardar (reviso los litros)'
-                )) throw new Error('No se guardó: esos litros no caben como adicionales en el tanque y no son el total. Revisa los litros.');
-                marcas.ResiduoTanque = 'total';
-              } else {
-                marcas.ResiduoTanque = window.confirm(
-                  mensajeServidor.replace(/>>> /g, '\n\n• ') +
-                  '\n\n───────────────\nACEPTAR  =  son ADICIONALES (se suman)' +
-                  '\nCANCELAR =  son el TOTAL del tanque'
-                ) ? 'adicional' : 'total';
-              }
+              // Cada boton dice con cuantos litros queda el tanque, y salirse NUNCA guarda (5-oct:
+              // con ACEPTAR/CANCELAR, "Cancelar" guardaba como total y el tanque 19 quedo en 8 L
+              // teniendo 160). Si los sumados no caben (21-sep), el boton de sumar no sale.
+              var eleccion = await preguntarResiduoTanque(mensajeServidor);
+              if (!eleccion) throw new Error('No se guardó: escogiste revisar los litros del tanque. No quedó nada registrado.');
+              marcas.ResiduoTanque = eleccion;
             } else if (/Falta el producto de Siigo/i.test(mensajeServidor)) {
               // EL SERVIDOR ES EL QUE SABE. El mapa de parejas producto+envase verificadas
               // vive alla, no aca, asi que la app no puede adivinar de antemano si le va a

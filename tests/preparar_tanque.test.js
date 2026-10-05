@@ -398,7 +398,55 @@ test('la capacidad de un tanque nunca se arrastra a otro (ni la que puso la app 
   assert.match(source, /addEventListener\('change', function \(\) \{\s*delete this\.dataset\.auto;\s*this\.dataset\.para = normalize\(valueOf\('TamborID'\)\);/);
 });
 
-test('la pregunta "¿adicionales o total?" no ofrece adicionales cuando no caben', () => {
-  assert.match(source, /NO PUEDEN SER ADICIONALES/);
-  assert.match(source, /ACEPTAR  =  son el TOTAL del tanque/);
+// 5-oct-2026, tanque 19 de Blanqueador: tenía 8 L, Carlos le echó 152 L (queda lleno, 160 L).
+// La pregunta era un window.confirm con ACEPTAR = adicionales y CANCELAR = total; tocó
+// Cancelar, quedó en 152; registró 8 L más para arreglarlo, volvió a tocar Cancelar y el
+// tanque quedó en 8 L con 152 L dados por perdidos. Esto se prueba PULSANDO los botones.
+test('la pregunta del sobrante dice con cuántos litros queda el tanque, y salirse NUNCA guarda', async (t) => {
+  let JSDOM;
+  try { ({ JSDOM } = require('jsdom')); } catch (e) { t.skip('jsdom no está instalado'); return; }
+  assert.doesNotMatch(source, /CANCELAR =  son el TOTAL del tanque/, 'volvió el Aceptar/Cancelar donde Cancelar guarda');
+  assert.match(source, /await preguntarResiduoTanque\(mensajeServidor\)/);
+
+  const modal = html.match(/<div id="modalResiduo"[\s\S]*?<\/button>\s*<\/div>\s*<\/div>/)[0];
+  const w = new JSDOM('<!doctype html><body>' + modal + '</body>', { runScripts: 'outside-only' }).window;
+  w.eval(tomar('function esc(') + '\n' + tomar('function preguntarResiduoTanque'));
+  const tick = () => new Promise(r => setTimeout(r, 0));
+  const opciones = () => [...w.document.querySelectorAll('#residuoOpciones button')];
+  const preguntar = msg => {
+    const r = { valor: undefined };
+    w.preguntarResiduoTanque(msg).then(v => { r.valor = v; });
+    return r;
+  };
+  const P1 = 'Error: RESIDUO EN EL TANQUE 19: el sistema dice que ya había 8 L y estás registrando 152 L (el tanque es de 160 L). ¿Con cuánto debe quedar el tanque? >>> Si los 152 L son ADICIONALES a lo que había, el tanque queda con 160 L de 160 L. >>> Si los 152 L son el TOTAL del tanque, queda con 152 L.';
+  const P2 = 'Error: RESIDUO EN EL TANQUE 19: el sistema dice que ya había 152 L y estás registrando 8 L (el tanque es de 160 L). ¿Con cuánto debe quedar el tanque? >>> Si los 8 L son ADICIONALES a lo que había, el tanque queda con 160 L de 160 L. >>> Si los 8 L son el TOTAL del tanque, queda con 8 L.';
+  const P3 = 'Error: RESIDUO EN EL TANQUE 2: el sistema dice que ya había 2.5 L y estás registrando 168 L (el tanque es de 170 L). NO PUEDEN SER ADICIONALES: sumados darían 170.5 L y no caben. >>> Si los 168 L son el TOTAL del tanque, queda con 168 L.';
+
+  // Cada botón dice el número final del tanque.
+  let r = preguntar(P1);
+  assert.deepEqual(opciones().map(b => b.querySelector('b').textContent), ['Queda con 160 L', 'Queda con 152 L']);
+  // Salirse no guarda nada.
+  w.document.getElementById('btnResiduoNo').click(); await tick();
+  assert.equal(r.valor, null);
+  assert.equal(w.document.getElementById('modalResiduo').classList.contains('visible'), false);
+
+  r = preguntar(P1);
+  opciones()[0].click(); await tick();
+  assert.equal(r.valor, 'adicional', '"Queda con 160 L" tiene que mandar adicional');
+
+  // El segundo tropiezo del 5-oct: dejar el tanque con MENOS de lo que tenía pide dos toques.
+  r = preguntar(P2);
+  const quedar8 = opciones()[1];
+  assert.match(quedar8.textContent, /Queda con 8 L[\s\S]*perdidos 144 L/);
+  quedar8.click(); await tick();
+  assert.equal(r.valor, undefined, 'un solo toque NO puede dar por perdidos 144 L');
+  assert.match(w.document.getElementById('residuoAviso').textContent, /se pierden 144 L/);
+  quedar8.click(); await tick();
+  assert.equal(r.valor, 'total');
+
+  // Si sumados no caben, el botón de sumar no se ofrece.
+  r = preguntar(P3);
+  assert.deepEqual(opciones().map(b => b.querySelector('b').textContent), ['Queda con 168 L']);
+  opciones()[0].click(); await tick();
+  assert.equal(r.valor, 'total');
 });
