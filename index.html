@@ -2519,8 +2519,18 @@
       var lista = unique(getCatalog('materiasPrimas').concat(invItems('Materia prima'))
         .concat(getCatalog('fragancias')).concat(invItems('Fragancia'))
         .concat(getCatalog('colores')).concat(invItems('Color')));
-      dl.innerHTML = lista.map(function (x) { return '<option value="' + escapeHtml(x) + '">'; }).join('');
+      dl.innerHTML = lista.map(function (x) {
+        var otro = (NOMBRE_DE_COMPRA || {})[normalize(x)];
+        return '<option value="' + escapeHtml(x) + '"' + (otro ? ' label="' + escapeHtml(otro) + '"' : '') + '>';
+      }).join('');
     }
+    // EL NOMBRE CON QUE SE COMPRA NO ES EL DE LA PLANTA (Oscar, 1-oct y 8-oct-2026). Lo que se
+    // le compra a Agropaisa es "Invermetrina" (Siigo LAB-materia-prima-exterm, atado en item_sku
+    // a APP|Materia prima extermin|); en la hoja de Carlos se llama "Materia prima extermin".
+    // El datalist lo muestra al lado, y si teclea el de la compra, resolverEnCatalogo lo lleva
+    // al de la planta: nunca nace un "Invermetrina" aparte con el saldo partido en dos.
+    var NOMBRE_DE_COMPRA = { 'materia prima extermin': 'Invermetrina' };
+    var SINONIMOS_MP = { 'invermetrina': 'Materia prima extermin', 'invertina': 'Materia prima extermin' };
 
     // ================== SELECCIÓN DE TIPO ==================
     function selectType(type) {
@@ -3369,9 +3379,14 @@
     // Oscar, 25-sep: solo hay UN galon de 4 L, el PET transparente. "Galón 4 L" se corrige
     // solo al salir de la casilla. El galon opaco es otro envase. Igual en Código.js y lab_motor.js.
     // 1-oct: el opaco tambien estaba repetido ("Opaco 4 L" = "Galon opaco 4 L").
+    // 8-oct: "Galón recuperado 3.800 ml" (hoja CATALOGOS) es el mismo galon opaco reciclado.
     var ENVASE_ALIAS = {
       'galon 4 l': 'Galon transparente 4 L',
-      'opaco 4 l': 'Galon opaco 4 L'
+      'opaco 4 l': 'Galon opaco 4 L',
+      'galon recuperado 3.800 ml': 'Galon opaco 4 L',
+      'galon recuperado 3800 ml': 'Galon opaco 4 L',
+      'galon reciclado 4 l': 'Galon opaco 4 L',
+      'galon reciclado opaco 4 l': 'Galon opaco 4 L'
     };
     var _sodaCanon = null;
     function sodaCanonica(nombre) {
@@ -4011,6 +4026,12 @@
       var n = normalize(texto);
       if (!n) return { estado: 'vacio' };
       var lista = unique(catalogo || []);
+      // El nombre de la compra ("invermetrina") se lleva al de la planta. Ver SINONIMOS_MP.
+      var sin = Object.keys(SINONIMOS_MP || {}).filter(function (k) { return n.indexOf(k) >= 0; })[0];
+      if (sin) {
+        var dePlanta = lista.filter(function (x) { return normalize(x) === normalize(SINONIMOS_MP[sin]); });
+        if (dePlanta.length) return { estado: 'ok', nombre: dePlanta[0] };
+      }
       // TAL CUAL LO ESCRIBIO, LETRA POR LETRA: eso no se discute ni se corrige.
       // En el catálogo conviven "Limón" (materia prima) y "Limon" (fragancia), que sin
       // tildes son la MISMA palabra. Si escribió una de las dos exacta, es esa; si escribió
@@ -4802,6 +4823,11 @@
         // etiqueta escogida lo disparaba en TODO empaque, siempre. Oscar, 22-sep-2026: "es
         // unicamente las etiquetas... la verdad no deberia ni sacar eso".
         if (normalize(item) === 'etiqueta') return;
+        // LA TAPA TAMPOCO SE PREGUNTA (Oscar, 8-oct-2026: "recuerda que la tapa no tiene que
+        // marcarse"). La tapa llega puesta en el envase: no se compra aparte (ACC-TAPA en Siigo
+        // nunca tiene compras) y su saldo es siempre negativo, asi que este cuadro la pedia en
+        // TODO empaque. El servidor ya la deja pasar (saldo negativo -> pasa); aqui igual.
+        if (/^tapa\b/.test(normalize(item))) return;
         var n = normalize(item);
         var nv = normalize(variante);
         var hay = state.inventario.some(function (r) {
