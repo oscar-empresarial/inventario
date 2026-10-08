@@ -2520,7 +2520,7 @@
         .concat(getCatalog('fragancias')).concat(invItems('Fragancia'))
         .concat(getCatalog('colores')).concat(invItems('Color')));
       dl.innerHTML = lista.map(function (x) {
-        var otro = (NOMBRE_DE_COMPRA || {})[normalize(x)];
+        var otro = ({ 'materia prima extermin': 'Invermetrina' })[normalize(x)];
         return '<option value="' + escapeHtml(x) + '"' + (otro ? ' label="' + escapeHtml(otro) + '"' : '') + '>';
       }).join('');
     }
@@ -2529,8 +2529,6 @@
     // a APP|Materia prima extermin|); en la hoja de Carlos se llama "Materia prima extermin".
     // El datalist lo muestra al lado, y si teclea el de la compra, resolverEnCatalogo lo lleva
     // al de la planta: nunca nace un "Invermetrina" aparte con el saldo partido en dos.
-    var NOMBRE_DE_COMPRA = { 'materia prima extermin': 'Invermetrina' };
-    var SINONIMOS_MP = { 'invermetrina': 'Materia prima extermin', 'invertina': 'Materia prima extermin' };
 
     // ================== SELECCIÓN DE TIPO ==================
     function selectType(type) {
@@ -4026,8 +4024,9 @@
       var n = normalize(texto);
       if (!n) return { estado: 'vacio' };
       var lista = unique(catalogo || []);
-      // El nombre de la compra ("invermetrina") se lleva al de la planta. Ver SINONIMOS_MP.
-      var sin = Object.keys(SINONIMOS_MP || {}).filter(function (k) { return n.indexOf(k) >= 0; })[0];
+      // El nombre de la compra ("invermetrina") se lleva al de la planta (ver llenarDatalistMp).
+      var SINONIMOS_MP = { 'invermetrina': 'Materia prima extermin', 'invertina': 'Materia prima extermin' };
+      var sin = Object.keys(SINONIMOS_MP).filter(function (k) { return n.indexOf(k) >= 0; })[0];
       if (sin) {
         var dePlanta = lista.filter(function (x) { return normalize(x) === normalize(SINONIMOS_MP[sin]); });
         if (dePlanta.length) return { estado: 'ok', nombre: dePlanta[0] };
