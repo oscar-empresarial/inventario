@@ -303,6 +303,33 @@ async function seccionEstatica() {
     exigir(/reglasUnidad/.test(motor), 'lab_motor.js no tiene reglasUnidad');
     return 'Apps Script y Worker';
   });
+
+  // EL CANDADO NO PUEDE VOLVER A SER UN INTERRUPTOR. Del 11-ago al 13-sep vivio en Código.js
+  // un `var CANDADO_ABIERTO = true` puesto a mano "mientras se limpian los saldos", y en ese
+  // mes los negativos pasaron de 30 a 98: el candado abierto produce los negativos por los
+  // que se abrio. Lo que lo reemplazo decide POR ITEM y se cierra solo. Si alguien vuelve a
+  // meter un interruptor global, esto lo dice el mismo dia.
+  await probar('el candado de existencias decide por item, no por interruptor', () => {
+    const apps = readFileSync(join(AQUI, '..', '..', '3-INVENTARIO', 'app-ingeniero', 'Código.js'), 'utf8');
+    // Sin comentarios: el que explica el bug CITA el codigo viejo y la prueba se acusaria sola.
+    const vivo = apps.split('\n').filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join('\n');
+    exigir(!/CANDADO_ABIERTO/.test(vivo), 'volvio el interruptor global CANDADO_ABIERTO');
+    exigir(/function excusaParaPasarSinExistencia_/.test(apps), 'falta excusaParaPasarSinExistencia_');
+    exigir(/function dejarRastroSinExistencia_/.test(apps), 'falta dejarRastroSinExistencia_');
+    exigir(/_SIN_EXISTENCIA/.test(apps), 'lo que pasa sin existencia ya no deja rastro fuera de la pantalla');
+    return 'sin interruptor, con rastro';
+  });
+
+  await probar('los saldos negativos del laboratorio los mira /salud', () => {
+    const salud = readFileSync(join(AQUI, '..', '..', '_cloudflare', 'full', 'src', 'salud.js'), 'utf8');
+    const vigia = readFileSync(join(AQUI, '..', '..', '_cloudflare', 'full', 'src', 'vigia_pruebas.js'), 'utf8');
+    exigir(/laboratorio_en_negativo/.test(salud), 'salud.js no tiene la regla laboratorio_en_negativo');
+    exigir(/lab_negativos/.test(vigia), 'el vigia no cuenta los negativos del laboratorio');
+    // Sin sqlTotal, un 0 no distingue "todo bien" de "el vigia nunca corrio".
+    const desde = salud.indexOf("id: 'laboratorio_en_negativo'");
+    exigir(/sqlTotal/.test(salud.slice(desde, desde + 2600)), 'la regla no tiene sqlTotal: un cero se veria igual que un vigia apagado');
+    return 'regla + vigia + contexto del verde';
+  });
 }
 
 // ================== 2. LOS DOS SERVIDORES ESTAN VIVOS ==================
