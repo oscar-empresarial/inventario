@@ -1449,7 +1449,7 @@
     var LAB_LLAVE = 'gCw0PqcIlSGWDnmBvz-JF720';
     // Las acciones que el Worker sabe contestar desde el espejo. ping, operacion y todos
     // los POST NO estan aqui a proposito: siguen contra el Apps Script.
-    var ACCIONES_WORKER = ['init', 'inventario', 'registros', 'conciliacion', 'revision', 'preguntas', 'mapasku', 'auditoria', 'anulable'];
+    var ACCIONES_WORKER = ['init', 'inventario', 'registros', 'conciliacion', 'revision', 'preguntas', 'mapasku', 'auditoria', 'anulable', 'historia'];
     // Si el Worker no contesta en este tiempo, se pasa a Google sin esperar mas. Es corto
     // porque el Worker contesta en milisegundos: si tarda mas, algo le pasa.
     var TIMEOUT_WORKER_MS = 8000;
@@ -5701,9 +5701,13 @@
         var stockTxt = isNaN(r.stock) ? '—' : (redondear(r.stock) + (r.unidad ? ' ' + r.unidad : ''));
         // Producto terminado guarda su LOTE (el tanque): clic para ver la trazabilidad
         var esPT = normalize(r.categoria) === 'producto terminado' && r.variante;
-        return '<div class="inv-row"' + (esPT ? ' data-lote="' + escapeHtml(r.variante) + '" style="cursor:pointer"' : '') + '>' +
+        // Todo lo demás (materia prima, envases, etiquetas...) abre su HISTORIA: cada entrada y
+        // cada gasto con el saldo que dejó, y lo raro que se ve al leerlo (Oscar, 9-nov).
+        var conHistoria = !esPT && !!r.item;
+        return '<div class="inv-row"' + (esPT ? ' data-lote="' + escapeHtml(r.variante) + '" style="cursor:pointer"'
+          : (conHistoria ? ' data-hist-item="' + escapeHtml(r.item) + '" data-hist-var="' + escapeHtml(r.variante || '') + '" style="cursor:pointer"' : '')) + '>' +
           '<div><div class="inv-nombre">' + escapeHtml(nombreDe(r)) + (esPT ? ' <span class="badge conteo">Lote: ' + escapeHtml(r.variante) + ' 🔍</span>' : '') + '</div>' +
-          (r.categoria ? '<div class="inv-cat">' + escapeHtml(r.categoria) + (esPT ? ' · toca para ver cómo se hizo' : '') + '</div>' : '') + '</div>' +
+          (r.categoria ? '<div class="inv-cat">' + escapeHtml(r.categoria) + (esPT ? ' · toca para ver cómo se hizo' : (conHistoria ? ' · toca para ver su historia' : '')) + '</div>' : '') + '</div>' +
           '<div style="display:flex;align-items:center;gap:10px">' +
           '<span class="inv-stock">' + escapeHtml(stockTxt) + '</span>' +
           '<span class="badge ' + est + '">' + ETIQ_ESTADO[est] + '</span>' +
@@ -5713,6 +5717,98 @@
         fila.addEventListener('click', function () {
           verLoteTanque(fila.dataset.lote, fila);
         });
+      });
+      lista.querySelectorAll('[data-hist-item]').forEach(function (fila) {
+        fila.addEventListener('click', function () {
+          verHistoriaItem(fila.dataset.histItem, fila.dataset.histVar || '', fila);
+        });
+      });
+    }
+
+    // HISTORIA DE UN ITEM (trazabilidad): el libro completo que el Worker saca del mismo motor
+    // que calcula el saldo, con las alertas de lo raro. Solo lectura: no escribe nada.
+    var HIST_NIVEL = { alto: ['#fee2e2', '#991b1b', 'Revisar'], medio: ['#ffedd5', '#9a3412', 'Mirar'], bajo: ['#e5e7eb', '#374151', 'Informativo'] };
+    function verHistoriaItem(item, variante, fila) {
+      var sig = fila.nextElementSibling;
+      if (sig && sig.classList.contains('hist-det')) { sig.remove(); return; }
+      document.querySelectorAll('.hist-det').forEach(function (d) { d.remove(); });
+      var det = document.createElement('div');
+      det.className = 'hist-det';
+      det.style.cssText = 'background:#f8fafc;border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin:4px 0 10px';
+      det.innerHTML = '<div class="hint">Cargando la historia…</div>';
+      fila.insertAdjacentElement('afterend', det);
+      leerBackend({ action: 'historia', item: item, variante: variante }, function (h) {
+        if (!h || h.error || h.ok === false) {
+          det.innerHTML = '<div class="hint">No se pudo cargar la historia' + (h && h.error ? ': ' + escapeHtml(h.error) : '') + '. Intenta de nuevo en un momento.</div>';
+          return;
+        }
+        pintarHistoria(det, h);
+      }, function () {
+        det.innerHTML = '<div class="hint">Sin conexión con el servidor. Intenta de nuevo.</div>';
+      }, 30000);
+    }
+    function pintarHistoria(det, h) {
+      var u = h.unidad || '';
+      var num2 = function (n) { return (Math.round(Number(n) * 100) / 100).toLocaleString('es-CO'); };
+      var signo = function (n) { return (n > 0 ? '+' : '') + num2(n); };
+      var marcadas = {};
+      (h.alertas || []).forEach(function (a) { (a.filas || []).forEach(function (f) { marcadas[f] = true; }); });
+      var html = '<div style="font-weight:bold;font-size:14px;margin-bottom:2px">📊 Historia de ' + escapeHtml(h.item + (h.variante ? ' · ' + h.variante : '')) + '</div>';
+      var rs = h.resumen || {};
+      html += '<div class="hint" style="margin-bottom:8px">Hoy el libro dice <b>' + num2(h.saldo) + ' ' + escapeHtml(u) + '</b> · entraron ' + num2(rs.entradas) + ' · se gastaron ' + num2(-rs.consumos) + ' · ' + (rs.conteos || 0) + ' conteo(s)' + (rs.anuladas ? ' · ' + rs.anuladas + ' anulada(s)' : '') + '</div>';
+      if (!h.existe || !(h.movimientos || []).length) {
+        det.innerHTML = html + '<div class="hint">Este ítem todavía no tiene movimientos.</div>';
+        return;
+      }
+      var alertas = h.alertas || [];
+      if (alertas.length) {
+        html += '<div style="font-weight:bold;font-size:12px;margin:6px 0 4px">Lo que llama la atención (' + alertas.length + ')</div>';
+        html += alertas.map(function (a) {
+          var c = HIST_NIVEL[a.nivel] || HIST_NIVEL.bajo;
+          return '<div style="background:' + c[0] + ';color:' + c[1] + ';border-radius:8px;padding:6px 9px;margin-bottom:5px;font-size:12px;line-height:1.35">' +
+            '<b>' + escapeHtml(c[2] + ' · ' + a.titulo) + '</b><br>' + escapeHtml(a.detalle) +
+            ((a.filas || []).length ? '<br><span style="opacity:.75">Filas de la hoja: ' + escapeHtml(a.filas.join(', ')) + '</span>' : '') + '</div>';
+        }).join('');
+      } else {
+        html += '<div class="status" style="display:block;margin:6px 0">No se ve nada raro en este ítem.</div>';
+      }
+      var pp = h.porProducto || [];
+      if (pp.length) {
+        html += '<div style="font-weight:bold;font-size:12px;margin:10px 0 4px">En qué se gastó</div><div style="font-size:12px;overflow-x:auto"><table style="width:100%;border-collapse:collapse"><tr style="text-align:left;color:var(--gray)"><th>Producto</th><th>Veces</th><th>Total</th><th>Promedio</th><th>Último</th></tr>' +
+          pp.map(function (p) {
+            return '<tr style="border-top:1px solid var(--line)"><td>' + escapeHtml(p.producto) + '</td><td>' + p.veces + '</td><td>' + num2(p.total) + ' ' + escapeHtml(u) + '</td><td>' + num2(p.promedio) + '</td><td>' + escapeHtml(String(p.ultimo || '').slice(0, 10)) + '</td></tr>';
+          }).join('') + '</table></div>';
+      }
+      var movs = (h.movimientos || []).slice().reverse();
+      var mostrar = movs.slice(0, 40);
+      var filaMov = function (m) {
+        var dia = String(m.fecha || '').slice(0, 10);
+        var color = m.efecto === 'entrada' ? '#166534' : (m.efecto === 'consumo' ? '#991b1b' : '#5b21b6');
+        var cant = m.delta == null ? '' : signo(m.delta);
+        var extra = (m.unidadOriginal && m.unidadOriginal !== m.unidad && m.efecto !== 'conteo') ? ' <span style="color:var(--gray)">(' + num2(m.cantidadOriginal) + ' ' + escapeHtml(m.unidadOriginal) + ')</span>' : '';
+        var fac = m.factura ? '<div style="color:var(--gray)">Compra #' + m.compra.compra + ': pidió ' + num2(m.factura.cantidad) + ' ' + escapeHtml(m.factura.unidad || '') + (m.factura.recibido != null ? ', recibió ' + num2(m.factura.recibido) : '') + '</div>' : '';
+        return '<tr style="border-top:1px solid var(--line);' + (marcadas[m.fila] ? 'background:#fef9c3' : '') + '">' +
+          '<td style="white-space:nowrap;vertical-align:top">' + escapeHtml(dia) + '</td>' +
+          '<td style="vertical-align:top">' + escapeHtml(m.detalle || m.tipo) + extra + fac + '<div style="color:var(--gray)">' + escapeHtml(m.responsable || '') + (m.fila ? ' · fila ' + m.fila : '') + '</div></td>' +
+          '<td style="text-align:right;white-space:nowrap;vertical-align:top;color:' + color + ';font-weight:bold">' + escapeHtml(cant) + '</td>' +
+          '<td style="text-align:right;white-space:nowrap;vertical-align:top">' + num2(m.saldo) + '</td></tr>';
+      };
+      html += '<div style="font-weight:bold;font-size:12px;margin:10px 0 4px">Movimientos, del más reciente al más viejo <span style="font-weight:normal;color:var(--gray)">(amarillo = lo señalado arriba)</span></div>' +
+        '<div style="font-size:12px;overflow-x:auto"><table class="hist-tabla" style="width:100%;border-collapse:collapse"><tr style="text-align:left;color:var(--gray)"><th>Día</th><th>Qué pasó</th><th style="text-align:right">Cantidad</th><th style="text-align:right">Saldo</th></tr>' +
+        mostrar.map(filaMov).join('') + '</table></div>';
+      if (movs.length > mostrar.length) {
+        html += '<button type="button" class="btn-azul hist-mas" style="margin-top:8px">Ver los ' + (movs.length - mostrar.length) + ' más viejos</button>';
+      }
+      if ((h.anuladas || []).length) {
+        html += '<div style="font-weight:bold;font-size:12px;margin:10px 0 4px">Anuladas (no cuentan en el saldo)</div>' + h.anuladas.map(function (a) {
+          return '<div class="hint">· ' + escapeHtml(String(a.fecha || '').slice(0, 10) + ' ' + a.tipo + ' ' + num2(a.cantidad) + ' ' + a.unidad + (a.producto ? ' · ' + a.producto : '') + ' · ' + a.responsable) + '</div>';
+        }).join('');
+      }
+      det.innerHTML = html;
+      var mas = det.querySelector('.hist-mas');
+      if (mas) mas.addEventListener('click', function () {
+        det.querySelector('.hist-tabla').insertAdjacentHTML('beforeend', movs.slice(40).map(filaMov).join(''));
+        mas.remove();
       });
     }
     function redondear(n) {
